@@ -1,0 +1,26 @@
+[
+  {
+    "username": "laurazanchi",
+    "avatarUrl": "https://images.unsplash.com/photo-1596815064285-45ed8a9c0463?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxzZWFyY2h8MTB8fHByb2ZpbGV8ZW58MHx8MHx8&auto=format&fit=crop&w=500&q=60",
+    "timestamp": "Ayer a las 9:42 PM",
+    "following": false
+  },
+  {
+    "username": "raulsncz",
+    "avatarUrl": "https://images.unsplash.com/photo-1596815064285-45ed8a9c0463?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxzZWFyY2h8MTB8fHByb2ZpbGV8ZW58MHx8MHx8&auto=format&fit=crop&w=500&q=60",
+    "timestamp": "Ayer a las 9:42 AM",
+    "following": false
+  },
+  {
+    "username": "casikenegro",
+    "avatarUrl": "https://images.unsplash.com/photo-1596815064285-45ed8a9c0463?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxzZWFyY2h8MTB8fHByb2ZpbGV8ZW58MHx8MHx8&auto=format&fit=crop&w=500&q=60",
+    "timestamp": "Ayer a las 9:42 AM",
+    "following": true
+  },
+  {
+    "username": "pero23",
+    "avatarUrl": "https://images.unsplash.com/photo-1596815064285-45ed8a9c0463?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxzZWFyY2h8MTB8fHByb2ZpbGV8ZW58MHx8MHx8&auto=format&fit=crop&w=500&q=60",
+    "timestamp": "Ayer a las 9:42 AM",
+    "following": false
+  }
+]

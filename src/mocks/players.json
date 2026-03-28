@@ -1,0 +1,82 @@
+[
+  {
+    "id": "1",
+    "username": "pedro23",
+    "name": "Pedro Pérez",
+    "location": "Puerto Ordaz",
+    "avatarUrl": "https://via.placeholder.com/150",
+    "following": false
+  },
+  {
+    "id": "2",
+    "username": "casikenegro",
+    "name": "Jesús Ortiz",
+    "location": "Puerto Ordaz",
+    "avatarUrl": "https://via.placeholder.com/150",
+    "following": false
+  },
+  {
+    "id": "3",
+    "username": "luis_spain",
+    "name": "Luis España",
+    "location": "Puerto Ordaz",
+    "avatarUrl": "https://via.placeholder.com/150",
+    "following": false
+  },
+  {
+    "id": "4",
+    "username": "laurazanchi",
+    "name": "Laura Zanchi",
+    "location": "Lechería",
+    "avatarUrl": "https://via.placeholder.com/150",
+    "following": false
+  },
+  {
+    "id": "5",
+    "username": "paolobenedetti",
+    "name": "Paolo B.",
+    "location": "Lechería",
+    "avatarUrl": "https://via.placeholder.com/150",
+    "following": false
+  },
+  {
+    "id": "6",
+    "username": "carolinacp",
+    "name": "Carolina Coello",
+    "location": "Caracas",
+    "avatarUrl": "https://via.placeholder.com/150",
+    "following": false
+  },
+  {
+    "id": "7",
+    "username": "martinaperez",
+    "name": "Martina Pérez",
+    "location": "Caracas",
+    "avatarUrl": "https://via.placeholder.com/150",
+    "following": false
+  },
+  {
+    "id": "8",
+    "username": "pedro23",
+    "name": "Pedro Pérez",
+    "location": "Valencia",
+    "avatarUrl": "https://via.placeholder.com/150",
+    "following": false
+  },
+  {
+    "id": "9",
+    "username": "andresg",
+    "name": "Andrés García",
+    "location": "Puerto Cabello",
+    "avatarUrl": "https://via.placeholder.com/150",
+    "following": false
+  },
+  {
+    "id": "10",
+    "username": "pedro23",
+    "name": "Pedro Pérez",
+    "location": "Barquisimeto",
+    "avatarUrl": "https://via.placeholder.com/150",
+    "following": false
+  }
+]

@@ -1,0 +1,58 @@
+[
+  {
+    "id": "1",
+    "name": "Casa Padel",
+    "state": "Bolívar",
+    "stateId": "3",
+    "location": "Puerto Ordaz, Bolívar",
+    "imageUrl": "https://images.unsplash.com/photo-1567220720374-a67f33b2a6b9?q=80&w=2664&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D", 
+    "logoUrl": "https://via.placeholder.com/100",
+    "isFollowing": true,
+    "username": "@casapadelpzo",
+    "bio": "Jugador de padel amateur y emprendedor tecnológico. Founder de Torna.",
+    "following": 84,
+    "followers": 127
+  },
+  {
+    "id": "2",
+    "name": "La Llovizna Padel",
+    "state": "Bolívar",
+    "stateId": "3",
+    "location": "Puerto Ordaz, Bolívar",
+    "imageUrl": "https://images.unsplash.com/photo-1567220720374-a67f33b2a6b9?q=80&w=2664&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D", 
+    "logoUrl": "https://via.placeholder.com/100",
+    "isFollowing": false,
+    "username": "@casapadelpzo",
+    "bio": "Jugador de padel amateur y emprendedor tecnológico. Founder de Torna.",
+    "following": 84,
+    "followers": 127
+  },
+  {
+    "id": "3",
+    "name": "Valgreen Padel Club",
+    "state": "Bolívar",
+    "stateId": "3",
+    "location": "Puerto Ordaz, Bolívar",
+    "imageUrl": "https://images.unsplash.com/photo-1567220720374-a67f33b2a6b9?q=80&w=2664&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D", 
+    "logoUrl": "https://via.placeholder.com/100",
+    "isFollowing": false,
+    "username": "@casapadelpzo",
+    "bio": "Jugador de padel amateur y emprendedor tecnológico. Founder de Torna.",
+    "following": 84,
+    "followers": 127
+  },
+  {
+    "id": "4",
+    "name": "Casa Padel",
+    "state": "Anzoátegui",
+    "stateId": "2",
+    "location": "Lechería, Anzoátegui",
+    "imageUrl": "https://images.unsplash.com/photo-1567220720374-a67f33b2a6b9?q=80&w=2664&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D", 
+    "logoUrl": "https://via.placeholder.com/100",
+    "isFollowing": false,
+    "username": "@casapadelpzo",
+    "bio": "Jugador de padel amateur y emprendedor tecnológico. Founder de Torna.",
+    "following": 84,
+    "followers": 127
+  }
+]

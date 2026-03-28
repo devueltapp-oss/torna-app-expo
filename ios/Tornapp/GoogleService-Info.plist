@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>AIzaSyDWEU0ORrolxhwDSsiirDsvYmmMpKBadhw</string>
+	<key>BUNDLE_ID</key>
+	<string>com.tornapp</string>
+	<key>CLIENT_ID</key>
+	<string>83738503515-ghi319v2gn3mkqob6vehece3a3ghjvj8.apps.googleusercontent.com</string>
+	<key>GCM_SENDER_ID</key>
+	<string>83738503515</string>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:83738503515:ios:22a86d491e1c98b6d2127e</string>
+	<key>IS_ADS_ENABLED</key>
+	<false/>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false/>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true/>
+	<key>IS_GCM_ENABLED</key>
+	<true/>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>PROJECT_ID</key>
+	<string>torna-7a62f</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.83738503515-ghi319v2gn3mkqob6vehece3a3ghjvj8</string>
+	<key>STORAGE_BUCKET</key>
+	<string>torna-7a62f.appspot.com</string>
+</dict>
+</plist>

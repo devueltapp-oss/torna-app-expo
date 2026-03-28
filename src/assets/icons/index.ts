@@ -1,0 +1,11 @@
+export {default as BackArrowIcon} from './back-arrow';
+export {default as EyeIcon} from './eye-icon';
+export {default as FullscreenIcon} from './fullscreen-icon';
+export {default as PauseIcon} from './pause-icon';
+export {default as ResumeIcon} from './resume-icon';
+export {default as TouchableIcon} from './touchable-icon';
+export {WorldIcon, WorldIconOutline} from './world-icon';
+export {ProfileIcon, ProfileIconOutline} from './profile-icon';
+export {HouseIcon, HouseIconOutline} from './house-icon';
+export {default as LocationIcon} from './location-icon';
+export {default as MenuButtonIcon} from './menu-button-icon';

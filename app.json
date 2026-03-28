@@ -1,7 +1,95 @@
 {
   "expo": {
-    "name": "torna-app-expo",
-    "slug": "torna-app-expo",
-    "version": "1.0.0"
+    "name": "Tornapp",
+    "slug": "tornapp",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": false,
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f0f0f"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.tornapp",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Needed to record videos",
+        "NSPhotoLibraryUsageDescription": "Needed to pick videos and images",
+        "NSMicrophoneUsageDescription": "Needed to record audio"
+      }
+    },
+    "android": {
+      "package": "com.tornapp.app",
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "plugins": [
+      "./plugins/withFirebaseSwiftAppDelegate",
+      "./plugins/withPodfileConfig",
+      "@react-native-firebase/crashlytics",
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "development"
+        }
+      ],
+      "expo-video",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Tornapp to access your photo library.",
+          "cameraPermission": "Allow Tornapp to use the camera."
+        }
+      ],
+      "expo-screen-orientation",
+      "expo-splash-screen"
+    ],
+    "extra": {
+      "eas": {
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "targetName": "OneSignalNotificationServiceExtension",
+                  "bundleIdentifier": "com.tornapp.OneSignalNotificationServiceExtension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.tornapp.onesignal"
+                    ]
+                  }
+                },
+                {
+                  "targetName": "OneSignalNotificationServiceExtension",
+                  "bundleIdentifier": "com.tornapp.OneSignalNotificationServiceExtension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.tornapp.onesignal"
+                    ]
+                  }
+                },
+                {
+                  "targetName": "OneSignalNotificationServiceExtension",
+                  "bundleIdentifier": "com.tornapp.OneSignalNotificationServiceExtension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.tornapp.onesignal"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "projectId": "6a3a7eab-f27e-4225-989f-4331a6fc578e"
+      }
+    },
+    "owner": "teamtornas-organization"
   }
 }

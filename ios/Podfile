@@ -17,10 +17,11 @@ ENV['RCT_USE_RN_DEP'] ||= '1' if podfile_properties['ios.buildReactNativeFromSou
 ENV['RCT_USE_PREBUILT_RNCORE'] ||= '1' if podfile_properties['ios.buildReactNativeFromSource'] != 'true'
 ENV['RCT_HERMES_V1_ENABLED'] ||= '1' if podfile_properties['expo.useHermesV1'] == 'true'
 platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
+use_modular_headers!
 
 prepare_react_native_project!
 
-target 'tornaappexpo' do
+target 'Tornapp' do
   use_expo_modules!
 
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
@@ -59,5 +60,23 @@ target 'tornaappexpo' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        gcc_defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS']
+        case gcc_defs
+        when Array
+          gcc_defs << 'FOLLY_CFG_NO_COROUTINES=1' unless gcc_defs.include?('FOLLY_CFG_NO_COROUTINES=1')
+        when String
+          config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = "#{gcc_defs} FOLLY_CFG_NO_COROUTINES=1" unless gcc_defs.include?('FOLLY_CFG_NO_COROUTINES')
+        else
+          config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = ['$(inherited)', 'FOLLY_CFG_NO_COROUTINES=1']
+        end
+      end
+    end
   end
+end
+
+target 'OneSignalNotificationServiceExtension' do
+  pod 'OneSignalXCFramework', '>= 5.0', '< 6.0'
+  use_frameworks! :linkage => podfile_properties['ios.useFrameworks'].to_sym if podfile_properties['ios.useFrameworks']
 end

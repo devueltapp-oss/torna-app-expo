@@ -1,0 +1,68 @@
+[
+  {
+    "id": "1",
+    "name": "Anzoátegui",
+    "value": "anzoategui",
+    "image": "https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=800"
+  },
+  {
+    "id": "2",
+    "name": "Aragua",
+    "value": "aragua",
+    "image": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800"
+  },
+  {
+    "id": "3",
+    "name": "Bolívar",
+    "value": "bolivar",
+    "image": "https://haimaneltroudi.com/wp-content/uploads/2024/03/Haiman-el-troudi-parque-la-llovina-un-paraiso-en-el-corazon-de-puerto-ordaz-03.jpg"
+  },
+  {
+    "id": "4",
+    "name": "Carabobo",
+    "value": "carabobo",
+    "image": "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800"
+  },
+  {
+    "id": "5",
+    "name": "Distrito Capital",
+    "value": "distrito_capital",
+    "image": "https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=800"
+  },
+  {
+    "id": "6",
+    "name": "Lara",
+    "value": "lara",
+    "image": "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=800"
+  },
+  {
+    "id": "7",
+    "name": "Mérida",
+    "value": "merida",
+    "image": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800"
+  },
+  {
+    "id": "8",
+    "name": "Miranda",
+    "value": "miranda",
+    "image": "https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=800"
+  },
+  {
+    "id": "9",
+    "name": "Monagas",
+    "value": "monagas",
+    "image": "https://images.unsplash.com/photo-1472214103451-9374bd1c798e?w=800"
+  },
+  {
+    "id": "10",
+    "name": "Táchira",
+    "value": "tachira",
+    "image": "https://images.unsplash.com/photo-1426604966848-d7adac402bff?w=800"
+  },
+  {
+    "id": "11",
+    "name": "Zulia",
+    "value": "zulia",
+    "image": "https://images.unsplash.com/photo-1504893524553-b855bce32c67?w=800"
+  }
+]
