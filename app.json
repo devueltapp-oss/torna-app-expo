@@ -36,7 +36,7 @@
       [
         "onesignal-expo-plugin",
         {
-          "mode": "development"
+          "mode": "production"
         }
       ],
       "expo-video",
@@ -57,24 +57,6 @@
           "experimental": {
             "ios": {
               "appExtensions": [
-                {
-                  "targetName": "OneSignalNotificationServiceExtension",
-                  "bundleIdentifier": "io.torna.OneSignalNotificationServiceExtension",
-                  "entitlements": {
-                    "com.apple.security.application-groups": [
-                      "group.io.torna.onesignal"
-                    ]
-                  }
-                },
-                {
-                  "targetName": "OneSignalNotificationServiceExtension",
-                  "bundleIdentifier": "io.torna.OneSignalNotificationServiceExtension",
-                  "entitlements": {
-                    "com.apple.security.application-groups": [
-                      "group.io.torna.onesignal"
-                    ]
-                  }
-                },
                 {
                   "targetName": "OneSignalNotificationServiceExtension",
                   "bundleIdentifier": "io.torna.OneSignalNotificationServiceExtension",
