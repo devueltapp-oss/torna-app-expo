@@ -196,8 +196,9 @@ function HomeScreen(props: HomeScreenProps): React.JSX.Element | null {
     try {
       const accessToken = await getAccessToken();
       const res = await GetLivesApi(accessToken);
+      console.log('live',res)
       if (res.length > 0) {
-        const liveMatches: HomeMatchCard[] = res.map(item => ({
+        const liveMatches: HomeMatchCard[] = res.map((item) => ({
           id: item.id,
           imageUrl:
             item?.cover ||

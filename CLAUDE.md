@@ -71,7 +71,7 @@ Pipeline trim polling: 2.5s interval, transitions `PENDING → RUNNING → COMPL
 
 ## iOS Native Details
 
-- Bundle identifier: `com.tornapp`
+- Bundle identifier: `io.torna`
 - Deployment target: iOS 15.1
 - New Architecture: **disabled**
 - Hermes: enabled

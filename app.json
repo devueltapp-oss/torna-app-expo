@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.tornapp",
+      "bundleIdentifier": "io.torna",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSCameraUsageDescription": "Needed to record videos",
@@ -23,7 +23,7 @@
       }
     },
     "android": {
-      "package": "com.tornapp.app",
+      "package": "io.torna",
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.RECORD_AUDIO"
@@ -48,7 +48,8 @@
         }
       ],
       "expo-screen-orientation",
-      "expo-splash-screen"
+      "expo-splash-screen",
+      "react-native-ble-plx"
     ],
     "extra": {
       "eas": {
@@ -58,28 +59,28 @@
               "appExtensions": [
                 {
                   "targetName": "OneSignalNotificationServiceExtension",
-                  "bundleIdentifier": "com.tornapp.OneSignalNotificationServiceExtension",
+                  "bundleIdentifier": "io.torna.OneSignalNotificationServiceExtension",
                   "entitlements": {
                     "com.apple.security.application-groups": [
-                      "group.com.tornapp.onesignal"
+                      "group.io.torna.onesignal"
                     ]
                   }
                 },
                 {
                   "targetName": "OneSignalNotificationServiceExtension",
-                  "bundleIdentifier": "com.tornapp.OneSignalNotificationServiceExtension",
+                  "bundleIdentifier": "io.torna.OneSignalNotificationServiceExtension",
                   "entitlements": {
                     "com.apple.security.application-groups": [
-                      "group.com.tornapp.onesignal"
+                      "group.io.torna.onesignal"
                     ]
                   }
                 },
                 {
                   "targetName": "OneSignalNotificationServiceExtension",
-                  "bundleIdentifier": "com.tornapp.OneSignalNotificationServiceExtension",
+                  "bundleIdentifier": "io.torna.OneSignalNotificationServiceExtension",
                   "entitlements": {
                     "com.apple.security.application-groups": [
-                      "group.com.tornapp.onesignal"
+                      "group.io.torna.onesignal"
                     ]
                   }
                 }
@@ -93,3 +94,4 @@
     "owner": "teamtornas-organization"
   }
 }
+

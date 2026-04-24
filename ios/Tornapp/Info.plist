@@ -27,7 +27,7 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>com.tornapp</string>
+          <string>io.torna</string>
         </array>
       </dict>
       <dict>

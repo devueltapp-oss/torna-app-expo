@@ -333,6 +333,7 @@ PODS:
   - hermes-engine (0.14.1):
     - hermes-engine/Pre-built (= 0.14.1)
   - hermes-engine/Pre-built (0.14.1)
+  - MultiplatformBleAdapter (0.2.0)
   - nanopb (2.30910.0):
     - nanopb/decode (= 2.30910.0)
     - nanopb/encode (= 2.30910.0)
@@ -1780,6 +1781,29 @@ PODS:
     - React-RCTFBReactNativeSpec
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
+  - react-native-ble-plx (3.5.1):
+    - hermes-engine
+    - MultiplatformBleAdapter (= 0.2.0)
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
   - react-native-onesignal (5.2.5):
     - OneSignalXCFramework (= 5.2.5)
     - React (< 1.0.0, >= 0.13.0)
@@ -2682,6 +2706,7 @@ DEPENDENCIES:
   - React-logger (from `../node_modules/react-native/ReactCommon/logger`)
   - React-Mapbuffer (from `../node_modules/react-native/ReactCommon`)
   - React-microtasksnativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)
+  - react-native-ble-plx (from `../node_modules/react-native-ble-plx`)
   - react-native-onesignal (from `../node_modules/react-native-onesignal`)
   - react-native-pager-view (from `../node_modules/react-native-pager-view`)
   - react-native-safe-area-context (from `../node_modules/react-native-safe-area-context`)
@@ -2747,6 +2772,7 @@ SPEC REPOS:
     - GoogleDataTransport
     - GoogleUtilities
     - GTMSessionFetcher
+    - MultiplatformBleAdapter
     - nanopb
     - OneSignalXCFramework
     - PromisesObjC
@@ -2876,6 +2902,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon"
   React-microtasksnativemodule:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/microtasks"
+  react-native-ble-plx:
+    :path: "../node_modules/react-native-ble-plx"
   react-native-onesignal:
     :path: "../node_modules/react-native-onesignal"
   react-native-pager-view:
@@ -3013,6 +3041,7 @@ SPEC CHECKSUMS:
   GoogleUtilities: ea963c370a38a8069cc5f7ba4ca849a60b6d7d15
   GTMSessionFetcher: 5aea5ba6bd522a239e236100971f10cb71b96ab6
   hermes-engine: 09d634212dc3879ae33999286dde73009a6f866f
+  MultiplatformBleAdapter: b1fddd0d499b96b607e00f0faa8e60648343dc1d
   nanopb: 438bc412db1928dac798aa6fd75726007be04262
   OneSignalXCFramework: 76ca508fc2b941317729d13fdec96817f8ef5b3b
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
@@ -3053,6 +3082,7 @@ SPEC CHECKSUMS:
   React-logger: 69811317123fe08dc34ed5837dc1d269c468cc8d
   React-Mapbuffer: 8f8cbeb5bedb521cce0897a71274e3a72b5236a1
   React-microtasksnativemodule: bef4a47c7efd42421de52201e6d76a73cf6c816e
+  react-native-ble-plx: 33232d5b55f5d5393f5f41bf7a30a1eb75280a37
   react-native-onesignal: 505a974a74b97e81d7ab090a63ea065566e2339f
   react-native-pager-view: adc7d78123fb395e03a70d19e8d75805b49838b5
   react-native-safe-area-context: 37e680fc4cace3c0030ee46e8987d24f5d3bdab2

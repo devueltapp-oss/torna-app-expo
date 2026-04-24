@@ -1,12 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import axios from 'axios';
-import crashlytics from '@react-native-firebase/crashlytics';
+import axios from "axios";
+import crashlytics from "@react-native-firebase/crashlytics";
 
-import {API_URL} from './constants';
+import { API_URL } from "./constants";
 
-import locations from '@/mocks/locations.json';
-import games from '@/mocks/games.json';
-import {normalizeApiResponse} from '@/utils';
+import locations from "@/mocks/locations.json";
+import games from "@/mocks/games.json";
+import { normalizeApiResponse } from "@/utils";
 import {
   FollowUserResponse,
   Game,
@@ -14,11 +14,11 @@ import {
   GetClubResponse,
   GetClubsResponse,
   GetGameResponse,
-} from '@/config/types';
-import { GameStatusType } from '@/config/enums/game-status-type.enum';
+} from "@/config/types";
+import { GameStatusType } from "@/config/enums/game-status-type.enum";
 
 export function buildHeader(token: string) {
-  return {Authorization: `Bearer ${token}`};
+  return { Authorization: `Bearer ${token}` };
 }
 
 export async function getLocations() {
@@ -44,13 +44,13 @@ export async function getGame(
     return {
       id: data.id,
       cover:
-        'https://medac.es/sites/default/files/styles/img_blog_big/public/blog/destacadas/historia-del-padel.jpg',
+        "https://medac.es/sites/default/files/styles/img_blog_big/public/blog/destacadas/historia-del-padel.jpg",
       stream: data.camera.streamingUrl,
       viewers: 0,
       elapsedTime: 10,
       onLive: data.status === GameStatusType.LIVE,
       createdAt: data.createdAt,
-      caption: '',
+      caption: "",
       duration: 0,
       club: {
         id: data.club.id,
@@ -60,7 +60,7 @@ export async function getGame(
         location: data.club.address,
         isFollowing: data.club.isFollowing,
       },
-      players: data.gamePlayers.map(user => ({
+      players: data.gamePlayers.map((user) => ({
         id: user.userId,
         username: user.user.username,
         name: user.user.name,
@@ -97,12 +97,12 @@ export async function getClubs(
 
     // Normalizar la respuesta usando la función de normalización existente
     const normalizedData = normalizeApiResponse<GetClubsResponse[]>(res.data);
-    
+
     // Asegurar que siempre devolvamos un array
     return Array.isArray(normalizedData) ? normalizedData : [];
   } catch (error: any) {
     crashlytics().recordError(error);
-    
+
     // Lanzar el código de estado HTTP si está disponible, o un error genérico
     if (error.response?.status) {
       throw error.response.status;
@@ -133,7 +133,7 @@ export async function getClubById(
 // TODO: get on live games from specific club
 export async function getLiveGames() {
   return games
-    .filter(game => game.onLive)
+    .filter((game) => game.onLive)
     .sort(
       (a, b) =>
         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
@@ -148,7 +148,7 @@ export async function getClubGames(clubId: string, token: string) {
         headers: buildHeader(token),
       },
     );
-
+    
     if (res.status !== 200) {
       throw res;
     }
@@ -163,9 +163,11 @@ export async function getClubGames(clubId: string, token: string) {
 
 export async function getLiveClubGames(clubId: string, token: string) {
   try {
-    const res = await getClubGames(clubId, token);
+    const res: any = await getClubGames(clubId, token);
 
-    return res.filter(game => game.gameStatus === GameStatusType.LIVE);
+    return res.items.filter(
+      (game: any) => game.gameStatus === GameStatusType.LIVE,
+    );
   } catch (error: any) {
     throw error;
   }
@@ -173,9 +175,11 @@ export async function getLiveClubGames(clubId: string, token: string) {
 
 export async function getNotLiveClubGames(clubId: string, token: string) {
   try {
-    const res = await getClubGames(clubId, token);
+    const res: any = await getClubGames(clubId, token);
 
-    return res.filter(game => game.gameStatus !== GameStatusType.LIVE);
+    return res?.items?.filter(
+      (game) => game.gameStatus !== GameStatusType.LIVE,
+    );
   } catch (error: any) {
     throw error;
   }
@@ -185,7 +189,7 @@ export async function followUser(userId: string, token: string) {
   try {
     const res = await axios.post<FollowUserResponse>(
       `${API_URL}/follow`,
-      {userId},
+      { userId },
       {
         headers: buildHeader(token),
       },
@@ -200,15 +204,15 @@ export async function followUser(userId: string, token: string) {
 
 export async function unfollowUser(userId: string, token: string) {
   try {
-    const res = await axios.post<{count: number}>(
+    const res = await axios.post<{ count: number }>(
       `${API_URL}/follow/unfollow`,
-      {userId},
+      { userId },
       {
         headers: buildHeader(token),
       },
     );
 
-    return normalizeApiResponse<{count: number}>(res.data);
+    return normalizeApiResponse<{ count: number }>(res.data);
   } catch (error: any) {
     crashlytics().recordError(error);
     throw new Error(error);
