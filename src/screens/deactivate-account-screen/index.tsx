@@ -1,17 +1,8 @@
 import {useState} from 'react';
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import {Alert, ScrollView, StyleSheet, View} from 'react-native';
 import {
   Button,
   ButtonText,
-  Input,
-  InputField,
   SafeAreaView,
   Text,
   VStack,
@@ -25,7 +16,7 @@ import {SpinnerLogin} from '@/components/Spinner-login';
 import {colors} from '@/config/theme';
 import {useAuth} from '@/contexts/authContext';
 import {MainNavigatorParamList} from '@/navigators/main-navigator';
-import {deactivateCurrentUser} from '@/api/users';
+import {deleteCurrentUser} from '@/api/users';
 import {logOut} from '@/firebase/auth';
 
 type Props = NativeStackScreenProps<
@@ -33,19 +24,12 @@ type Props = NativeStackScreenProps<
   'screens.deactivateAccount'
 >;
 
-const MAX_REASON_LENGTH = 500;
-
 const DeactivateAccountScreen = ({navigation}: Props) => {
   const {getAccessToken} = useAuth();
   const insets = useSafeAreaInsets();
 
-  const [reason, setReason] = useState('');
-  const [touched, setTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [requestError, setRequestError] = useState<{error: any} | null>(null);
-
-  const trimmedReason = reason.trim();
-  const hasValidationError = touched && trimmedReason.length === 0;
 
   const handleGoBack = () => {
     navigation.goBack();
@@ -59,11 +43,6 @@ const DeactivateAccountScreen = ({navigation}: Props) => {
   };
 
   const handleSubmit = async () => {
-    setTouched(true);
-    if (trimmedReason.length === 0) {
-      return;
-    }
-
     setRequestError(null);
     setSubmitting(true);
 
@@ -74,11 +53,11 @@ const DeactivateAccountScreen = ({navigation}: Props) => {
         throw {response: {status: 401}};
       }
 
-      await deactivateCurrentUser(token, trimmedReason);
+      await deleteCurrentUser(token);
 
       Alert.alert(
-        'Cuenta desactivada',
-        'Tu cuenta ha sido desactivada correctamente.',
+        'Cuenta eliminada',
+        'Tu cuenta ha sido eliminada permanentemente.',
         [
           {
             text: 'Aceptar',
@@ -114,82 +93,50 @@ const DeactivateAccountScreen = ({navigation}: Props) => {
       ]}>
       <CustomHeader
         boolImageTorna={false}
-        textCenter="Darme de baja"
+        textCenter="Eliminar cuenta"
         showNotificationIcon={false}
         showProfileIcon={false}
         customGoBack={handleGoBack}
       />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.keyboardAvoiding}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled">
-          <View style={styles.container}>
-            {requestError && (
-              <ToastRequest status={requestError} topPercentage={'85%'} />
-            )}
-            <VStack space="lg">
-              <Text style={styles.title} bold>
-                Confirmar baja de cuenta
-              </Text>
-              <Text style={styles.description}>
-                Cuéntanos el motivo por el cual deseas darte de baja. Esta
-                información nos ayuda a mejorar la experiencia.
-              </Text>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled">
+        <View style={styles.container}>
+          {requestError && (
+            <ToastRequest status={requestError} topPercentage={'85%'} />
+          )}
+          <VStack space="lg">
+            <Text style={styles.title} bold>
+              Eliminar cuenta permanentemente
+            </Text>
+            <Text style={styles.description}>
+              Esta acción es permanente e irreversible. Tu cuenta y todos tus
+              datos serán eliminados definitivamente.
+            </Text>
 
-              <VStack space="xs">
-                <Text style={styles.label} bold>
-                  Motivo (obligatorio)
-                </Text>
-                <Input style={styles.inputContainer}>
-                  <InputField
-                    style={styles.input}
-                    value={reason}
-                    onChangeText={text => {
-                      setReason(text.slice(0, MAX_REASON_LENGTH));
-                      setRequestError(null);
-                    }}
-                    onBlur={() => setTouched(true)}
-                    multiline
-                    placeholder="Escribe tu motivo aquí..."
-                    placeholderTextColor={colors.neutral400}
-                  />
-                </Input>
-                <View style={styles.helperRow}>
-                  <Text style={styles.helperText}>
-                    {reason.length}/{MAX_REASON_LENGTH}
-                  </Text>
-                  {hasValidationError && (
-                    <Text style={styles.errorText}>El motivo es obligatorio.</Text>
-                  )}
-                </View>
-              </VStack>
+            <VStack space="md" style={styles.buttonsContainer}>
+              <Button
+                disabled={submitting}
+                style={[styles.buttonPrimary, submitting && styles.buttonDisabled]}
+                onPress={handleSubmit}>
+                <ButtonText bold>
+                  {submitting ? <SpinnerLogin /> : 'Eliminar cuenta'}
+                </ButtonText>
+              </Button>
 
-              <VStack space="md" style={styles.buttonsContainer}>
-                <Button
-                  disabled={submitting}
-                  style={[styles.buttonPrimary, submitting && styles.buttonDisabled]}
-                  onPress={handleSubmit}>
-                  <ButtonText bold>
-                    {submitting ? <SpinnerLogin /> : 'Confirmar baja'}
-                  </ButtonText>
-                </Button>
-
-                <Button
-                  variant="outline"
-                  style={styles.buttonSecondary}
-                  onPress={handleGoBack}
-                  disabled={submitting}>
-                  <ButtonText bold style={styles.buttonSecondaryText}>
-                    Cancelar
-                  </ButtonText>
-                </Button>
-              </VStack>
+              <Button
+                variant="outline"
+                style={styles.buttonSecondary}
+                onPress={handleGoBack}
+                disabled={submitting}>
+                <ButtonText bold style={styles.buttonSecondaryText}>
+                  Cancelar
+                </ButtonText>
+              </Button>
             </VStack>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          </VStack>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -198,9 +145,6 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.white,
-  },
-  keyboardAvoiding: {
-    flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
@@ -219,42 +163,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22,
   },
-  label: {
-    color: colors.dark,
-    fontSize: 16,
-  },
-  inputContainer: {
-    borderColor: colors.neutral200,
-    borderWidth: 1,
-    borderRadius: 8,
-    minHeight: 168,
-    backgroundColor: colors.neutral100,
-  },
-  input: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    textAlignVertical: 'top',
-    color: colors.dark,
-    minHeight: 168,
-  },
-  helperRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  helperText: {
-    color: colors.neutral500,
-    fontSize: 12,
-  },
-  errorText: {
-    color: colors.danger,
-    fontSize: 12,
-  },
   buttonsContainer: {
     marginTop: 12,
   },
   buttonPrimary: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.danger,
     borderRadius: 8,
     height: 48,
     justifyContent: 'center',

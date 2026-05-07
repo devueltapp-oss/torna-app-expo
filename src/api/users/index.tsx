@@ -43,3 +43,8 @@ export const deactivateCurrentUser = async (token: string, reason: string) => {
     throw error;
   }
 };
+
+export const deleteCurrentUser = async (token: string) => {
+  const api = createAxiosInstance(token);
+  await api.delete('/user/me');
+};
