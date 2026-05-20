@@ -1,0 +1,103 @@
+import React from 'react';
+import { View, Text, ScrollView, Pressable } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Svg, Rect, Line } from 'react-native-svg';
+import { ChevronLeft, Check, Camera } from 'lucide-react-native';
+import { useTheme } from '../theme';
+import { Button, AppHeader, SurfaceChip } from '../components/ui';
+import type { ClubCourtPublic } from '../data/mocks';
+import { StepIndicator } from './reserveCommon';
+
+interface Props {
+  clubName: string;
+  courts: ClubCourtPublic[];
+  /** Initial selection (e.g. court tapped from ClubProfile's Reservar CTA). */
+  initialCourtId?: string;
+  onBack?: () => void;
+  onContinue?: (courtId: string) => void;
+}
+
+/**
+ * Step 1 of 3 — pick which court to reserve.
+ * In production:
+ *   GET /clubs/:id  → ClubPublic (with courts[])
+ */
+export function ReserveStep1Screen({ clubName, courts, initialCourtId, onBack, onContinue }: Props) {
+  const { colors } = useTheme();
+  const [selected, setSelected] = React.useState<string>(initialCourtId || courts[0]?.id || '');
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
+      <AppHeader title="Reservar cancha"
+        left={<Pressable onPress={onBack}><ChevronLeft size={22} color={colors.text}/></Pressable>}
+        right={<Text style={{ fontSize: 11, color: colors.muted2, fontWeight: '700' }}>1/3</Text>}
+      />
+      <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
+        <StepIndicator step={1}/>
+      </View>
+
+      <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+        <View>
+          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted2, letterSpacing: 0.8 }}>CLUB</Text>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text, letterSpacing: -0.3 }}>{clubName}</Text>
+        </View>
+
+        <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text }}>Elegí la cancha</Text>
+        <View style={{ gap: 10 }}>
+          {courts.map(c => {
+            const on = c.id === selected;
+            return (
+              <Pressable key={c.id} onPress={() => setSelected(c.id)}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 12,
+                  backgroundColor: colors.surface,
+                  borderWidth: 1.5, borderColor: on ? colors.primary : colors.line,
+                  borderRadius: 14, padding: 12,
+                  ...(on ? { shadowColor: '#000', shadowOpacity: 0.04, shadowOffset: { width: 0, height: 0 }, shadowRadius: 0 } : {}),
+                }}>
+                <View style={{
+                  width: 64, height: 56, borderRadius: 10, overflow: 'hidden',
+                  backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <Svg viewBox="0 0 200 110" width="85%" style={{ opacity: 0.3 }}>
+                    <Rect x={20} y={15} width={160} height={80} stroke={colors.accent} strokeWidth={1.5} fill="none"/>
+                    <Line x1={100} y1={15} x2={100} y2={95} stroke={colors.accent} strokeWidth={1.5}/>
+                  </Svg>
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={{ fontWeight: '800', fontSize: 15, color: colors.text }}>{c.name}</Text>
+                    <SurfaceChip surface={c.surface}/>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                      <Camera size={11} color={colors.muted2}/>
+                      <Text style={{ fontSize: 11, color: colors.muted2 }}>{c.cams}</Text>
+                    </View>
+                    <Text style={{ fontSize: 11, color: colors.muted2 }}>·</Text>
+                    <Text style={{ fontSize: 11, color: colors.muted2 }}>{c.indoor ? 'Cubierta' : 'Exterior'}</Text>
+                  </View>
+                </View>
+                <View style={{
+                  width: 22, height: 22, borderRadius: 11,
+                  borderWidth: 2, borderColor: on ? colors.primary : colors.lineStrong,
+                  backgroundColor: on ? colors.primary : 'transparent',
+                  alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {on && <Check size={12} color={colors.primaryFg} strokeWidth={3}/>}
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      </ScrollView>
+
+      <View style={{
+        paddingHorizontal: 16, paddingTop: 12, paddingBottom: 18,
+        borderTopWidth: 1, borderTopColor: colors.line, backgroundColor: colors.surface,
+      }}>
+        <Button fullWidth size="lg" onPress={() => onContinue?.(selected)}>Continuar →</Button>
+      </View>
+    </SafeAreaView>
+  );
+}

@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\casik\\\\Desktop\\\\Torna Design System\\\\expo\" -Directory)",
+      "Bash(Select-Object Name)",
+      "Read(//tmp/**)",
+      "Bash(npx tsc *)",
+      "Bash(npx expo *)",
+      "Bash(curl *)",
+      "Bash(yarn add *)",
+      "Bash(npm info *)",
+      "Bash(cd C:\\\\Users\\\\casik\\\\Desktop\\\\Torna Design System\\\\expo *)",
+      "Bash(grep -E \"\\\\.tsx$\")",
+      "Bash(Get-ChildItem *)"
+    ]
+  }
+}

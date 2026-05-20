@@ -1,0 +1,64 @@
+{
+  "expo": {
+    "name": "Torna",
+    "slug": "tornapp",
+    "owner": "teamtornas-organization",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/torna-icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/torna-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F1E47"
+    },
+    "plugins": [
+      ["expo-av", {
+        "microphonePermission": "Torna necesita el micrófono para reproducir audio de los partidos en vivo."
+      }]
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "io.torna",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Torna necesita el micrófono para reproducir audio de los partidos en vivo.",
+        "NSLocationWhenInUseUsageDescription": "Torna usa tu ubicación para mostrarte canchas y jugadores cercanos.",
+        "NSPhotoLibraryUsageDescription": "Torna accede a tu galería para subir fotos y videos.",
+        "NSPhotoLibraryAddUsageDescription": "Torna guarda clips en tu galería."
+      },
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestampAPIs",
+            "NSPrivacyAccessedAPITypeReasons": ["C617.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategorySystemBootTime",
+            "NSPrivacyAccessedAPITypeReasons": ["35F9.1"]
+          }
+        ]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/torna-icon.png",
+        "backgroundColor": "#0F1E47"
+      },
+      "package": "io.torna",
+      "googleServicesFile": "./google-services.json"
+    },
+    "web": {
+      "favicon": "./assets/torna-icon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "6a3a7eab-f27e-4225-989f-4331a6fc578e"
+      }
+    }
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "project_info": {
+    "project_number": "83738503515",
+    "project_id": "torna-7a62f",
+    "storage_bucket": "torna-7a62f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:83738503515:android:bbfd03924dd1b1c7d2127e",
+        "android_client_info": {
+          "package_name": "com.tornapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "83738503515-bit0pprnegn1eg2r3eodqshfgk64eh4d.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDYOAnkuPFARLwuXLY9Ds9ksVSxRWaOXwY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "83738503515-bit0pprnegn1eg2r3eodqshfgk64eh4d.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "83738503515-5pdsdh9gumdctbpci6upucgpa41brbkc.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "io.torna"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:83738503515:android:62ca5790b2959c63d2127e",
+        "android_client_info": {
+          "package_name": "io.torna"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "83738503515-bit0pprnegn1eg2r3eodqshfgk64eh4d.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDYOAnkuPFARLwuXLY9Ds9ksVSxRWaOXwY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "83738503515-bit0pprnegn1eg2r3eodqshfgk64eh4d.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "83738503515-5pdsdh9gumdctbpci6upucgpa41brbkc.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "io.torna"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
