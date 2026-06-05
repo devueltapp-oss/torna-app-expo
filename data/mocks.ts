@@ -6,7 +6,7 @@
  * (`useFeed`, `useClubProfile`, etc.); types stay identical.
  */
 import { LiveGameData, GameListData, CourtData, PlayerData, MatchParticipant } from '../components/cards';
-import { GameDetailData, ClubProfile, UpcomingGameData } from '../screens';
+import { GameDetailData, ClubProfile } from '../screens';
 
 /* ─────────── Existing mocks (club admin views) ─────────── */
 
@@ -112,13 +112,77 @@ export const MOCK_GAME_DETAIL: GameDetailData = {
   ],
 };
 
+export interface UpcomingGamePlayer {
+  id?: string;
+  username: string;
+  name?: string;
+  profilePicture?: string;
+}
+
+export interface GameApplication {
+  id: string;
+  applicant: UpcomingGamePlayer;
+  partner?: UpcomingGamePlayer;
+  status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
+}
+
+export interface UpcomingGameData {
+  id: string;
+  time: string;
+  date?: string;
+  court: string;
+  club: string;
+  players: UpcomingGamePlayer[];
+  following: 'club' | 'player';
+  byPlayer?: string;
+  isOpenForPlayers?: boolean;
+  maxPlayers?: number;
+  isCreator?: boolean;
+  applications?: GameApplication[];
+}
+
 export const MOCK_UPCOMING_GAMES: UpcomingGameData[] = [
-  { id: 'G-7430', time: '19:00', court: 'Cancha 2', club: 'Club Pádel BSAS',
-    players: [{ username: '@maxi' }, { username: '@lu' }], following: 'club' },
-  { id: 'G-7431', time: '20:30', court: 'Cancha 5', club: 'Padel Norte',
-    players: [{ username: '@flor' }, { username: '@nico' }, { username: '@jp' }, { username: '@mar' }], following: 'club' },
-  { id: 'G-7444', time: '21:00', court: 'Cancha 1', club: 'Club Recoleta',
-    players: [{ username: '@maxi' }, { username: '@diego' }], following: 'player', byPlayer: '@maxi' },
+  { id: 'G-7430', time: '19:00', date: 'Hoy', court: 'Cancha 2', club: 'Club Pádel BSAS',
+    players: [
+      { id: 'p-1042', username: '@maxi', name: 'Maxi Rodríguez' },
+      { id: 'p-1043', username: '@lu',   name: 'Lucía Paredes' },
+    ],
+    following: 'club', isOpenForPlayers: true, maxPlayers: 4 },
+  { id: 'G-7431', time: '20:30', date: 'Hoy', court: 'Cancha 5', club: 'Padel Norte',
+    players: [
+      { id: 'p-1046', username: '@flor',  name: 'Flor Bauer' },
+      { id: 'p-1047', username: '@nico',  name: 'Nico Suárez' },
+      { id: 'p-1044', username: '@jp',    name: 'JP Torres' },
+      { id: 'p-1045', username: '@mar',   name: 'Mar Díaz' },
+    ],
+    following: 'club', maxPlayers: 4 },
+  { id: 'G-7444', time: '21:00', date: 'Mañana', court: 'Cancha 1', club: 'Club Recoleta',
+    players: [
+      { id: 'p-1042', username: '@maxi',  name: 'Maxi Rodríguez' },
+      { id: 'p-1044', username: '@diego', name: 'Diego Vázquez' },
+    ],
+    following: 'player', byPlayer: '@maxi', isOpenForPlayers: true, maxPlayers: 4 },
+  { id: 'G-7450', time: '18:00', date: 'Hoy', court: 'Cancha 3', club: 'Club Pádel BSAS',
+    players: [
+      { id: 'me', username: '@vos', name: 'Tú' },
+      { id: 'p-1043', username: '@lu', name: 'Lucía Paredes' },
+    ],
+    following: 'club', isOpenForPlayers: true, maxPlayers: 4,
+    isCreator: true,
+    applications: [
+      {
+        id: 'app-001',
+        applicant: { id: 'p-2001', username: '@carlos', name: 'Carlos Méndez' },
+        partner: { id: 'p-2002', username: '@romi', name: 'Romina Paz' },
+        status: 'PENDING',
+      },
+      {
+        id: 'app-002',
+        applicant: { id: 'p-2003', username: '@santi', name: 'Santiago López' },
+        status: 'PENDING',
+      },
+    ],
+  },
 ];
 
 export const MOCK_PROFILE: ClubProfile = {
@@ -177,6 +241,12 @@ export interface UpcomingPublicGame {
 }
 export interface DirectoryPlayer {
   id: string; name: string; username: string;
+}
+export interface FollowItem {
+  id: string;
+  name: string;
+  username: string;
+  profilePicture?: string;
 }
 export interface ClubPublic {
   id: string;
@@ -305,6 +375,7 @@ export interface PlayerLiveGame {
 }
 export interface PlayerClip {
   id: string; title: string; length: string; date: string;
+  videoUrl?: string;
 }
 export interface PlayerPublic {
   id: string;
@@ -321,6 +392,10 @@ export interface PlayerPublic {
   clips: PlayerClip[];
   /** Photo grid placeholders (1..n). In prod replace with image URLs. */
   photos: number[];
+  notifyOnMatch?: boolean;
+  followingCount: number;
+  followersList: FollowItem[];
+  followingList: FollowItem[];
 }
 
 export const MOCK_PLAYER_PUBLIC: PlayerPublic = {
@@ -331,6 +406,7 @@ export const MOCK_PLAYER_PUBLIC: PlayerPublic = {
   location: 'Palermo, Buenos Aires',
   followers: 234,
   isFollowing: false,
+  notifyOnMatch: false,
   isLiveNow: true,
   liveGame: {
     id: 'G-7421', court: 'Cancha 3', club: 'Club Pádel BSAS', viewers: 47,
@@ -343,12 +419,54 @@ export const MOCK_PLAYER_PUBLIC: PlayerPublic = {
     streamUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
   },
   clips: [
-    { id: 'clip-p1', title: 'Remate final · vs Diego', length: '0:18', date: 'Ayer' },
-    { id: 'clip-p2', title: 'Punto largo · 18 golpes', length: '0:42', date: '2 días' },
-    { id: 'clip-p3', title: 'Smash desde el fondo',    length: '0:12', date: '3 días' },
-    { id: 'clip-p4', title: 'Volea cruzada',           length: '0:24', date: '1 sem.' },
+    { id: 'clip-p1', title: 'Remate final · vs Diego', length: '0:18', date: 'Ayer',
+      videoUrl: 'https://f005.backblazeb2.com/file/torna-videos/games/YTDown_YouTube_Padel-GoPro-Hero-12_Media_EAdDVgx5A24_001_1080p.mp4' },
+    { id: 'clip-p2', title: 'Punto largo · 18 golpes', length: '0:42', date: '2 días',
+      videoUrl: 'https://f005.backblazeb2.com/file/torna-videos/games/YTDown_YouTube_Padel-GoPro-Hero-12_Media_EAdDVgx5A24_001_1080p.mp4' },
+    { id: 'clip-p3', title: 'Smash desde el fondo',    length: '0:12', date: '3 días',
+      videoUrl: 'https://f005.backblazeb2.com/file/torna-videos/games/YTDown_YouTube_Padel-GoPro-Hero-12_Media_EAdDVgx5A24_001_1080p.mp4' },
+    { id: 'clip-p4', title: 'Volea cruzada',           length: '0:24', date: '1 sem.',
+      videoUrl: 'https://f005.backblazeb2.com/file/torna-videos/games/YTDown_YouTube_Padel-GoPro-Hero-12_Media_EAdDVgx5A24_001_1080p.mp4' },
   ],
   photos: [1, 2, 3, 4, 5, 6, 7, 8],
+  followingCount: 18,
+  followersList: [],
+  followingList: [],
+};
+
+export const MOCK_FAKE_PLAYER: PlayerPublic = {
+  id: 'p-2099',
+  name: 'Félix Torrealba',
+  username: '@felix.t',
+  club: 'Padel Norte',
+  location: 'Belgrano, Buenos Aires',
+  followers: 512,
+  isFollowing: false,
+  notifyOnMatch: false,
+  isLiveNow: false,
+  liveGame: null,
+  clips: [
+    { id: 'clip-f1', title: 'Bajada de pared · final del set', length: '0:22', date: 'Ayer',
+      videoUrl: 'https://f005.backblazeb2.com/file/torna-videos/games/YTDown_YouTube_Padel-GoPro-Hero-12_Media_EAdDVgx5A24_001_1080p.mp4' },
+    { id: 'clip-f2', title: 'Globo defensivo · punto increíble', length: '0:31', date: '3 días',
+      videoUrl: 'https://f005.backblazeb2.com/file/torna-videos/games/YTDown_YouTube_Padel-GoPro-Hero-12_Media_EAdDVgx5A24_001_1080p.mp4' },
+    { id: 'clip-f3', title: 'Remate ganador · cuartos', length: '0:15', date: '1 sem.',
+      videoUrl: 'https://f005.backblazeb2.com/file/torna-videos/games/YTDown_YouTube_Padel-GoPro-Hero-12_Media_EAdDVgx5A24_001_1080p.mp4' },
+  ],
+  photos: [1, 2, 3, 4, 5, 6],
+  followingCount: 47,
+  followersList: [
+    { id: 'p-1042', name: 'Maxi Rodríguez', username: '@maxi.r' },
+    { id: 'p-1043', name: 'Lucía Paredes',  username: '@lupare' },
+    { id: 'p-1044', name: 'Diego Vázquez',  username: '@dievaz' },
+    { id: 'p-1046', name: 'Flor Bauer',     username: '@florb'  },
+    { id: 'p-1047', name: 'Nico Suárez',    username: '@nicosua'},
+  ],
+  followingList: [
+    { id: 'p-1044', name: 'Diego Vázquez',  username: '@dievaz' },
+    { id: 'p-1045', name: 'Javier Mtz.',    username: '@javim'  },
+    { id: 'p-1046', name: 'Flor Bauer',     username: '@florb'  },
+  ],
 };
 
 /* ─────────── Search play (GPS) ───────────
@@ -392,6 +510,48 @@ export const MOCK_NEARBY: { courts: NearbyCourt[]; players: NearbyPlayer[] } = {
   ],
 };
 
+/* ─────────── Búsqueda global (texto) ───────────
+ *   GET /search?q=  → { players: SearchablePlayer[], courts: SearchableCourt[] }
+ */
+
+export interface SearchablePlayer {
+  id: string;
+  name: string;
+  username: string;
+  rating: number;
+}
+
+export interface SearchableCourt {
+  id: string;
+  name: string;
+  club: string;
+  clubId: string;
+  surface: 'CLAY' | 'GRASS' | 'HARD' | 'CARPET';
+  hasCameras: boolean;
+}
+
+export const MOCK_SEARCHABLE_PLAYERS: SearchablePlayer[] = [
+  { id: '1042', name: 'Maxi Rodríguez',  username: '@maxi.r',  rating: 4.6 },
+  { id: '1043', name: 'Lucía Paredes',   username: '@lupare',  rating: 4.2 },
+  { id: '1044', name: 'Diego Vázquez',   username: '@dievaz',  rating: 4.7 },
+  { id: '1045', name: 'Javier Martínez', username: '@javim',   rating: 4.1 },
+  { id: '1046', name: 'Florencia Bauer', username: '@florb',   rating: 4.4 },
+  { id: '1047', name: 'Nicolás Suárez',  username: '@nicosua', rating: 4.0 },
+  { id: '1048', name: 'Ana Gómez',       username: '@ana.g',   rating: 4.5 },
+  { id: '1049', name: 'Pablo Herrera',   username: '@pabloH',  rating: 3.9 },
+];
+
+export const MOCK_SEARCHABLE_COURTS: SearchableCourt[] = [
+  { id: 'C1', name: 'Cancha 1', club: 'Club Pádel BSAS', clubId: 'club-padelbsas', surface: 'CLAY',   hasCameras: true  },
+  { id: 'C2', name: 'Cancha 2', club: 'Club Pádel BSAS', clubId: 'club-padelbsas', surface: 'CLAY',   hasCameras: true  },
+  { id: 'C3', name: 'Cancha 3', club: 'Club Pádel BSAS', clubId: 'club-padelbsas', surface: 'HARD',   hasCameras: true  },
+  { id: 'C4', name: 'Cancha 4', club: 'Club Pádel BSAS', clubId: 'club-padelbsas', surface: 'GRASS',  hasCameras: true  },
+  { id: 'C5', name: 'Cancha 1', club: 'Padel Norte',     clubId: 'club-norte',     surface: 'CLAY',   hasCameras: true  },
+  { id: 'C6', name: 'Cancha 2', club: 'Padel Norte',     clubId: 'club-norte',     surface: 'HARD',   hasCameras: true  },
+  { id: 'C7', name: 'Cancha 4', club: 'Club Recoleta',   clubId: 'club-recoleta',  surface: 'GRASS',  hasCameras: false },
+  { id: 'C8', name: 'Cancha 2', club: 'Padel Sur',       clubId: 'club-sur',       surface: 'CLAY',   hasCameras: true  },
+];
+
 /* ─────────── Social feed (player home) ───────────
  *   GET /feed/posts?cursor=…  → { posts: FeedPost[], nextCursor }
  *   POST /feed/posts/:id/like → { likes, hasLiked }
@@ -416,6 +576,8 @@ export interface FeedPost {
   tone?: FeedPostTone;
   /** Optional aspect ratio override for the media block. */
   mediaAspectRatio?: string;
+  /** Playback URL for highlight clips. Replace with real CDN URL when API ships. */
+  videoUrl?: string;
 }
 
 export const MOCK_FEED_POSTS: FeedPost[] = [
@@ -425,6 +587,7 @@ export const MOCK_FEED_POSTS: FeedPost[] = [
     contextLine: 'Final · Cancha 3', duration: '0:24',
     caption: 'Cerramos el partido con un remate en parábola. 🔥',
     postedAt: 'hace 2 h', likes: 48, comments: 7,
+    videoUrl: 'https://f005.backblazeb2.com/file/torna-videos/games/YTDown_YouTube_Padel-GoPro-Hero-12_Media_EAdDVgx5A24_001_1080p.mp4',
   },
   {
     id: 'P-202', type: 'photo', tone: 'lime',
@@ -439,6 +602,7 @@ export const MOCK_FEED_POSTS: FeedPost[] = [
     contextLine: 'Mejor jugada de la semana', duration: '0:18',
     caption: 'Smash desde el fondo. ¿Mejor momento de Cancha 3 esta semana?',
     postedAt: 'hace 8 h', likes: 122, comments: 19,
+    videoUrl: 'https://f005.backblazeb2.com/file/torna-videos/games/YTDown_YouTube_Padel-GoPro-Hero-12_Media_EAdDVgx5A24_001_1080p.mp4',
   },
   {
     id: 'P-204', type: 'photo', tone: 'white',
@@ -521,25 +685,10 @@ export type LibraryItem = LibraryMatch | LibraryHighlight | LibraryUpload;
 export const MOCK_MY_MATCHES_V2: LibraryMatch[] = [
   { id: 'G-7401', kind: 'match', title: 'Cancha 3 · Club Pádel BSAS',
     subtitle: 'Hoy · 15:52 · GoPro Hero 12 · 1080p',
-    surface: 'HARD',   durationSeconds: 142, durationLabel: '2:22 min',
+    surface: 'HARD', durationSeconds: 142, durationLabel: '2:22 min',
     cameras: 1, highlightsCount: 0, isPublic: false,
     recordingUrl: 'https://f005.backblazeb2.com/file/torna-videos/games/YTDown_YouTube_Padel-GoPro-Hero-12_Media_EAdDVgx5A24_001_1080p.mp4',
     date: 'Hoy' },
-  { id: 'G-7388', kind: 'match', title: 'Cancha 1 · Padel Norte',
-    subtitle: '12 nov · 12:00 · vs Pablo S. & Nico S.',
-    surface: 'CLAY',   durationSeconds: 96, durationLabel: '1:36 hs',
-    cameras: 2, highlightsCount: 2, isPublic: true,
-    recordingUrl: 'https://cdn.torna.io/games/G-7388.m3u8', date: '12 nov' },
-  { id: 'G-7359', kind: 'match', title: 'Cancha 5 · Club Pádel BSAS',
-    subtitle: '8 nov · 21:00 · vs Andrés P. & Sofía M.',
-    surface: 'CARPET', durationSeconds: 88, durationLabel: '1:28 hs',
-    cameras: 3, highlightsCount: 0, isPublic: false,
-    recordingUrl: 'https://cdn.torna.io/games/G-7359.m3u8', date: '8 nov' },
-  { id: 'G-7341', kind: 'match', title: 'Cancha 2 · Padel Sur',
-    subtitle: '5 nov · 19:30 · vs Maxi R. & Carla M.',
-    surface: 'CLAY',   durationSeconds: 124, durationLabel: '2:04 hs',
-    cameras: 2, highlightsCount: 0, isPublic: false,
-    recordingUrl: 'https://cdn.torna.io/games/G-7341.m3u8', date: '5 nov' },
 ];
 
 export const MOCK_MY_HIGHLIGHTS_V2: LibraryHighlight[] = [

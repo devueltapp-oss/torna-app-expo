@@ -1,19 +1,17 @@
-/**
- * Dual-handle trim slider. Reusa la lógica que pediría el spec original
- * (min 3 s, max 60 s, brand-strict warning colors) sin depender de
- * `react-native-unistyles`. Usa PanResponder de RN core — sin reanimated.
- */
 import React from 'react';
-import { View, Text, PanResponder, LayoutChangeEvent } from 'react-native';
+import { View, Text, LayoutChangeEvent } from 'react-native';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { useTheme } from '../../../theme';
 
 export const TRIM_MIN_SEC = 3;
 export const TRIM_MAX_SEC = 60;
+export const FILMSTRIP_H = 72;
 
 export interface TrimRangeSliderProps {
   duration: number;
   value: [number, number];
   onChange: (next: [number, number]) => void;
+  currentTime?: number;
 }
 
 function fmt(s: number) {
@@ -23,13 +21,10 @@ function fmt(s: number) {
   return `${m}:${r.toString().padStart(2, '0')}`;
 }
 
-export function TrimRangeSlider({ duration, value, onChange }: TrimRangeSliderProps) {
+export function TrimRangeSlider({ duration, value, onChange, currentTime }: TrimRangeSliderProps) {
   const { colors } = useTheme();
   const [w, setW] = React.useState(0);
 
-  // Refs latentes: el PanResponder se crea UNA SOLA vez, así que tiene que
-  // leer la duración y el width actuales por ref (sino quedan capturados al
-  // momento del montaje y nunca se actualizan).
   const valueRef = React.useRef(value);
   const widthRef = React.useRef(w);
   const durRef   = React.useRef(duration);
@@ -39,37 +34,43 @@ export function TrimRangeSlider({ duration, value, onChange }: TrimRangeSliderPr
   React.useEffect(() => { durRef.current = duration; }, [duration]);
   React.useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
-  // Valor al INICIO del drag — se fija en onPanResponderGrant y se usa como
-  // base para sumar `g.dx`. Sin esto, la handle "se escapa" porque g.dx es
-  // acumulativo desde el touch-start pero el value ya cambió.
   const grantValueRef = React.useRef<[number, number]>(value);
 
   const onLayout = (e: LayoutChangeEvent) => setW(e.nativeEvent.layout.width);
 
-  function buildResponder(handle: 'start' | 'end') {
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => { grantValueRef.current = valueRef.current; },
-      onPanResponderMove: (_, g) => {
-        const wNow = widthRef.current;
-        if (wNow <= 0) return;
-        const dNow = durRef.current;
-        const [s0, e0] = grantValueRef.current;
-        const dt = (g.dx / wNow) * dNow;
-        if (handle === 'start') {
+  const startGesture = React.useMemo(
+    () =>
+      Gesture.Pan()
+        .runOnJS(true)
+        .onBegin(() => { grantValueRef.current = valueRef.current; })
+        .onUpdate((e) => {
+          const wNow = widthRef.current;
+          if (wNow <= 0) return;
+          const dNow = durRef.current;
+          const [s0, e0] = grantValueRef.current;
+          const dt = (e.translationX / wNow) * dNow;
           const next = Math.max(0, Math.min(e0 - TRIM_MIN_SEC, s0 + dt));
           onChangeRef.current([next, e0]);
-        } else {
+        }),
+    [],
+  );
+
+  const endGesture = React.useMemo(
+    () =>
+      Gesture.Pan()
+        .runOnJS(true)
+        .onBegin(() => { grantValueRef.current = valueRef.current; })
+        .onUpdate((e) => {
+          const wNow = widthRef.current;
+          if (wNow <= 0) return;
+          const dNow = durRef.current;
+          const [s0, e0] = grantValueRef.current;
+          const dt = (e.translationX / wNow) * dNow;
           const next = Math.min(dNow, Math.max(s0 + TRIM_MIN_SEC, e0 + dt));
           onChangeRef.current([s0, next]);
-        }
-      },
-    });
-  }
-
-  const startPan = React.useRef(buildResponder('start')).current;
-  const endPan   = React.useRef(buildResponder('end')).current;
+        }),
+    [],
+  );
 
   const [start, end] = value;
   const sel = end - start;
@@ -78,65 +79,98 @@ export function TrimRangeSlider({ duration, value, onChange }: TrimRangeSliderPr
   const warn = tooShort || tooLong;
 
   const pct = (s: number) => duration > 0 ? (s / duration) * 100 : 0;
+  const accentColor = warn ? colors.lineStrong : colors.accent;
 
   return (
-    <View style={{ gap: 10 }}>
-      <View
-        onLayout={onLayout}
-        style={{
-          height: 56, borderRadius: 12, backgroundColor: colors.bg2,
-          borderWidth: 1, borderColor: colors.line, justifyContent: 'center',
-        }}>
-        {/* base track */}
+    <View style={{ gap: 8 }}>
+      {/* Overlay sobre la filmstrip */}
+      <View onLayout={onLayout} style={{ height: FILMSTRIP_H, position: 'relative' }}>
+
+        {/* Dimming zona izquierda (antes del start) */}
         <View style={{
-          position: 'absolute', left: 14, right: 14, top: '50%', height: 4,
-          marginTop: -2, backgroundColor: colors.lineStrong, borderRadius: 2,
-        }}/>
-        {/* selection */}
+          position: 'absolute', left: 0, top: 0, bottom: 0,
+          width: `${pct(start)}%`,
+          backgroundColor: 'rgba(0,0,0,0.58)',
+        }} pointerEvents="none" />
+
+        {/* Dimming zona derecha (después del end) */}
         <View style={{
-          position: 'absolute', top: '50%', height: 8, marginTop: -4,
-          left: `${pct(start)}%`, width: `${pct(end - start)}%`,
-          backgroundColor: warn ? colors.lineStrong : colors.accent, borderRadius: 4,
-        }}/>
-        {/* handle start */}
-        <View
-          {...startPan.panHandlers}
-          style={{
-            position: 'absolute', top: '50%', marginTop: -18,
-            left: `${pct(start)}%`, marginLeft: -9,
-            width: 18, height: 36, borderRadius: 6,
-            borderWidth: 2, borderColor: colors.ink, backgroundColor: '#FFFFFF',
+          position: 'absolute', right: 0, top: 0, bottom: 0,
+          width: `${100 - pct(end)}%`,
+          backgroundColor: 'rgba(0,0,0,0.58)',
+        }} pointerEvents="none" />
+
+        {/* Borde superior de selección */}
+        <View style={{
+          position: 'absolute', top: 0, height: 3,
+          left: `${pct(start)}%`, right: `${100 - pct(end)}%`,
+          backgroundColor: accentColor,
+        }} pointerEvents="none" />
+
+        {/* Borde inferior de selección */}
+        <View style={{
+          position: 'absolute', bottom: 0, height: 3,
+          left: `${pct(start)}%`, right: `${100 - pct(end)}%`,
+          backgroundColor: accentColor,
+        }} pointerEvents="none" />
+
+        {/* Playhead */}
+        {currentTime != null && duration > 0 && (
+          <View style={{
+            position: 'absolute', top: 0, bottom: 0,
+            left: `${pct(currentTime)}%`,
+            width: 2, backgroundColor: '#FFFFFF', opacity: 0.9,
+          }} pointerEvents="none" />
+        )}
+
+        {/* Handle izquierdo */}
+        <GestureDetector gesture={startGesture}>
+          <View style={{
+            position: 'absolute', top: 0, bottom: 0,
+            left: `${pct(start)}%`, marginLeft: -6,
+            width: 12, backgroundColor: accentColor,
             alignItems: 'center', justifyContent: 'center',
           }}>
-          <View style={{ width: 2, height: 14, backgroundColor: colors.ink }}/>
-        </View>
-        {/* handle end */}
-        <View
-          {...endPan.panHandlers}
-          style={{
-            position: 'absolute', top: '50%', marginTop: -18,
-            left: `${pct(end)}%`, marginLeft: -9,
-            width: 18, height: 36, borderRadius: 6,
-            borderWidth: 2, borderColor: colors.ink, backgroundColor: '#FFFFFF',
+            <View style={{ gap: 3 }}>
+              <View style={{ width: 2, height: 2, borderRadius: 1, backgroundColor: colors.ink }} />
+              <View style={{ width: 2, height: 2, borderRadius: 1, backgroundColor: colors.ink }} />
+              <View style={{ width: 2, height: 2, borderRadius: 1, backgroundColor: colors.ink }} />
+            </View>
+          </View>
+        </GestureDetector>
+
+        {/* Handle derecho */}
+        <GestureDetector gesture={endGesture}>
+          <View style={{
+            position: 'absolute', top: 0, bottom: 0,
+            left: `${pct(end)}%`, marginLeft: -6,
+            width: 12, backgroundColor: accentColor,
             alignItems: 'center', justifyContent: 'center',
           }}>
-          <View style={{ width: 2, height: 14, backgroundColor: colors.ink }}/>
-        </View>
+            <View style={{ gap: 3 }}>
+              <View style={{ width: 2, height: 2, borderRadius: 1, backgroundColor: colors.ink }} />
+              <View style={{ width: 2, height: 2, borderRadius: 1, backgroundColor: colors.ink }} />
+              <View style={{ width: 2, height: 2, borderRadius: 1, backgroundColor: colors.ink }} />
+            </View>
+          </View>
+        </GestureDetector>
       </View>
 
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+      {/* Labels IN / OUT y duración */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', paddingHorizontal: 2 }}>
         <View style={{ flexDirection: 'row', gap: 12 }}>
-          <Text style={{ fontFamily: 'Menlo', fontSize: 11, color: colors.muted2 }}>IN  {fmt(start)}</Text>
-          <Text style={{ fontFamily: 'Menlo', fontSize: 11, color: colors.muted2 }}>OUT {fmt(end)}</Text>
+          <Text style={{ fontFamily: 'Menlo', fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>IN  {fmt(start)}</Text>
+          <Text style={{ fontFamily: 'Menlo', fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>OUT {fmt(end)}</Text>
         </View>
-        <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text }}>
-          {fmt(sel)} <Text style={{ color: colors.muted2, fontWeight: '600' }}>/ {TRIM_MAX_SEC}s máx</Text>
+        <Text style={{ fontSize: 12, fontWeight: '800', color: warn ? accentColor : '#FFFFFF' }}>
+          {fmt(sel)}{' '}
+          <Text style={{ color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>/ {TRIM_MAX_SEC}s máx</Text>
         </Text>
       </View>
 
       {warn ? (
-        <View style={{ backgroundColor: colors.accentSoft, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}>
-          <Text style={{ fontSize: 11, color: colors.accentText, fontWeight: '700' }}>
+        <View style={{ backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}>
+          <Text style={{ fontSize: 11, color: accentColor, fontWeight: '700' }}>
             {tooShort ? `El clip debe durar al menos ${TRIM_MIN_SEC}s.` : `El clip no puede pasar de ${TRIM_MAX_SEC}s.`}
           </Text>
         </View>

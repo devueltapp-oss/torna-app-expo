@@ -1,36 +1,39 @@
 import React from 'react';
-import { View, Text, ScrollView, Pressable } from 'react-native';
+import { View, Text, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
 import { Search, Bell } from 'lucide-react-native';
 import { useTheme } from '../theme';
-import { SectionHeader, StatusBadge, AvatarStack } from '../components/ui';
-import { LiveGameTile, FeedPost, LiveGameData } from '../components/cards';
+import { SectionHeader } from '../components/ui';
+import { LiveGameTile, FeedPost, LiveGameData, UpcomingGameTile } from '../components/cards';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
-import { fonts } from '../theme/tokens';
-import type { FeedPost as FeedPostData } from '../data/mocks';
+import { VideoPreviewModal } from '../components/VideoPreviewModal';
+import { UpcomingMatchSheet } from '../components/UpcomingMatchSheet';
+import type { FeedPost as FeedPostData, InvitablePlayer, UpcomingGameData, UpcomingGamePlayer } from '../data/mocks';
+import type { ReelSection } from './ReelViewScreen';
 
 const tornaLogo = require('../assets/torna-icon.png');
 
-export interface UpcomingGameData {
-  id: string;
-  time: string;
-  court: string;
-  club: string;
-  players: { username: string; name?: string }[];
-  /** What relationship surfaces this game in the feed. */
-  following: 'club' | 'player';
-  byPlayer?: string;
-}
+export type { UpcomingGamePlayer, UpcomingGameData } from '../data/mocks';
 
 interface Props {
   greeting?: string;
   liveGames: LiveGameData[];
   upcomingGames?: UpcomingGameData[];
+  /** Partidas abiertas (isOpenForPlayers) a las que el usuario puede postularse. */
+  openGames?: UpcomingGameData[];
   feedPosts?: FeedPostData[];
   onOpenGame?: (id: string) => void;
   onOpenSearch?: () => void;
   onChangeTab?: (id: TabId) => void;
   activeTab?: TabId;
+  onVerMas?: (section: ReelSection, initialIndex?: number) => void;
+  refreshing: boolean;
+  onRefresh: () => void;
+  onOpenPlayerProfile?: (playerId: string) => void;
+  invitablePlayers?: InvitablePlayer[];
+  onAcceptApplication?: (gameId: string, appId: string) => void;
+  onRejectApplication?: (gameId: string, appId: string) => void;
 }
 
 /**
@@ -45,13 +48,25 @@ export function HomeScreen({
   greeting = 'Maxi',
   liveGames,
   upcomingGames = [],
+  openGames = [],
   feedPosts = [],
   onOpenGame,
   onOpenSearch,
   onChangeTab,
   activeTab = 'home',
+  onVerMas,
+  refreshing,
+  onRefresh,
+  onOpenPlayerProfile,
+  invitablePlayers = [],
+  onAcceptApplication,
+  onRejectApplication,
 }: Props) {
   const { colors } = useTheme();
+  const isFocused = useIsFocused();
+  const [highlightModal, setHighlightModal] = React.useState<{ url: string; title: string } | null>(null);
+  const [upcomingSheet, setUpcomingSheet] = React.useState<UpcomingGameData | null>(null);
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       {/* Header */}
@@ -74,16 +89,30 @@ export function HomeScreen({
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingTop: 4, paddingBottom: 20, gap: 14 }}>
+      <ScrollView
+        contentContainerStyle={{ paddingTop: 4, paddingBottom: 20, gap: 14 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.ink}
+            colors={[colors.ink]}
+          />
+        }
+      >
         {/* En vivo · de quienes seguís */}
         <View style={{ paddingHorizontal: 16 }}>
           <SectionHeader title="En vivo · de quienes seguís"
-            action={<Text style={{ fontSize: 11, fontWeight: '700', color: colors.accentText }}>Ver todos</Text>}/>
+            action={
+              <Pressable onPress={() => onVerMas?.('live')} hitSlop={10}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.accentText }}>Ver todos</Text>
+              </Pressable>
+            }/>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}>
-          {liveGames.map(g => (
-            <LiveGameTile key={g.id} game={g} onPress={onOpenGame} tornaLogo={tornaLogo}/>
+          {liveGames.map((g, i) => (
+            <LiveGameTile key={g.id} game={g} onPress={onOpenGame} onDoubleTap={() => onVerMas?.('live', i)} tornaLogo={tornaLogo} isActive={isFocused}/>
           ))}
         </ScrollView>
 
@@ -92,29 +121,31 @@ export function HomeScreen({
           <>
             <View style={{ paddingHorizontal: 16 }}>
               <SectionHeader title="Próximos · de tus seguidos"
-                action={<Text style={{ fontSize: 11, fontWeight: '700', color: colors.accentText }}>Ver todos</Text>}/>
+                action={
+                  <Pressable onPress={() => onVerMas?.('upcoming')} hitSlop={10}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.accentText }}>Ver todos</Text>
+                  </Pressable>
+                }/>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}>
               {upcomingGames.map(g => (
-                <View key={g.id} style={{
-                  width: 220, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line,
-                  borderRadius: 14, padding: 12, gap: 8,
-                }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <StatusBadge status="SCHEDULED"/>
-                    <Text style={{ fontSize: 11, color: colors.muted2, fontFamily: fonts.mono }}>{g.id}</Text>
-                  </View>
-                  <Text style={{ color: colors.text, fontWeight: '800', fontSize: 18, letterSpacing: -0.3 }}>{g.time} · {g.court}</Text>
-                  <AvatarStack users={g.players} size={26} max={4}/>
-                  <Text style={{ color: colors.muted2, fontSize: 12 }}>{g.club}</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: colors.accent }}/>
-                    <Text style={{ color: colors.accentText, fontSize: 10, fontWeight: '800', letterSpacing: 0.4, textTransform: 'uppercase' }}>
-                      Sigues a {g.following === 'player' ? g.byPlayer : g.club}
-                    </Text>
-                  </View>
-                </View>
+                <UpcomingGameTile key={g.id} game={g} onDoubleTap={() => setUpcomingSheet(g)} />
+              ))}
+            </ScrollView>
+          </>
+        )}
+
+        {/* Partidos abiertos · para unirte */}
+        {openGames.length > 0 && (
+          <>
+            <View style={{ paddingHorizontal: 16 }}>
+              <SectionHeader title="Partidos abiertos · para unirte" />
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}>
+              {openGames.map(g => (
+                <UpcomingGameTile key={g.id} game={g} onDoubleTap={() => setUpcomingSheet(g)} />
               ))}
             </ScrollView>
           </>
@@ -125,17 +156,48 @@ export function HomeScreen({
           <>
             <View style={{ paddingHorizontal: 16 }}>
               <SectionHeader title="Highlights · de tus seguidos"
-                action={<Text style={{ fontSize: 11, fontWeight: '700', color: colors.accentText }}>Ver todos</Text>}/>
+                action={
+                  <Pressable onPress={() => onVerMas?.('highlights')} hitSlop={10}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.accentText }}>Ver todos</Text>
+                  </Pressable>
+                }/>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}>
-              {feedPosts.map(p => <FeedPost key={p.id} post={p}/>)}
+              {feedPosts.map(p => (
+                <FeedPost
+                  key={p.id}
+                  post={p}
+                  onDoubleTap={p.type === 'highlight' && p.videoUrl
+                    ? () => setHighlightModal({ url: p.videoUrl!, title: p.caption ?? 'Highlight' })
+                    : undefined}
+                />
+              ))}
             </ScrollView>
           </>
         )}
       </ScrollView>
 
       {onChangeTab && <BottomTabBar active={activeTab} onChange={onChangeTab} role="player"/>}
+
+      <UpcomingMatchSheet
+        visible={upcomingSheet !== null}
+        game={upcomingSheet}
+        invitablePlayers={invitablePlayers}
+        onClose={() => setUpcomingSheet(null)}
+        onOpenPlayerProfile={onOpenPlayerProfile}
+        onAcceptApplication={onAcceptApplication}
+        onRejectApplication={onRejectApplication}
+      />
+
+      <VideoPreviewModal
+        visible={highlightModal !== null}
+        url={highlightModal?.url ?? ''}
+        title={highlightModal?.title ?? ''}
+        durationSeconds={0}
+        onClose={() => setHighlightModal(null)}
+        showComments
+      />
     </SafeAreaView>
   );
 }

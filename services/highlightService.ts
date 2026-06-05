@@ -1,16 +1,16 @@
 /**
  * Highlight creation service.
  *
- * In production builds (EAS / TestFlight / APK): clips using FFmpegKit on-device
- * and uploads the result directly to Backblaze B2.
+ * In production builds (EAS / TestFlight / APK): clips using FFmpegKit on-device,
+ * then uploads the result to B2 via a presigned URL obtained from the backend.
+ * No B2 credentials are stored in the app binary.
  *
  * In dev builds / Expo Go: `isHighlightSupported()` returns false and this
  * module is never evaluated (imported dynamically by useVideoEditorFlow only
  * when !__DEV__), so no native module errors occur.
- *
- * When the real backend is ready: replace the body of `createHighlight` with
- * a single fetch call to the backend endpoint. No other files need to change.
  */
+
+import * as SecureStore from 'expo-secure-store';
 
 export interface HighlightResult {
   streamUrl: string;
@@ -18,11 +18,7 @@ export interface HighlightResult {
   title: string;
 }
 
-// ── B2 config — values come from .env (EXPO_PUBLIC_* are inlined at build time) ──
-const B2_KEY_ID    = process.env.EXPO_PUBLIC_B2_KEY_ID    ?? '';
-const B2_APP_KEY   = process.env.EXPO_PUBLIC_B2_APP_KEY   ?? '';
-const BUCKET_ID    = process.env.EXPO_PUBLIC_B2_BUCKET_ID ?? '';
-const BUCKET_NAME  = process.env.EXPO_PUBLIC_B2_BUCKET_NAME ?? 'torna-videos';
+const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
 
 // Try to load FFmpegKit — only succeeds in compiled native builds.
 let FFmpegKit: any = null;
@@ -38,6 +34,34 @@ try {
 export function isHighlightSupported(): boolean {
   return FFmpegKit !== null;
 }
+
+// ── Backend helpers ──────────────────────────────────────────────────────────
+
+async function getB2UploadUrl(
+  token: string,
+  key: string,
+  contentType = 'video/mp4',
+): Promise<string> {
+  const res = await fetch(
+    `${API_URL}/files/upload-url?key=${encodeURIComponent(key)}&contentType=${encodeURIComponent(contentType)}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) throw new Error('No se pudo obtener URL de upload');
+  const data = await res.json();
+  return data.uploadUrl as string;
+}
+
+async function getB2StreamUrl(token: string, key: string): Promise<string> {
+  const res = await fetch(
+    `${API_URL}/files/stream?key=${encodeURIComponent(key)}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) throw new Error('No se pudo obtener URL de stream');
+  const data = await res.json();
+  return data.url as string;
+}
+
+// ── Public API ───────────────────────────────────────────────────────────────
 
 export async function createHighlight(
   params: {
@@ -65,7 +89,6 @@ export async function createHighlight(
   const cmd = `-ss ${startSec} -i "${videoUrl}" -t ${duration} -c copy -movflags +faststart "${outPath}"`;
 
   const session = await FFmpegKit.executeAsync(cmd, undefined, (log: any) => {
-    // Parse time= from FFmpeg output to estimate progress
     const match = log.getMessage?.()?.match(/time=(\d+):(\d+):(\d+)/);
     if (match && duration > 0) {
       const elapsed = parseInt(match[1]) * 3600 + parseInt(match[2]) * 60 + parseInt(match[3]);
@@ -82,51 +105,32 @@ export async function createHighlight(
 
   onProgress?.(88);
 
-  // ── Upload clip to B2 ──
-  const streamUrl = await uploadToB2(outPath, `highlights/hl_${Date.now()}.mp4`);
+  // ── Retrieve auth token from secure storage ──
+  const token = await SecureStore.getItemAsync('@torna/auth-token');
+  if (!token) throw new Error('Usuario no autenticado');
+
+  // ── Upload clip via presigned URL ──
+  const key = `highlights/hl_${Date.now()}.mp4`;
+  const uploadUrl = await getB2UploadUrl(token, key, 'video/mp4');
+
+  const uploadRes = await FileSystem.uploadAsync(uploadUrl, outPath, {
+    httpMethod: 'PUT',
+    headers: { 'Content-Type': 'video/mp4' },
+    uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+  });
+  if (uploadRes.status < 200 || uploadRes.status >= 300) {
+    throw new Error(`Upload failed: ${uploadRes.status}`);
+  }
 
   // Clean up temp file
   try { await FileSystem.deleteAsync(outPath, { idempotent: true }); } catch {}
 
+  onProgress?.(96);
+
+  // ── Get playback URL ──
+  const streamUrl = await getB2StreamUrl(token, key);
+
   onProgress?.(100);
 
   return { streamUrl, durationSeconds: duration, title };
-}
-
-async function uploadToB2(localPath: string, fileName: string): Promise<string> {
-  // 1. Auth
-  const authRes = await fetch('https://api.backblazeb2.com/b2api/v3/b2_authorize_account', {
-    headers: { Authorization: 'Basic ' + btoa(`${B2_KEY_ID}:${B2_APP_KEY}`) },
-  });
-  if (!authRes.ok) throw new Error(`B2 auth failed: ${authRes.status}`);
-  const auth = await authRes.json();
-  const apiUrl      = auth.apiInfo.storageApi.apiUrl;
-  const authToken   = auth.authorizationToken;
-  const downloadUrl = auth.apiInfo.storageApi.downloadUrl;
-
-  // 2. Get upload URL
-  const upUrlRes = await fetch(`${apiUrl}/b2api/v3/b2_get_upload_url`, {
-    method: 'POST',
-    headers: { Authorization: authToken, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ bucketId: BUCKET_ID }),
-  });
-  if (!upUrlRes.ok) throw new Error(`B2 get_upload_url failed: ${upUrlRes.status}`);
-  const { uploadUrl, authorizationToken: uploadToken } = await upUrlRes.json();
-
-  // 3. Read file as blob and upload
-  const fileBlob = await fetch(localPath).then(r => r.blob());
-
-  const uploadRes = await fetch(uploadUrl, {
-    method: 'POST',
-    headers: {
-      Authorization: uploadToken,
-      'X-Bz-File-Name': encodeURIComponent(fileName),
-      'Content-Type': 'video/mp4',
-      'X-Bz-Content-Sha1': 'do_not_verify',
-    },
-    body: fileBlob,
-  });
-  if (!uploadRes.ok) throw new Error(`B2 upload failed: ${uploadRes.status}`);
-
-  return `${downloadUrl}/file/${BUCKET_NAME}/${fileName}`;
 }

@@ -19,6 +19,16 @@ npm run ios          # build + simulador iOS
 npm run android      # build + emulador Android
 ```
 
+### Variables de entorno
+
+```bash
+# expo/.env (crear si no existe)
+EXPO_PUBLIC_API_URL=https://api.torna.io        # URL base del backend
+EXPO_PUBLIC_ONESIGNAL_APP_ID=<tu-app-id>        # App ID de OneSignal
+```
+
+Cambios al `.env` requieren reiniciar Metro con `npm start -- --clear`.
+
 Arranca en **`LoginWithRoleScreen`** (`initialRouteName="LoginWithRole"` en
 `App.tsx`). El usuario elige Player o Club desde el segmented control y va a
 `MainPlayer` o `MainClub`.
@@ -108,7 +118,9 @@ real (idealmente envuelta en un hook de RTK Query / TanStack Query).
 
 ```ts
 // Auth
-User { id, email, name, type: 'player' | 'club', avatarUrl?, club?: Club }
+TornaUser { id, email, username, name?, phone?, region?,
+            isClub: boolean,
+            authProvider: 'email' | 'google' | 'apple' }
 
 // Club
 ClubPublic {
@@ -210,21 +222,33 @@ las `MOCK_*` por hooks reales.
 ### Auth
 
 ```
-POST /auth/login              { email, password, type } → { token, user }
-POST /auth/register/player    { name, username, email, password } → { token, user }
-POST /auth/register/club      { name, handle, email, region, password } → { id, isApproved: false }
-GET  /me                                                → User
+POST /auth/login-email-password  { email, password } → { token, user: TornaUser }
+POST /auth/login                 { idToken: string } → { token, user: TornaUser }
+                                                      | { status: 'needs_registration', idToken }
+POST /auth/register              { idToken, username, name, authProvider } → { token, user: TornaUser }
+GET  /auth/me                    Bearer token → TornaUser
+DELETE /auth/logout              → 204
 ```
 
-### Feed (player)
+### Feed / Inicio (player)
+
+> ⚠️ El backend NO tiene módulo `/feed`. El inicio se arma con endpoints de
+> `/game`, `/highlights` y `/follow`. La columna izquierda es lo que la app
+> debe llamar realmente:
 
 ```
-GET  /feed/live                  → LiveGame[]    (clubs/players seguidos)
-GET  /feed/upcoming              → UpcomingGame[]
-GET  /feed/posts?cursor=…        → { posts: FeedPost[], nextCursor }
-POST /feed/posts/:id/like        → { likes, hasLiked: true }
-POST /feed/posts/:id/comments    { text } → Comment
+GET  /game/live                  → LiveGame[]   partidas LIVE de seguidos (clubs/players)
+                                                 stream HLS en cameras[].camera.streamingUrl
+GET  /game/:userId/upcoming      → Game[]        próximas partidas del usuario
+GET  /highlights?cursor=…        → highlights (feed de momentos destacados)
+POST /highlights/:id/like        → like/unlike de un highlight
+POST /highlights/:id/comments    { text } → Comment
 ```
+
+`HomeScreen` consume `GET /game/live` vía el hook `hooks/useLiveGames.ts`
+(mapea la respuesta del backend → `LiveGameData`). El contenedor `MainPlayer`
+en `App.tsx` cae a `MOCK_LIVE_GAMES` si la lista real viene vacía (login de dev
+sin token, o sin partidas en vivo de tus seguidos).
 
 ### Feed (club admin)
 
@@ -296,14 +320,15 @@ POST /games/:id/comments     → Comment
 | **Estilos** | StyleSheet inline + tokens de `theme/tokens.ts` (NO styled-components, NO Tailwind) |
 | **Iconos** | `lucide-react-native` (size 22 default, stroke 2) |
 | **Tipografía** | Helvetica (manual de marca) — TODO migrar H1 a Coolvetica |
-| **Storage** | `@react-native-async-storage/async-storage` |
 | **SVG** | `react-native-svg` (`<Svg>`, `<Rect>`, `<Line>`, `<Path>`) |
 | **Video / HLS** | `expo-av` ~14.0.7 (reproductor HLS) |
 | **Gestos** | `react-native-gesture-handler` ~2.16.1 (swipe entre cámaras, editor) |
 | **Fuentes** | `expo-font` ~12.0.0 (carga de .ttf custom) |
 | **Procesamiento de video** | `ffmpeg-kit-react-native` ^6.0.2 (trim de highlights — **solo production build**, no incluir en `package.json` para dev; incompatible con el config plugin de Expo en Node moderno) |
 | **Splash / icon** | `assets/torna-icon.png` (1024×1024) · fondo `#2d4c75` |
-| **Bundle IDs** | iOS: `io.torna.refactor` · Android package: `io.torna.refactor` |
+| **Bundle IDs** | iOS: `io.torna` · Android package: `io.torna` |
+| **Auth** | `@react-native-firebase/auth` v24 · `@react-native-google-signin` · `expo-apple-authentication` |
+| **Storage** | `expo-secure-store` (auth tokens) · `@react-native-async-storage` (tema) |
 
 ---
 
@@ -429,12 +454,16 @@ expo/
 │   ├── ContentThumb.tsx         # thumbnail para ítems de librería (match/highlight/foto/video)
 │   ├── UploadSheet.tsx          # modal bottom-sheet para subir contenido (2 pasos: tipo → config)
 │   ├── VisibilityPill.tsx       # toggle chip Privado/Público
-│   └── VideoPreviewModal.tsx    # modal reproductor de video: preview + pantalla completa
+│   ├── VideoPreviewModal.tsx    # modal reproductor de video: preview + pantalla completa
+│   ├── FollowListSheet.tsx      # modal lista de seguidores/siguiendo
+│   ├── UpcomingMatchSheet.tsx   # detalles de próximo partido
+│   └── ApplyMatchSheet.tsx      # solicitar unirse a partido abierto
 ├── screens/
 │   ├── LoginScreen.tsx
 │   ├── LoginWithRoleScreen.tsx
 │   ├── RegisterClubScreen.tsx
 │   ├── PendingApprovalScreen.tsx
+│   ├── CompleteProfileScreen.tsx   # completar perfil tras social login (username + nombre)
 │   ├── HomeScreen.tsx               # player home
 │   ├── ClubHomeScreen.tsx           # club admin home
 │   ├── GamesScreen.tsx
@@ -461,6 +490,7 @@ expo/
 │   ├── ClubProfilePlayerView.tsx    # POV player
 │   ├── PlayerProfilePublicView.tsx
 │   ├── SearchPlayScreen.tsx
+│   ├── GlobalSearchScreen.tsx      # búsqueda global de players/courts por texto
 │   ├── JoinMatchScreen.tsx
 │   ├── ReserveStep1Screen.tsx       # elegir cancha
 │   ├── ReserveStep2Screen.tsx       # día + slot
@@ -468,6 +498,16 @@ expo/
 │   ├── ReserveSuccessScreen.tsx
 │   ├── reserveCommon.tsx            # StepIndicator compartido
 │   └── index.ts                     # barrel de exports
+├── contexts/
+│   └── AuthContext.tsx      # useAuth() · session restore (SecureStore) · social login
+├── hooks/
+│   ├── useOwnMedia.ts       # fetch /media/my, retorna photos/videos con refresh
+│   └── useFollow.ts         # follow/unfollow con optimistic update
+├── api/
+│   ├── highlights.ts        # createHighlightApi · listSavedHighlights
+│   └── video.ts             # upload helpers + presigned URL
+├── services/
+│   └── highlightService.ts  # orquestación: trim → upload → index
 └── data/
     └── mocks.ts            # MOCK_* + tipos públicos (ClubPublic, NearbyCourt, etc.)
 ```
@@ -484,6 +524,7 @@ Stack único en `App.tsx`. `initialRouteName="LoginWithRole"`.
 | `Login` | Login legacy (solo club) | club | — |
 | `Register` | Alta de club | club | — |
 | `Pending` | Aprobación pendiente | club | — |
+| `CompleteProfile` | Completar perfil (social) | ambos | `{ idToken: string }` |
 | `MainPlayer` | Tabs internos player | player | — |
 | `MainClub` | Tabs internos club | club | — |
 | `GameDetail` | Visor HLS | ambos | `{ gameId }` |
@@ -655,6 +696,8 @@ npm start                   # arranca sin warnings en Metro
 
 12. **`torna-logo.svg`** en assets no se usa en runtime — borrarlo o
     convertirlo a componente RN-SVG.
+
+13. ~~**Typo en `.env`**: `api.tora.io` en lugar de `api.torna.io`~~ **RESUELTO**: corregido — todas las llamadas API ahora apuntan al dominio correcto.
 
 ---
 

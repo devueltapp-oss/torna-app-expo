@@ -6,14 +6,17 @@
  *   - video     → máx 3:00, va a "Mis subidas"
  *   - highlight → máx 1:00, va a "Mis highlights"
  *
- * El picker real (`expo-image-picker`) NO está integrado todavía —
- * simulamos duración aleatoria para mostrar el warning de "supera el
- * máximo". Cuando se integre el picker, reemplazar `mockDuration` por
- * la duración real del asset elegido.
+ * Usa expo-image-picker para seleccionar el asset real y lo sube a B2
+ * mediante un presigned URL obtenido desde el backend.
  */
 import React from 'react';
-import { Modal, View, Text, Pressable, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import {
+  Modal, View, Text, Pressable, ScrollView,
+  KeyboardAvoidingView, Platform, ActivityIndicator,
+} from 'react-native';
 import { Camera, Video as VideoIcon, Play } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as SecureStore from 'expo-secure-store';
 import { useTheme } from '../theme';
 import { Button, Input } from './ui';
 import { ContentThumb, type ThumbKind } from './ContentThumb';
@@ -47,20 +50,120 @@ export function UploadSheet({ visible, onClose, onConfirm }: UploadSheetProps) {
   const [title, setTitle] = React.useState('');
   const [visibility, setVisibility] = React.useState<UploadVisibility>('private');
   const [mockDuration, setMockDuration] = React.useState(45);
+  const [pickedAsset, setPickedAsset] = React.useState<{
+    uri: string; type?: string; duration?: number;
+  } | null>(null);
+  const [uploading, setUploading] = React.useState(false);
 
   // Reset state cada vez que se abre
   React.useEffect(() => {
     if (visible) {
-      setStep('pick'); setKind(null); setTitle(''); setVisibility('private');
+      setStep('pick');
+      setKind(null);
+      setTitle('');
+      setVisibility('private');
       setMockDuration(30 + Math.floor(Math.random() * 170));
+      setPickedAsset(null);
+      setUploading(false);
     }
   }, [visible]);
 
+  // Use real asset duration when available, otherwise fall back to mockDuration
+  const displayDuration = pickedAsset?.duration != null ? pickedAsset.duration / 1000 : mockDuration;
   const MAX_SEC = kind === 'highlight' ? 60 : kind === 'video' ? 180 : 0;
-  const tooLong = (kind === 'video' || kind === 'highlight') && mockDuration > MAX_SEC;
+  const tooLong = (kind === 'video' || kind === 'highlight') && displayDuration > MAX_SEC;
 
-  const pickKind = (k: UploadKind) => { setKind(k); setStep('configure'); };
-  const confirm  = () => { if (!kind || tooLong) return; onConfirm({ kind, title, visibility }); };
+  async function pickAsset(k: UploadKind) {
+    const isVideo = k === 'video' || k === 'highlight';
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: isVideo ? 'videos' : 'images',
+      quality: 0.85,
+      videoMaxDuration: isVideo ? 180 : undefined,
+      allowsEditing: !isVideo,
+    });
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      setPickedAsset({
+        uri: asset.uri,
+        type: isVideo ? 'video' : 'photo',
+        duration: asset.duration ?? undefined,
+      });
+    }
+  }
+
+  const pickKind = (k: UploadKind) => {
+    setKind(k);
+    setStep('configure');
+    pickAsset(k);
+  };
+
+  async function handleUpload() {
+    if (!kind || tooLong) return;
+    // If no real asset was picked (picker cancelled), fall through with onConfirm only
+    if (!pickedAsset) {
+      onConfirm({ kind, title, visibility });
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const isVideo = pickedAsset.type === 'video';
+      const ext = pickedAsset.uri.split('.').pop()?.toLowerCase() ?? (isVideo ? 'mp4' : 'jpg');
+      const mime = isVideo ? 'video/mp4' : 'image/jpeg';
+      const key = `media/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+      const token = await SecureStore.getItemAsync('@torna/auth-token');
+
+      // 1. Presigned URL de B2
+      const urlRes = await fetch(
+        `${apiUrl}/files/upload-url?key=${encodeURIComponent(key)}&contentType=${encodeURIComponent(mime)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!urlRes.ok) throw new Error('No se pudo obtener URL de upload');
+      const { uploadUrl } = await urlRes.json();
+
+      // 2. Subir a B2
+      const fileBlob = await fetch(pickedAsset.uri).then((r) => r.blob());
+      const uploadRes = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': mime },
+        body: fileBlob,
+      });
+      if (!uploadRes.ok) throw new Error('Upload a B2 falló');
+
+      // 3. URL final
+      let finalUrl: string;
+      if (isVideo) {
+        const streamRes = await fetch(
+          `${apiUrl}/files/stream?key=${encodeURIComponent(key)}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        const { url } = await streamRes.json();
+        finalUrl = url;
+      } else {
+        finalUrl = `https://f005.backblazeb2.com/file/torna-videos/${key}`;
+      }
+
+      // 4. Registrar en backend
+      await fetch(`${apiUrl}/media`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          url: finalUrl,
+          kind: isVideo ? 'video' : 'photo',
+          title: title ?? '',
+          visibility,
+        }),
+      });
+
+      onConfirm({ kind, title, visibility });
+    } catch (err) {
+      console.error('Upload error:', err);
+      // TODO: mostrar error al usuario
+    } finally {
+      setUploading(false);
+    }
+  }
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -79,12 +182,13 @@ export function UploadSheet({ visible, onClose, onConfirm }: UploadSheetProps) {
             <PickStep colors={colors} onPick={pickKind} onClose={onClose}/>
           ) : kind ? (
             <ConfigureStep
-              colors={colors} kind={kind} mockDuration={mockDuration} maxSec={MAX_SEC} tooLong={tooLong}
+              colors={colors} kind={kind} displayDuration={displayDuration} maxSec={MAX_SEC} tooLong={tooLong}
               title={title} onChangeTitle={setTitle}
               visibility={visibility} onChangeVisibility={setVisibility}
-              onChange={() => setStep('pick')}
+              uploading={uploading}
+              onChange={() => { setStep('pick'); setPickedAsset(null); }}
               onCancel={onClose}
-              onConfirm={confirm}
+              onConfirm={handleUpload}
             />
           ) : null}
         </View>
@@ -153,21 +257,22 @@ function PickCard({ label, sub, icon, onPress, colors, highlighted, disabled }: 
 interface ConfigureStepProps {
   colors: ReturnType<typeof useTheme>['colors'];
   kind: UploadKind;
-  mockDuration: number;
+  displayDuration: number;
   maxSec: number;
   tooLong: boolean;
   title: string;
   onChangeTitle: (s: string) => void;
   visibility: UploadVisibility;
   onChangeVisibility: (v: UploadVisibility) => void;
+  uploading: boolean;
   onChange: () => void;
   onCancel: () => void;
   onConfirm: () => void;
 }
 
 function ConfigureStep(p: ConfigureStepProps) {
-  const { colors, kind, mockDuration, maxSec, tooLong, title, onChangeTitle, visibility,
-          onChangeVisibility, onChange, onCancel, onConfirm } = p;
+  const { colors, kind, displayDuration, maxSec, tooLong, title, onChangeTitle, visibility,
+          onChangeVisibility, uploading, onChange, onCancel, onConfirm } = p;
   const headerTitle = kind === 'highlight' ? 'Subir highlight'
                     : kind === 'photo'     ? 'Tu foto'
                                            : 'Tu video';
@@ -185,7 +290,7 @@ function ConfigureStep(p: ConfigureStepProps) {
       </View>
 
       <ContentThumb kind={thumbKind} aspect="wide"
-        durationLabel={kind === 'photo' ? undefined : fmt(mockDuration)}/>
+        durationLabel={kind === 'photo' ? undefined : fmt(displayDuration)}/>
 
       {tooLong ? (
         <View style={{
@@ -193,7 +298,7 @@ function ConfigureStep(p: ConfigureStepProps) {
           paddingHorizontal: 12, paddingVertical: 8,
         }}>
           <Text style={{ fontSize: 11, color: colors.accentText, fontWeight: '700', lineHeight: 16 }}>
-            Este video dura {fmt(mockDuration)} y supera los {fmt(maxSec)}.
+            Este video dura {fmt(displayDuration)} y supera los {fmt(maxSec)}.
             {kind === 'highlight' ? ' Recortalo a 1:00 máximo antes de subirlo.' : ' Recortalo antes de subirlo.'}
           </Text>
         </View>
@@ -222,11 +327,20 @@ function ConfigureStep(p: ConfigureStepProps) {
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
         <Button variant="soft" size="lg" onPress={onCancel}>Cancelar</Button>
         <View style={{ flex: 1 }}>
-          <Button fullWidth size="lg"
-            variant={tooLong ? 'disabled' : 'primary'}
-            onPress={tooLong ? undefined : onConfirm}>
-            Subir
-          </Button>
+          {uploading ? (
+            <View style={{
+              flex: 1, height: 48, borderRadius: 12,
+              backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center',
+            }}>
+              <ActivityIndicator color={colors.ink} size="small" />
+            </View>
+          ) : (
+            <Button fullWidth size="lg"
+              variant={tooLong ? 'disabled' : 'primary'}
+              onPress={tooLong ? undefined : onConfirm}>
+              Subir
+            </Button>
+          )}
         </View>
       </View>
     </ScrollView>

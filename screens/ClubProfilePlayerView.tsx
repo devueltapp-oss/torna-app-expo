@@ -6,6 +6,7 @@ import { Video, ResizeMode } from 'expo-av';
 import {
   ChevronLeft, MoreHorizontal, MapPin, Phone, Clock, Eye, Play, Camera,
 } from 'lucide-react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { SectionHeader, StatusBadge, Avatar, SurfaceChip } from '../components/ui';
@@ -46,6 +47,7 @@ export function ClubProfilePlayerView({
   club, onBack, onToggleFollow, onReserveCourt, onOpenLive, onChangeTab, activeTab = 'home',
 }: Props) {
   const { colors } = useTheme();
+  const isFocused = useIsFocused();
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
@@ -107,7 +109,7 @@ export function ClubProfilePlayerView({
             <Pressable key={g.id} onPress={() => onOpenLive?.(g.id)}
               style={{ width: 230, borderRadius: 14, overflow: 'hidden', backgroundColor: colors.ink }}>
               <View style={{ height: 110, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                {g.streamUrl ? (
+                {g.streamUrl && isFocused ? (
                   <Video
                     key={g.id}
                     source={{ uri: g.streamUrl }}

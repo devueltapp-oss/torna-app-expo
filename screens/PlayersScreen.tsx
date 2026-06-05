@@ -12,9 +12,10 @@ interface Props {
   onChangeTab?: (id: TabId) => void;
   activeTab?: TabId;
   role?: 'player' | 'club';
+  onOpenPlayerProfile?: (id: string) => void;
 }
 
-export function PlayersScreen({ players, onChangeTab, activeTab = 'players', role = 'club' }: Props) {
+export function PlayersScreen({ players, onChangeTab, activeTab = 'players', role = 'club', onOpenPlayerProfile }: Props) {
   const { colors } = useTheme();
   const [q, setQ] = React.useState('');
   const filtered = players.filter(p => !q || `${p.name} ${p.username} ${p.email || ''}`.toLowerCase().includes(q.toLowerCase()));
@@ -33,7 +34,7 @@ export function PlayersScreen({ players, onChangeTab, activeTab = 'players', rol
 
       <FlatList
         data={filtered} keyExtractor={p => p.id}
-        renderItem={({ item }) => <PlayerListItem player={item}/>}
+        renderItem={({ item }) => <PlayerListItem player={item} onPress={() => onOpenPlayerProfile?.(item.id)}/>}
         contentContainerStyle={{ padding: 16, gap: 8 }}
         ListEmptyComponent={
           <EmptyState title="Sin jugadores" message="Cuando alguien siga a tu club, aparecerá aquí." />

@@ -1,11 +1,11 @@
 import React from 'react';
-import { View, Text } from 'react-native';
-import { useTheme } from '../../../theme';
+import { View, Text, StyleSheet, Pressable, LayoutChangeEvent } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { ChevronLeft } from 'lucide-react-native';
 import { Button } from '../../../components/ui';
 import { Player, type PlayerHandle } from '../components/Player';
-import {
-  TrimRangeSlider, TRIM_MIN_SEC, TRIM_MAX_SEC,
-} from '../components/TrimRangeSlider';
+import { TrimRangeSlider, TRIM_MIN_SEC, TRIM_MAX_SEC, FILMSTRIP_H } from '../components/TrimRangeSlider';
+import { VideoFilmstrip } from '../components/VideoFilmstrip';
 
 function fmt(s: number) {
   s = Math.max(0, Math.round(s));
@@ -26,11 +26,13 @@ export interface TrimStepProps {
 export function TrimStep({
   recordingUrl, durationSeconds, range, onChangeRange, onBack, onContinue,
 }: TrimStepProps) {
-  const { colors } = useTheme();
   const playerRef = React.useRef<PlayerHandle | null>(null);
+  const [sliderWidth, setSliderWidth] = React.useState(0);
+  const [currentTime, setCurrentTime] = React.useState(range[0]);
 
-  // Cuando el usuario arrastra los handles, salteamos el preview al inicio
-  // del corte para que vea el cut-in en vivo (regla del prompt).
+  const onContainerLayout = (e: LayoutChangeEvent) =>
+    setSliderWidth(e.nativeEvent.layout.width);
+
   React.useEffect(() => {
     playerRef.current?.seek(range[0]);
   }, [range[0]]);
@@ -39,39 +41,114 @@ export function TrimStep({
   const invalid = sel < TRIM_MIN_SEC || sel > TRIM_MAX_SEC;
 
   return (
-    <View style={{ paddingHorizontal: 16, gap: 14 }}>
-      <View>
-        <Text style={{ fontSize: 11, fontWeight: '800', color: colors.muted2, letterSpacing: 1.2 }}>PASO 2 DE 4</Text>
-        <Text style={{ fontSize: 22, fontWeight: '800', color: colors.text, letterSpacing: -0.4, marginTop: 4 }}>
-          Elegí el recorte
-        </Text>
-        <Text style={{ fontSize: 13, color: colors.muted2, marginTop: 2 }}>
-          Arrastrá los bordes para definir el inicio y el fin del clip.
-        </Text>
-      </View>
+    <View style={{ flex: 1, backgroundColor: '#000' }}>
 
+      {/* Video full screen */}
       <Player
         ref={playerRef}
+        fullscreen
         recordingUrl={recordingUrl}
         durationSeconds={durationSeconds}
         startAt={range[0]}
         endAt={range[1]}
-        label={`PREVIEW · ${fmt(sel)}`}
+        autoPlay
+        hideControls
+        onProgress={setCurrentTime}
       />
 
-      <TrimRangeSlider duration={durationSeconds} value={range} onChange={onChangeRange}/>
+      {/* Header overlay */}
+      <SafeAreaView edges={['top']} style={styles.headerOverlay}>
+        <View style={styles.headerRow}>
+          <Pressable onPress={onBack} style={styles.backBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <ChevronLeft size={20} color="#FFFFFF" />
+          </Pressable>
+          <View style={styles.stepPill}>
+            <Text style={styles.stepLabel}>RECORTE · {fmt(sel)}</Text>
+          </View>
+          <View style={{ width: 36 }} />
+        </View>
+      </SafeAreaView>
 
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        <Button variant="soft" size="lg" onPress={onBack}>Volver</Button>
-        <View style={{ flex: 1 }}>
+      {/* Panel inferior */}
+      <SafeAreaView edges={['bottom']} style={styles.bottomPanel}>
+        <View style={{ paddingHorizontal: 12, paddingTop: 12, gap: 10 }}>
+
+          {/* Filmstrip con handles superpuestos */}
+          <View
+            onLayout={onContainerLayout}
+            style={{ borderRadius: 8, overflow: 'hidden', position: 'relative' }}
+          >
+            <VideoFilmstrip
+              videoUrl={recordingUrl}
+              durationSeconds={durationSeconds}
+              frameCount={10}
+              height={FILMSTRIP_H}
+              containerWidth={sliderWidth}
+            />
+            <View style={StyleSheet.absoluteFill}>
+              <TrimRangeSlider
+                duration={durationSeconds}
+                value={range}
+                onChange={onChangeRange}
+                currentTime={currentTime}
+              />
+            </View>
+          </View>
+
           <Button
-            fullWidth size="lg"
+            fullWidth
+            size="lg"
             variant={invalid ? 'disabled' : 'primary'}
-            onPress={invalid ? undefined : onContinue}>
+            onPress={invalid ? undefined : onContinue}
+          >
             Continuar →
           </Button>
         </View>
-      </View>
+      </SafeAreaView>
+
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  headerOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  stepLabel: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  bottomPanel: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+  },
+});

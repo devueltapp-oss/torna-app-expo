@@ -3,7 +3,7 @@ import { View, Text, Image, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Mail, Lock } from 'lucide-react-native';
 import { useTheme } from '../theme';
-import { Button, Input } from '../components/ui';
+import { Button, Input, SocialButton } from '../components/ui';
 
 const tornaLogo = require('../assets/torna-icon.png');
 
@@ -38,6 +38,16 @@ export function LoginScreen({ onLogin, onRegister, onForgot }: {
 
         <Button fullWidth size="lg" onPress={onLogin} style={{ marginTop: 6 }}>Ingresar</Button>
         <Button fullWidth size="lg" variant="ghost" onPress={onRegister}>Registrar un nuevo club</Button>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 }}>
+          <View style={{ flex: 1, height: 1, backgroundColor: colors.line }} />
+          <Text style={{ fontSize: 11, color: colors.muted, fontWeight: '600' }}>o continuá con</Text>
+          <View style={{ flex: 1, height: 1, backgroundColor: colors.line }} />
+        </View>
+        <View style={{ gap: 10 }}>
+          <SocialButton provider="google" label="Continuar con Google" comingSoon onPress={() => {}} />
+          <SocialButton provider="apple"  label="Continuar con Apple"  comingSoon onPress={() => {}} />
+        </View>
 
         <View style={{ flex: 1 }} />
         <Text style={{ textAlign: 'center', color: colors.muted, fontSize: 11, paddingTop: 20 }}>

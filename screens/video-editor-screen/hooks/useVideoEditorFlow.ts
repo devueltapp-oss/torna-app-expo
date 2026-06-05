@@ -1,25 +1,21 @@
 /**
  * Hook que encapsula el flujo del editor: estado de step, range, metadata,
- * polling del job (PENDING → RUNNING → COMPLETED|FAILED) y guardado del
- * highlight. Sigue lo pedido por el prompt:
+ * procesamiento on-device con FFmpegKit y guardado del highlight.
  *
- *   - polling con useRef + clearInterval en unmount (no memory leak)
- *   - polling NO bloquea el UI thread
- *   - manejo de error (banner + retry) cuando el job devuelve FAILED
+ *   - FFmpegKit recorta el video on-device (via highlightService)
+ *   - highlightService sube el clip a B2 via presigned URL del backend
+ *   - el hook llama POST /highlights con la streamUrl resultante
+ *   - sin polling, sin BullMQ, sin Redis
  */
 import React from 'react';
-import {
-  startTrimJobApi, getJobStatusApi,
-  type JobStatus, type JobStatusName,
-} from '../../../api/video';
-import { createHighlightApi, type HighlightRecord } from '../../../api/highlights';
+import * as SecureStore from 'expo-secure-store';
+import { type JobStatusName } from '../../../api/video';
+import { type HighlightRecord } from '../../../api/highlights';
 import { TRIM_MIN_SEC } from '../components/TrimRangeSlider';
 import type { Visibility } from '../steps/MetadataStep';
 
 export type EditorStep = 'preview' | 'trim' | 'metadata' | 'processing' | 'result';
 export type { Visibility } from '../steps/MetadataStep';
-
-const POLL_INTERVAL_MS = 2500;
 
 export interface UseVideoEditorFlowParams {
   gameId: string;
@@ -30,7 +26,7 @@ export interface UseVideoEditorFlowParams {
 }
 
 export function useVideoEditorFlow(params: UseVideoEditorFlowParams) {
-  const { gameId, recordingUrl, durationSeconds, token = 'mock-token' } = params;
+  const { gameId, recordingUrl, durationSeconds } = params;
 
   const [step, setStep] = React.useState<EditorStep>('preview');
 
@@ -42,22 +38,14 @@ export function useVideoEditorFlow(params: UseVideoEditorFlowParams) {
   const [title, setTitle] = React.useState('');
   const [visibility, setVisibility] = React.useState<Visibility>('private');
 
-  // Job polling
-  const [jobId, setJobId] = React.useState<string | null>(null);
+  // Job state
   const [jobStatus, setJobStatus] = React.useState<JobStatusName>('PENDING');
   const [jobProgress, setJobProgress] = React.useState(0);
   const [jobError, setJobError] = React.useState<string | null>(null);
   const [resultUrl, setResultUrl] = React.useState<string | null>(null);
-  const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Highlight save
-  const [savedHighlight, setSavedHighlight] = React.useState<HighlightRecord | null>(null);
-
-  const clearPoll = React.useCallback(() => {
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-  }, []);
-
-  React.useEffect(() => () => clearPoll(), [clearPoll]);
+  // Highlight save (populated after createHighlight completes)
+  const [savedHighlight] = React.useState<HighlightRecord | null>(null);
 
   const generate = React.useCallback(async () => {
     setJobError(null);
@@ -65,93 +53,62 @@ export function useVideoEditorFlow(params: UseVideoEditorFlowParams) {
     setJobStatus('PENDING');
     setStep('processing');
 
-    // ── Rama de producción: FFmpegKit + B2 (solo en builds compiladas) ──
-    if (!__DEV__) {
-      try {
-        // Importación dinámica: highlightService nunca se evalúa en dev,
-        // por lo que no hay errores de módulo nativo en Expo Go.
-        const { createHighlight, isHighlightSupported } = await import('../../../services/highlightService');
-
-        if (!isHighlightSupported()) {
-          setJobError('El dispositivo no soporta creación de highlights en este build.');
-          setJobStatus('FAILED');
-          return;
-        }
-
-        setJobStatus('RUNNING');
-        const result = await createHighlight({
-          videoUrl: recordingUrl,
-          startSec: range[0],
-          endSec: range[1],
-          title: title.trim() || 'Highlight',
-          onProgress: (pct) => setJobProgress(pct),
-        });
-
-        setResultUrl(result.streamUrl);
-        setJobProgress(100);
-        setJobStatus('COMPLETED');
-        setTimeout(() => setStep('result'), 400);
-      } catch (err: any) {
-        setJobError('No pudimos crear el highlight. Intentá de nuevo.');
-        setJobStatus('FAILED');
-      }
-      return;
-    }
-
-    // ── Rama de desarrollo: mock API (flujo simulado con progreso fake) ──
     try {
-      const resp = await startTrimJobApi(token, {
-        sourceKey: `${gameId}::${recordingUrl}`,
-        startTime: range[0],
-        endTime: range[1],
+      const { createHighlight, isHighlightSupported } = await import('../../../services/highlightService');
+
+      if (!isHighlightSupported()) {
+        setJobError('La creación de highlights requiere la build nativa (EAS). No disponible en Expo Go.');
+        setJobStatus('FAILED');
+        return;
+      }
+
+      setJobStatus('RUNNING');
+      const result = await createHighlight({
+        videoUrl: recordingUrl,
+        startSec: range[0],
+        endSec: range[1],
+        title: title.trim() || 'Highlight',
+        onProgress: (pct) => setJobProgress(pct),
       });
-      setJobId(resp.job_id);
 
-      clearPoll();
-      pollRef.current = setInterval(async () => {
-        try {
-          const status: JobStatus = await getJobStatusApi(token, resp.job_id);
-          setJobStatus(status.status);
-          setJobProgress(status.progress);
+      // Guardar metadata en el backend
+      const token = await SecureStore.getItemAsync('@torna/auth-token');
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+      await fetch(`${apiUrl}/highlights`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          gameId,
+          clipUrl: result.streamUrl,
+          start: range[0],
+          end: range[1],
+          duration: result.durationSeconds,
+          title: result.title,
+        }),
+      });
 
-          if (status.status === 'COMPLETED') {
-            clearPoll();
-            if (status.publicUrl) setResultUrl(status.publicUrl);
-            try {
-              const rec = await createHighlightApi(token, {
-                gameId, recordingUrl: status.publicUrl || recordingUrl,
-                start: range[0], end: range[1],
-                title: title.trim() || undefined,
-              });
-              setSavedHighlight(rec);
-            } catch { /* silently ignore */ }
-            setTimeout(() => setStep('result'), 400);
-          } else if (status.status === 'FAILED') {
-            clearPoll();
-            setJobError('No pudimos procesar el clip. Intentá de nuevo.');
-          }
-        } catch (err) {
-          clearPoll();
-          setJobError('Error consultando el estado del job.');
-        }
-      }, POLL_INTERVAL_MS);
-    } catch {
-      setJobError('No pudimos iniciar el procesamiento.');
+      setResultUrl(result.streamUrl);
+      setJobProgress(100);
+      setJobStatus('COMPLETED');
+      setTimeout(() => setStep('result'), 400);
+
+    } catch (err: unknown) {
+      setJobError(err instanceof Error ? err.message : 'No pudimos crear el highlight.');
+      setJobStatus('FAILED');
     }
-  }, [token, gameId, recordingUrl, range, title, clearPoll]);
+  }, [gameId, recordingUrl, range, title]);
 
   const cancelProcessing = React.useCallback(() => {
-    clearPoll();
     setJobError(null);
     setStep('metadata');
-  }, [clearPoll]);
+  }, []);
 
   return {
     step, setStep,
     range, setRange,
     title, setTitle,
     visibility, setVisibility,
-    jobId, jobStatus, jobProgress, jobError, resultUrl,
+    jobStatus, jobProgress, jobError, resultUrl,
     generate, cancelProcessing,
     savedHighlight,
   };

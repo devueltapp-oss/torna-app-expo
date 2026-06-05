@@ -1,7 +1,34 @@
 import React from 'react';
 import { View, Text, Pressable } from 'react-native';
-import { Home, Crosshair, LayoutGrid, Users, User, Search } from 'lucide-react-native';
+import { Home, Crosshair, LayoutGrid, Users, User } from 'lucide-react-native';
+import Svg, { G, Ellipse, Path } from 'react-native-svg';
 import { useTheme } from '../theme';
+
+function PadelRacketsIcon({ size = 22, strokeWidth = 2, color = 'black' }: { size?: number; strokeWidth?: number; color?: string }) {
+  const sw = strokeWidth;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 22 22">
+      {/* Racket izquierda: cabeza arriba-izquierda, mango abajo-derecha */}
+      <G transform="rotate(-42, 11, 11)">
+        <Ellipse cx="11" cy="6" rx="4" ry="4.5" stroke={color} strokeWidth={sw} fill="none" />
+        <Path
+          d="M10 10.5 L10 18 Q11 20 12 18 L12 10.5"
+          stroke={color} strokeWidth={sw} fill="none"
+          strokeLinejoin="round" strokeLinecap="round"
+        />
+      </G>
+      {/* Racket derecha: cabeza arriba-derecha, mango abajo-izquierda */}
+      <G transform="rotate(42, 11, 11)">
+        <Ellipse cx="11" cy="6" rx="4" ry="4.5" stroke={color} strokeWidth={sw} fill="none" />
+        <Path
+          d="M10 10.5 L10 18 Q11 20 12 18 L12 10.5"
+          stroke={color} strokeWidth={sw} fill="none"
+          strokeLinejoin="round" strokeLinecap="round"
+        />
+      </G>
+    </Svg>
+  );
+}
 
 export type TabId = 'home' | 'games' | 'courts' | 'players' | 'profile' | 'search';
 export type Role = 'club' | 'player';
@@ -30,7 +57,7 @@ const TABS_BY_ROLE: Record<Role, TabDef[]> = {
   ],
   player: [
     { id: 'games',   label: 'Juegos',    Icon: Crosshair },
-    { id: 'search',  label: 'Buscar',    Icon: Search },
+    { id: 'search',  label: 'Buscar',    Icon: PadelRacketsIcon },
     { id: 'home',    label: 'Inicio',    Icon: Home },
     { id: 'players', label: 'Jugadores', Icon: Users },
     { id: 'profile', label: 'Perfil',    Icon: User },

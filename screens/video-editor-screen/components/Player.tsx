@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, TouchableOpacity } from 'react-native';
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av';
+import { Maximize2 } from 'lucide-react-native';
 import { useTheme } from '../../../theme';
 
 export interface PlayerHandle {
@@ -21,6 +22,9 @@ export interface PlayerProps {
   onProgress?: (currentTime: number) => void;
   onLoad?: (duration: number) => void;
   onBuffer?: (isBuffering: boolean) => void;
+  hideControls?: boolean;
+  fullscreen?: boolean;
+  renderOverlay?: () => React.ReactNode;
 }
 
 function fmt(s: number) {
@@ -35,6 +39,7 @@ export const Player = React.forwardRef<PlayerHandle, PlayerProps>(function Playe
   const {
     recordingUrl, durationSeconds, startAt = 0, endAt,
     autoPlay = false, label, onProgress, onLoad, onBuffer,
+    hideControls = false, fullscreen = false, renderOverlay,
   } = props;
 
   const videoRef = React.useRef<Video>(null);
@@ -69,6 +74,11 @@ export const Player = React.forwardRef<PlayerHandle, PlayerProps>(function Playe
       setTotalSec(dur);
       onLoad?.(dur);
     }
+
+    if (endAt !== undefined && status.isPlaying && posSec >= endAt) {
+      videoRef.current?.pauseAsync();
+      videoRef.current?.setPositionAsync(startAt * 1000);
+    }
   }
 
   function togglePlay() {
@@ -82,7 +92,7 @@ export const Player = React.forwardRef<PlayerHandle, PlayerProps>(function Playe
   const pct = upper > startAt ? Math.min(1, (positionSec - startAt) / (upper - startAt)) : 0;
 
   return (
-    <View style={{
+    <View style={fullscreen ? { flex: 1, overflow: 'hidden', backgroundColor: '#000' } : {
       aspectRatio: 16 / 9, borderRadius: 18, overflow: 'hidden',
       backgroundColor: colors.ink2, borderWidth: 1, borderColor: colors.line,
     }}>
@@ -108,36 +118,61 @@ export const Player = React.forwardRef<PlayerHandle, PlayerProps>(function Playe
         </View>
       ) : null}
 
-      <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 10, gap: 8 }}>
-        <View style={{ height: 3, backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 2, overflow: 'hidden' }}>
-          <View style={{ width: `${pct * 100}%`, height: '100%', backgroundColor: colors.accent }}/>
+      {!hideControls && (
+        <TouchableOpacity
+          onPress={() => videoRef.current?.presentFullscreenPlayer()}
+          style={{
+            position: 'absolute',
+            top: 10,
+            right: 10,
+            width: 32,
+            height: 32,
+            borderRadius: 16,
+            backgroundColor: 'rgba(0,0,0,0.50)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 20,
+          }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Maximize2 size={16} color="#FFFFFF" />
+        </TouchableOpacity>
+      )}
+
+      {renderOverlay?.()}
+
+      {!hideControls && (
+        <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 10, gap: 8 }}>
+          <View style={{ height: 3, backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 2, overflow: 'hidden' }}>
+            <View style={{ width: `${pct * 100}%`, height: '100%', backgroundColor: colors.accent }}/>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Pressable
+              onPress={togglePlay}
+              style={{
+                width: 32, height: 32, borderRadius: 16,
+                backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
+              }}>
+              {isPlaying ? (
+                <View style={{ flexDirection: 'row', gap: 3 }}>
+                  <View style={{ width: 3, height: 12, backgroundColor: colors.ink }}/>
+                  <View style={{ width: 3, height: 12, backgroundColor: colors.ink }}/>
+                </View>
+              ) : (
+                <View style={{
+                  width: 0, height: 0, marginLeft: 2,
+                  borderLeftWidth: 9, borderLeftColor: colors.ink,
+                  borderTopWidth: 6, borderTopColor: 'transparent',
+                  borderBottomWidth: 6, borderBottomColor: 'transparent',
+                }}/>
+              )}
+            </Pressable>
+            <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700', fontFamily: 'Menlo' }}>
+              {fmt(positionSec)} / {fmt(upper)}
+            </Text>
+          </View>
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Pressable
-            onPress={togglePlay}
-            style={{
-              width: 32, height: 32, borderRadius: 16,
-              backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
-            }}>
-            {isPlaying ? (
-              <View style={{ flexDirection: 'row', gap: 3 }}>
-                <View style={{ width: 3, height: 12, backgroundColor: colors.ink }}/>
-                <View style={{ width: 3, height: 12, backgroundColor: colors.ink }}/>
-              </View>
-            ) : (
-              <View style={{
-                width: 0, height: 0, marginLeft: 2,
-                borderLeftWidth: 9, borderLeftColor: colors.ink,
-                borderTopWidth: 6, borderTopColor: 'transparent',
-                borderBottomWidth: 6, borderBottomColor: 'transparent',
-              }}/>
-            )}
-          </Pressable>
-          <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700', fontFamily: 'Menlo' }}>
-            {fmt(positionSec)} / {fmt(upper)}
-          </Text>
-        </View>
-      </View>
+      )}
     </View>
   );
 });

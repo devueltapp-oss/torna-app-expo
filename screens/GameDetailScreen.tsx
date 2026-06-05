@@ -4,11 +4,11 @@
  * see players, follow the club. NO stream control, NO BLE pairing.
  */
 import React from 'react';
-import { View, Text, Pressable, ScrollView, Image, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ScrollView, Image, StyleSheet, TouchableOpacity, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Svg, Rect, Line } from 'react-native-svg';
 import { Video, ResizeMode } from 'expo-av';
-import { ChevronLeft, MoreHorizontal, Eye, Play, ChevronRight, Scissors } from 'lucide-react-native';
+import { ChevronLeft, MoreHorizontal, Eye, Play, ChevronRight, Scissors, Maximize2, Minimize2 } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { Avatar, AvatarStack, Button, StatusBadge, SurfaceChip, SectionHeader } from '../components/ui';
@@ -34,11 +34,15 @@ export function GameDetailScreen({ game, onBack, isFollowing = false, onToggleFo
   game: GameDetailData; onBack?: () => void; isFollowing?: boolean; onToggleFollow?: () => void;
   onCreateHighlight?: () => void;
 }) {
-  const { colors } = useTheme();
+  const { colors, fonts, radii } = useTheme();
   const [camIdx, setCamIdx] = React.useState(
     Math.max(0, game.cameras.findIndex(c => c.state === 'available'))
   );
   const activeCam = game.cameras[camIdx];
+  const [streamError, setStreamError] = React.useState(false);
+  const [isFullscreen, setIsFullscreen] = React.useState(false);
+
+  React.useEffect(() => { setStreamError(false); }, [activeCam?.id]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
@@ -60,8 +64,8 @@ export function GameDetailScreen({ game, onBack, isFollowing = false, onToggleFo
         </View>
 
         {/* HLS player */}
-        <View style={{ marginHorizontal: 16, borderRadius: 18, overflow: 'hidden', aspectRatio: 16/9, backgroundColor: colors.ink2, borderWidth: 1, borderColor: '#334155', alignItems: 'center', justifyContent: 'center' }}>
-          {activeCam?.streamUrl ? (
+        <View style={{ marginHorizontal: 16, borderRadius: 18, overflow: 'hidden', aspectRatio: 16/9, backgroundColor: colors.ink2, borderWidth: 1, borderColor: '#334155', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+          {activeCam?.streamUrl && !streamError ? (
             <Video
               key={activeCam.id}
               source={{ uri: activeCam.streamUrl }}
@@ -70,6 +74,7 @@ export function GameDetailScreen({ game, onBack, isFollowing = false, onToggleFo
               shouldPlay
               isLooping={false}
               isMuted={false}
+              onError={() => setStreamError(true)}
             />
           ) : (
             <>
@@ -79,12 +84,21 @@ export function GameDetailScreen({ game, onBack, isFollowing = false, onToggleFo
                 <Line x1={40} y1={68} x2={320} y2={68} stroke={colors.accent} strokeWidth={1}/>
                 <Line x1={40} y1={132} x2={320} y2={132} stroke={colors.accent} strokeWidth={1}/>
               </Svg>
-              <Text style={{
-                position: 'absolute', bottom: 14,
-                color: colors.muted2, fontSize: 12, fontWeight: '600',
-              }}>
-                Stream no disponible para esta cámara
-              </Text>
+              <View style={{ position: 'absolute', bottom: 14, alignItems: 'center' }}>
+                <Text style={{ color: colors.muted2, fontSize: 12, fontWeight: '600' }}>
+                  {streamError
+                    ? 'Señal no disponible · reintentando...'
+                    : 'Stream no disponible para esta cámara'}
+                </Text>
+                {streamError && (
+                  <TouchableOpacity
+                    onPress={() => setStreamError(false)}
+                    style={{ marginTop: 12, paddingHorizontal: 16, paddingVertical: 8,
+                             backgroundColor: colors.ink, borderRadius: radii.md }}>
+                    <Text style={{ color: '#fff', fontFamily: fonts.bold, fontSize: 13 }}>Reintentar</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </>
           )}
           {game.isLive && (
@@ -99,6 +113,26 @@ export function GameDetailScreen({ game, onBack, isFollowing = false, onToggleFo
             <Eye size={14} color="#FFFFFF" />
             <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '600' }}>{game.viewers}</Text>
           </View>
+          {activeCam?.streamUrl && !streamError ? (
+            <TouchableOpacity
+              onPress={() => setIsFullscreen(true)}
+              style={{
+                position: 'absolute',
+                top: 10,
+                right: 10,
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: 'rgba(0,0,0,0.55)',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 10,
+              }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Maximize2 size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         {/* Camera angle tabs */}
@@ -181,6 +215,29 @@ export function GameDetailScreen({ game, onBack, isFollowing = false, onToggleFo
           </View>
         ) : null}
       </ScrollView>
+      <Modal visible={isFullscreen} animationType="fade" statusBarTranslucent>
+        <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center' }}>
+          <Video
+            source={{ uri: activeCam?.streamUrl }}
+            style={StyleSheet.absoluteFill}
+            resizeMode={ResizeMode.CONTAIN}
+            shouldPlay
+            isMuted={false}
+            isLooping={false}
+          />
+          <TouchableOpacity
+            onPress={() => setIsFullscreen(false)}
+            style={{
+              position: 'absolute', top: 48, right: 16,
+              width: 40, height: 40, borderRadius: 20,
+              backgroundColor: 'rgba(0,0,0,0.55)',
+              alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Minimize2 size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

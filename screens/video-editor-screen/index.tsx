@@ -63,6 +63,21 @@ export function VideoEditorScreen({
 
   const stepIdx = STEP_ORDER.indexOf(flow.step);
 
+  // El paso de trim toma toda la pantalla: video + overlay controls.
+  // No puede estar dentro del SafeAreaView/ScrollView del editor.
+  if (flow.step === 'trim') {
+    return (
+      <TrimStep
+        recordingUrl={recordingUrl}
+        durationSeconds={durationSeconds}
+        range={flow.range}
+        onChangeRange={flow.setRange}
+        onBack={() => flow.setStep('preview')}
+        onContinue={() => flow.setStep('metadata')}
+      />
+    );
+  }
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       {/* Header con stepper dots */}
@@ -109,16 +124,6 @@ export function VideoEditorScreen({
             clubName={clubName}
             cameraLabel={cameraLabel}
             onContinue={() => flow.setStep('trim')}
-          />
-        )}
-        {flow.step === 'trim' && (
-          <TrimStep
-            recordingUrl={recordingUrl}
-            durationSeconds={durationSeconds}
-            range={flow.range}
-            onChangeRange={flow.setRange}
-            onBack={() => flow.setStep('preview')}
-            onContinue={() => flow.setStep('metadata')}
           />
         )}
         {flow.step === 'metadata' && (

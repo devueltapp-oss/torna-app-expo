@@ -313,3 +313,78 @@ export function Switch({ value, onChange, disabled }: {
     </Pressable>
   );
 }
+
+/* ─────────────────────────  SocialButton  ─────────────────────────
+ * Used on login screens. Monochrome provider icon (brand blue / white)
+ * so we stay within the 3-color brand palette.
+ * comingSoon = shows "Próximamente" pill and disables press.
+ */
+
+export type SocialProvider = 'google' | 'apple' | 'facebook';
+
+export interface SocialButtonProps {
+  provider: SocialProvider;
+  label: string;
+  loading?: boolean;
+  disabled?: boolean;
+  comingSoon?: boolean;
+  onPress: () => void;
+}
+
+function ProviderIcon({ provider, color }: { provider: SocialProvider; color: string }) {
+  const char = { google: 'G', apple: 'A', facebook: 'f' }[provider];
+  return (
+    <View style={{
+      width: 22, height: 22, borderRadius: 11,
+      borderWidth: 1.5, borderColor: color,
+      alignItems: 'center', justifyContent: 'center',
+    }}>
+      <Text style={{ fontSize: provider === 'facebook' ? 14 : 12, fontWeight: '800', color, lineHeight: 18 }}>
+        {char}
+      </Text>
+    </View>
+  );
+}
+
+export function SocialButton({ provider, label, loading = false, disabled = false, comingSoon = false, onPress }: SocialButtonProps) {
+  const { colors } = useTheme();
+  const inactive = disabled || comingSoon;
+  const iconColor = inactive ? colors.muted : colors.text;
+  return (
+    <Pressable
+      onPress={inactive ? undefined : onPress}
+      style={({ pressed }) => ({
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+        paddingVertical: 14,
+        paddingHorizontal: 20,
+        borderRadius: 14,
+        borderWidth: 1.5,
+        borderColor: inactive ? colors.line : colors.lineStrong,
+        backgroundColor: colors.surface,
+        opacity: pressed || inactive ? 0.6 : 1,
+      })}
+    >
+      {loading
+        ? <ActivityIndicator size="small" color={colors.muted2} />
+        : <ProviderIcon provider={provider} color={iconColor} />
+      }
+      <Text style={{ fontSize: 14, fontWeight: '700', color: inactive ? colors.muted : colors.text }}>
+        {label}
+      </Text>
+      {comingSoon && (
+        <View style={{
+          backgroundColor: colors.bg2,
+          paddingHorizontal: 7, paddingVertical: 2,
+          borderRadius: 9999, marginLeft: 2,
+        }}>
+          <Text style={{ fontSize: 10, fontWeight: '700', color: colors.muted }}>
+            Próximamente
+          </Text>
+        </View>
+      )}
+    </Pressable>
+  );
+}

@@ -1,22 +1,27 @@
 import React from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, MoreHorizontal, MapPin, Eye, Play } from 'lucide-react-native';
+import { ChevronLeft, MoreHorizontal, MapPin, Eye, Play, Bell } from 'lucide-react-native';
 import { Svg, Rect, Line } from 'react-native-svg';
 import { Video, ResizeMode } from 'expo-av';
+import { useIsFocused } from '@react-navigation/native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { SectionHeader, StatusBadge, Avatar, Button } from '../components/ui';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
-import type { PlayerPublic } from '../data/mocks';
+import type { PlayerPublic, PlayerClip } from '../data/mocks';
 
 interface Props {
   player: PlayerPublic;
   onBack?: () => void;
   onToggleFollow?: () => void;
+  onToggleNotify?: () => void;
   onOpenLive?: (gameId: string) => void;
+  onOpenClip?: (clip: PlayerClip) => void;
   onChangeTab?: (id: TabId) => void;
   activeTab?: TabId;
+  onOpenFollowers?: () => void;
+  onOpenFollowing?: () => void;
 }
 
 /**
@@ -29,8 +34,9 @@ interface Props {
  *   GET /players/:id              → PlayerPublic
  *   POST/DELETE /players/:id/follow → { isFollowing }
  */
-export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onOpenLive, onChangeTab, activeTab = 'players' }: Props) {
+export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onToggleNotify, onOpenLive, onOpenClip, onChangeTab, activeTab = 'players', onOpenFollowers, onOpenFollowing }: Props) {
   const { colors } = useTheme();
+  const isFocused = useIsFocused();
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
@@ -80,10 +86,30 @@ export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onOpen
                 {player.isFollowing ? '✓ Siguiendo' : '+ Seguir'}
               </Text>
             </Pressable>
-            <View style={{ alignItems: 'flex-end', minWidth: 80 }}>
+            {player.isFollowing && (
+              <Pressable
+                onPress={onToggleNotify}
+                style={{
+                  width: 42, height: 42, borderRadius: 10,
+                  alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: player.notifyOnMatch ? '#FFFFFF' : 'rgba(255,255,255,0.18)',
+                }}
+              >
+                <Bell
+                  size={18}
+                  color={player.notifyOnMatch ? colors.ink : '#FFFFFF'}
+                  fill={player.notifyOnMatch ? colors.ink : 'none'}
+                />
+              </Pressable>
+            )}
+            <Pressable onPress={onOpenFollowers} style={{ alignItems: 'flex-end', minWidth: 60 }}>
               <Text style={{ fontSize: 18, fontWeight: '800', color: '#FFFFFF' }}>{player.followers}</Text>
               <Text style={{ fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.7)', letterSpacing: 0.8 }}>SEGUIDORES</Text>
-            </View>
+            </Pressable>
+            <Pressable onPress={onOpenFollowing} style={{ alignItems: 'flex-end', minWidth: 60 }}>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: '#FFFFFF' }}>{player.followingCount}</Text>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.7)', letterSpacing: 0.8 }}>SIGUIENDO</Text>
+            </Pressable>
           </View>
         </View>
 
@@ -102,7 +128,7 @@ export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onOpen
                 borderWidth: 2, borderColor: colors.live,
               }}>
               <View style={{ height: 118, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                {player.liveGame.streamUrl ? (
+                {player.liveGame.streamUrl && isFocused ? (
                   <Video
                     key={player.liveGame.id}
                     source={{ uri: player.liveGame.streamUrl }}
@@ -133,7 +159,11 @@ export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onOpen
 
           {/* Pre-recorded clips */}
           {player.clips.map(c => (
-            <View key={c.id} style={{ width: 180, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line }}>
+            <Pressable
+              key={c.id}
+              onPress={() => onOpenClip?.(c)}
+              style={({ pressed }) => ({ width: 180, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, opacity: pressed ? 0.88 : 1 })}
+            >
               <View style={{ height: 100, backgroundColor: colors.bg3, alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                 <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}>
                   <Play size={16} color={colors.ink}/>
@@ -146,7 +176,7 @@ export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onOpen
                 <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }} numberOfLines={2}>{c.title}</Text>
                 <Text style={{ fontSize: 10, color: colors.muted2, marginTop: 2 }}>{c.date}</Text>
               </View>
-            </View>
+            </Pressable>
           ))}
         </ScrollView>
 

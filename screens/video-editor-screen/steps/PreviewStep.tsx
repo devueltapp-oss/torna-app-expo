@@ -34,16 +34,17 @@ export function PreviewStep({
         recordingUrl={recordingUrl}
         durationSeconds={durationSeconds}
         label={cameraLabel}
+        autoPlay
       />
 
-      <View style={{
-        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        backgroundColor: colors.bg2, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
-      }}>
-        <View>
-          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted2, letterSpacing: 0.8 }}>{gameId}</Text>
-          <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text }}>{courtLabel} · {clubName}</Text>
-        </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted2, fontFamily: 'Menlo' }}>
+          {gameId}
+        </Text>
+        <Text style={{ fontSize: 12, color: colors.muted2 }}>·</Text>
+        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text }}>
+          {courtLabel} · {clubName}
+        </Text>
       </View>
 
       <Button fullWidth size="lg" onPress={onContinue}>Recortar un momento →</Button>

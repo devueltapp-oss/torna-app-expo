@@ -2,10 +2,12 @@ export { LoginScreen } from './LoginScreen';
 export { LoginWithRoleScreen, type LoginRole } from './LoginWithRoleScreen';
 export { RegisterClubScreen } from './RegisterClubScreen';
 export { PendingApprovalScreen } from './PendingApprovalScreen';
+export { CompleteProfileScreen, type CompleteProfileScreenProps } from './CompleteProfileScreen';
 
 // Home
-export { HomeScreen, type UpcomingGameData } from './HomeScreen';
+export { HomeScreen, type UpcomingGameData, type UpcomingGamePlayer } from './HomeScreen';
 export { ClubHomeScreen } from './ClubHomeScreen';
+export { ReelViewScreen, type ReelViewScreenProps, type ReelSection } from './ReelViewScreen';
 
 // Game
 export { GamesScreen } from './GamesScreen';
@@ -20,6 +22,7 @@ export { ProfileScreen, type ClubProfile } from './ProfileScreen';
 export { ClubProfilePlayerView } from './ClubProfilePlayerView';
 export { PlayerProfilePublicView } from './PlayerProfilePublicView';
 export { SearchPlayScreen } from './SearchPlayScreen';
+export { GlobalSearchScreen, type GlobalSearchScreenProps } from './GlobalSearchScreen';
 export { JoinMatchScreen } from './JoinMatchScreen';
 
 // Player main profile + library + settings

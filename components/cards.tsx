@@ -4,15 +4,15 @@
  *
  * Brand-strict: solid fills only (no gradients), 3-color palette.
  */
-import React from 'react';
-import { View, Text, Pressable, Image, StyleSheet } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, Pressable, Image, StyleSheet, Platform } from 'react-native';
 import { Svg, Rect, Line } from 'react-native-svg';
 import { Video, ResizeMode } from 'expo-av';
-import { Eye, Camera, Heart, MessageCircle, Play } from 'lucide-react-native';
+import { Eye, Camera, Heart, MessageCircle, Play, WifiOff } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { Avatar, AvatarStack, StatusBadge, SurfaceChip, ClubPill, GameStatus } from './ui';
-import type { FeedPost as FeedPostData } from '../data/mocks';
+import type { FeedPost as FeedPostData, UpcomingGameData } from '../data/mocks';
 
 export interface MatchParticipant { username: string; name?: string; profilePicture?: string; }
 
@@ -40,10 +40,15 @@ function CourtMotif({ accent, opacity = 0.18, width = '62%' }: { accent: string;
 
 /* ─────────────────  LiveGameCard (vertical, full-width)  ─────────────── */
 
-export function LiveGameCard({ game, onPress, tornaLogo }: {
-  game: LiveGameData; onPress?: (id: string) => void; tornaLogo: any;
+export function LiveGameCard({ game, onPress, tornaLogo, isActive }: {
+  game: LiveGameData; onPress?: (id: string) => void; tornaLogo: any; isActive?: boolean;
 }) {
   const { colors, radii } = useTheme();
+  const [streamError, setStreamError] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  useEffect(() => { setStreamError(false); }, [game.streamUrl]);
+
   return (
     <Pressable onPress={() => onPress?.(game.id)}
       style={({ pressed }) => [{ opacity: pressed ? 0.94 : 1 }]}>
@@ -53,20 +58,64 @@ export function LiveGameCard({ game, onPress, tornaLogo }: {
       }}>
         {/* Hero — solid brand blue (no gradient per manual) */}
         <View style={{ height: 118, position: 'relative', backgroundColor: colors.ink }}>
-          {game.streamUrl ? (
-            <Video
-              key={game.id}
-              source={{ uri: game.streamUrl }}
-              style={StyleSheet.absoluteFill}
-              resizeMode={ResizeMode.COVER}
-              shouldPlay isMuted isLooping={false}
-            />
+          {game.streamUrl && !streamError && isActive !== false ? (
+            <>
+              <Video
+                key={game.id}
+                source={{ uri: game.streamUrl }}
+                style={StyleSheet.absoluteFill}
+                resizeMode={ResizeMode.COVER}
+                shouldPlay isMuted isLooping={false}
+                onError={() => setStreamError(true)}
+                onPlaybackStatusUpdate={(status) => {
+                  if (status.isLoaded) setIsPlaying(status.isPlaying);
+                }}
+              />
+              {!isPlaying && (
+                <View style={{
+                  position: 'absolute',
+                  top: 0, left: 0, right: 0, bottom: 0,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  pointerEvents: 'none',
+                }}>
+                  <View style={{
+                    width: 48, height: 48,
+                    borderRadius: 24,
+                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    <Play size={22} color="#FFFFFF" fill="#FFFFFF" />
+                  </View>
+                </View>
+              )}
+            </>
           ) : (
             <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
               <CourtMotif accent={colors.accent} width="48%"/>
+              {streamError && (
+                <View style={{
+                  position: 'absolute',
+                  top: 6,
+                  left: 6,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 3,
+                  backgroundColor: 'rgba(45,76,117,0.12)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(45,76,117,0.30)',
+                  borderRadius: 100,
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                }}>
+                  <WifiOff size={10} color={colors.ink} />
+                  <Text style={{ fontSize: 9, fontFamily: fonts.bold, color: colors.text }}>Sin señal</Text>
+                </View>
+              )}
             </View>
           )}
-          {!game.streamUrl && (
+          {(!game.streamUrl || streamError) && (
             <View style={{
               position: 'absolute', top: '50%', left: '50%',
               marginLeft: -20, marginTop: -20,
@@ -113,25 +162,49 @@ export function LiveGameCard({ game, onPress, tornaLogo }: {
  * Compact horizontal tile used by both player and club home carousels.
  * Width 180px; hero 100px; footer with court + club only.
  */
-export function LiveGameTile({ game, onPress, tornaLogo }: {
-  game: LiveGameData; onPress?: (id: string) => void; tornaLogo: any;
+export function LiveGameTile({ game, onPress, onDoubleTap, tornaLogo, isActive }: {
+  game: LiveGameData; onPress?: (id: string) => void; onDoubleTap?: () => void; tornaLogo: any; isActive?: boolean;
 }) {
   const { colors } = useTheme();
+  const [streamError, setStreamError] = useState(false);
+  const videoRef = React.useRef<Video>(null);
+  const lastTap = React.useRef(0);
+  const tapTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => { setStreamError(false); }, [game.streamUrl]);
+
+  React.useEffect(() => () => {
+    if (tapTimer.current) clearTimeout(tapTimer.current);
+  }, []);
+
+  const handlePress = () => {
+    const now = Date.now();
+    if (now - lastTap.current < 300) {
+      if (tapTimer.current) { clearTimeout(tapTimer.current); tapTimer.current = null; }
+      onDoubleTap?.();
+    } else {
+      tapTimer.current = setTimeout(() => onPress?.(game.id), 300);
+    }
+    lastTap.current = now;
+  };
+
   return (
-    <Pressable onPress={() => onPress?.(game.id)}
+    <Pressable onPress={handlePress}
       style={({ pressed }) => [{ width: 180, opacity: pressed ? 0.94 : 1 }]}>
       <View style={{
         backgroundColor: colors.surface, borderRadius: 14, overflow: 'hidden',
         borderWidth: 1, borderColor: colors.line,
       }}>
         <View style={{ position: 'relative', height: 100, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' }}>
-          {game.streamUrl ? (
+          {game.streamUrl && !streamError && isActive !== false ? (
             <Video
+              ref={videoRef}
               key={game.id}
               source={{ uri: game.streamUrl }}
               style={StyleSheet.absoluteFill}
               resizeMode={ResizeMode.COVER}
               shouldPlay isMuted isLooping={false}
+              onError={() => setStreamError(true)}
             />
           ) : (
             <>
@@ -142,6 +215,25 @@ export function LiveGameTile({ game, onPress, tornaLogo }: {
               }}>
                 <Image source={tornaLogo} style={{ width: 20, height: 20 }}/>
               </View>
+              {streamError && (
+                <View style={{
+                  position: 'absolute',
+                  top: 6,
+                  left: 6,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 3,
+                  backgroundColor: 'rgba(45,76,117,0.12)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(45,76,117,0.30)',
+                  borderRadius: 100,
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                }}>
+                  <WifiOff size={10} color={colors.ink} />
+                  <Text style={{ fontSize: 9, fontFamily: fonts.bold, color: colors.text }}>Sin señal</Text>
+                </View>
+              )}
             </>
           )}
           <View style={{ position: 'absolute', top: 6, left: 6 }}>
@@ -153,6 +245,15 @@ export function LiveGameTile({ game, onPress, tornaLogo }: {
               <Text style={{ color: colors.accent, fontSize: 11, fontWeight: '700' }}>{game.viewers}</Text>
             </View>
           )}
+          <View style={{
+            position: 'absolute',
+            bottom: 6, left: 6,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            borderRadius: 10,
+            padding: 4,
+          }}>
+            <Play size={10} color="#FFFFFF" fill="#FFFFFF" />
+          </View>
         </View>
         <View style={{ paddingHorizontal: 10, paddingVertical: 8 }}>
           <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }} numberOfLines={1}>{game.court}</Text>
@@ -314,10 +415,10 @@ export interface PlayerData {
   id: string; name: string; username: string; email?: string;
 }
 
-export function PlayerListItem({ player }: { player: PlayerData }) {
+export function PlayerListItem({ player, onPress }: { player: PlayerData; onPress?: () => void }) {
   const { colors, radii } = useTheme();
   return (
-    <View style={{
+    <Pressable onPress={onPress} style={{
       flexDirection: 'row', alignItems: 'center', gap: 12,
       backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line,
       borderRadius: radii.xl, padding: 12,
@@ -330,7 +431,58 @@ export function PlayerListItem({ player }: { player: PlayerData }) {
         </Text>
       </View>
       <Text style={{ color: colors.muted, fontSize: 11, fontFamily: fonts.mono }}>#{player.id}</Text>
-    </View>
+    </Pressable>
+  );
+}
+
+/* ─────────────────  UpcomingGameTile (double-tap → sheet)  ─────────────── */
+
+export function UpcomingGameTile({ game, onDoubleTap }: {
+  game: UpcomingGameData;
+  onDoubleTap?: () => void;
+}) {
+  const { colors } = useTheme();
+  const lastTap = React.useRef(0);
+  const tapTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => () => {
+    if (tapTimer.current) clearTimeout(tapTimer.current);
+  }, []);
+
+  const handlePress = () => {
+    const now = Date.now();
+    if (now - lastTap.current < 300) {
+      if (tapTimer.current) { clearTimeout(tapTimer.current); tapTimer.current = null; }
+      onDoubleTap?.();
+    } else {
+      tapTimer.current = setTimeout(() => {}, 300);
+    }
+    lastTap.current = now;
+  };
+
+  return (
+    <Pressable onPress={handlePress} style={({ pressed }) => [{ opacity: pressed ? 0.94 : 1 }]}>
+      <View style={{
+        width: 220, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line,
+        borderRadius: 14, padding: 12, gap: 8,
+      }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <StatusBadge status="SCHEDULED"/>
+          <Text style={{ fontSize: 11, color: colors.muted2, fontFamily: fonts.mono }}>{game.id}</Text>
+        </View>
+        <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: 18, letterSpacing: -0.3 }}>
+          {game.time} · {game.court}
+        </Text>
+        <AvatarStack users={game.players} size={26} max={4}/>
+        <Text style={{ color: colors.muted2, fontSize: 12 }}>{game.club}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: colors.accent }}/>
+          <Text style={{ color: colors.accentText, fontSize: 10, fontFamily: fonts.bold, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+            Sigues a {game.following === 'player' ? game.byPlayer : game.club}
+          </Text>
+        </View>
+      </View>
+    </Pressable>
   );
 }
 
@@ -340,16 +492,35 @@ export function PlayerListItem({ player }: { player: PlayerData }) {
  *   - 200px wide, 1:1 media (square), tight footer with author + caption + counts
  */
 
-export function FeedPost({ post }: { post: FeedPostData }) {
+export function FeedPost({ post, onDoubleTap }: { post: FeedPostData; onDoubleTap?: () => void }) {
   const { colors } = useTheme();
   const isHighlight = post.type === 'highlight';
   const mediaBg = post.tone === 'lime' ? colors.accent
                 : post.tone === 'white' ? colors.bg2
                 : colors.ink;
   const motifStroke = post.tone === 'lime' ? colors.ink : colors.accent;
+
+  const lastTap = React.useRef(0);
+  const tapTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => () => {
+    if (tapTimer.current) clearTimeout(tapTimer.current);
+  }, []);
+
+  const handlePress = () => {
+    if (!onDoubleTap || !isHighlight) return;
+    const now = Date.now();
+    if (now - lastTap.current < 300) {
+      if (tapTimer.current) { clearTimeout(tapTimer.current); tapTimer.current = null; }
+      onDoubleTap();
+    }
+    lastTap.current = now;
+  };
+
   return (
+    <Pressable onPress={handlePress} style={{ width: 200 }}>
     <View style={{
-      width: 200, borderRadius: 14, overflow: 'hidden',
+      borderRadius: 14, overflow: 'hidden',
       backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line,
     }}>
       {/* Media — square thumbnail */}
@@ -413,5 +584,6 @@ export function FeedPost({ post }: { post: FeedPostData }) {
         </View>
       </View>
     </View>
+    </Pressable>
   );
 }
