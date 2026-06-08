@@ -2,12 +2,9 @@
  * MyLibraryScreen — sección PRIVADA del player. Solo el dueño la ve.
  *
  *   Header con badge PRIVADO + nota de privacidad.
- *   3 secciones STACKED y COLAPSABLES (tap en el chevron del header):
+ *   2 secciones STACKED y COLAPSABLES (tap en el chevron del header):
  *     1. Mis partidos completos   — cada uno con chip Privado/Público + "Crear highlight →"
  *     2. Mis highlights           — clips recortados con chip
- *     3. Mis subidas              — fotos + videos ≤ 3 min con chip
- *
- *   FAB único "+" abajo a la derecha → abre UploadSheet
  *
  * Toggle de visibilidad por item: tap en el chip flippea isPublic.
  * En producción cada flip es un PATCH /me/library/:id { isPublic }.
@@ -15,24 +12,22 @@
 import React from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronDown, Lock, Plus, Scissors, Play } from 'lucide-react-native';
+import { ChevronLeft, ChevronDown, Lock, Scissors, Play } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { Button, AppHeader, SurfaceChip } from '../components/ui';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import { ContentThumb } from '../components/ContentThumb';
 import { VisibilityPill } from '../components/VisibilityPill';
 import type {
-  LibraryItem, LibraryMatch, LibraryHighlight, LibraryUpload,
-} from '../data/mocks';
+  LibraryItem, LibraryMatch, LibraryHighlight,
+} from '../data/types';
 
-type SectionKey = 'matches' | 'highlights' | 'uploads';
+type SectionKey = 'matches' | 'highlights';
 
 export interface MyLibraryScreenProps {
   matches: LibraryMatch[];
   highlights: LibraryHighlight[];
-  uploads: LibraryUpload[];
   onBack: () => void;
-  onOpenUpload: () => void;
   /** Tap "Crear highlight" en un match → abre VideoEditor con esa grabación. */
   onCreateHighlight: (match: LibraryMatch) => void;
   /** Flip privado/público de un item. */
@@ -44,18 +39,18 @@ export interface MyLibraryScreenProps {
 }
 
 export function MyLibraryScreen({
-  matches, highlights, uploads,
-  onBack, onOpenUpload, onCreateHighlight, onToggleVisibility, onOpenItem,
+  matches, highlights,
+  onBack, onCreateHighlight, onToggleVisibility, onOpenItem,
   activeTab, onChangeTab,
 }: MyLibraryScreenProps) {
   const { colors } = useTheme();
   const [open, setOpen] = React.useState<Record<SectionKey, boolean>>({
-    matches: true, highlights: true, uploads: true,
+    matches: true, highlights: true,
   });
   const toggle = (k: SectionKey) => setOpen(o => ({ ...o, [k]: !o[k] }));
 
   const totalPublic = [
-    ...matches, ...highlights, ...uploads,
+    ...matches, ...highlights,
   ].filter(i => i.isPublic).length;
 
   return (
@@ -123,42 +118,9 @@ export function MyLibraryScreen({
             ))}
           </View>
         ) : null}
-
-        {/* MIS SUBIDAS */}
-        <SectionHeader
-          title="Mis subidas (fotos · clips ≤ 3 min)" count={uploads.length}
-          collapsed={!open.uploads} onToggle={() => toggle('uploads')}
-        />
-        {open.uploads ? (
-          <View style={{ gap: 8 }}>
-            {uploads.map(u => (
-              <ItemRow
-                key={u.id} item={u}
-                onToggleVisibility={() => onToggleVisibility(u)}
-                onOpen={() => onOpenItem?.(u)}
-              />
-            ))}
-          </View>
-        ) : null}
       </ScrollView>
 
-      {onChangeTab && <BottomTabBar role="player" active={activeTab} onChange={onChangeTab}/>}
-
-      {/* FAB único */}
-      <Pressable
-        onPress={onOpenUpload}
-        accessibilityLabel="Subir contenido"
-        style={({ pressed }) => ({
-          position: 'absolute', right: 18, bottom: onChangeTab ? 90 : 24,
-          width: 56, height: 56, borderRadius: 28,
-          backgroundColor: colors.accent,
-          alignItems: 'center', justifyContent: 'center',
-          shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 12, shadowOffset: { width: 0, height: 6 },
-          elevation: 6,
-          transform: [{ scale: pressed ? 0.96 : 1 }],
-        })}>
-        <Plus size={28} color={colors.ink} strokeWidth={2.4}/>
-      </Pressable>
+      {onChangeTab && <BottomTabBar role="player" active={activeTab ?? 'profile'} onChange={onChangeTab}/>}
     </SafeAreaView>
   );
 }
@@ -260,7 +222,7 @@ function MatchRow({ match, onCreateHighlight, onToggleVisibility, onOpen }: {
 }
 
 function ItemRow({ item, onToggleVisibility, onOpen }: {
-  item: LibraryHighlight | LibraryUpload;
+  item: LibraryHighlight;
   onToggleVisibility: () => void;
   onOpen: () => void;
 }) {

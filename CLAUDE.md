@@ -112,9 +112,10 @@ Si alguien pide algo que pisa estas líneas, rechazar y pedir confirmación.
 
 ## 📦 Modelo de datos
 
-Tipos exportados desde `data/mocks.ts`. Cuando el backend exponga la API,
-estos tipos no cambian — solo se reemplaza el `MOCK_*` por una llamada
-real (idealmente envuelta en un hook de RTK Query / TanStack Query).
+Tipos exportados desde `data/types.ts` (antes `mocks.ts`). **La app ya NO usa
+mocks de datos**: consume la API real mediante clientes (`api/*`) y hooks
+(`hooks/use*`). Donde todavía no hay endpoint, la pantalla muestra **estado
+vacío** — nunca datos falsos.
 
 ```ts
 // Auth
@@ -204,20 +205,22 @@ ClubTodayReservation {
 **Reglas de negocio que el frontend respeta:**
 
 1. Partner es **siempre obligatorio** en reservas — debe existir en la app.
-2. `mode='search-opponents'` solo requiere booker + partner; los 2 rivales
-   llegan por `POST /reservations/:id/join` cuando otros se suman.
-3. El precio se muestra pero NO se cobra. `payment.status='pending'` hasta
-   que el club marca como cobrado (en su admin panel externo).
-4. Slots `reserved` están bloqueados; slots `own` (verdes) son del usuario
-   actual — al tocarlos, abrir la reserva existente en lugar de crear una.
+2. La reserva se crea con `POST /game/reserve` (una `Game` SCHEDULED sin cámaras).
+   `mode='search-opponents'` marca `isOpenForPlayers=true` para que otros 2 se sumen.
+3. El precio se muestra pero NO se cobra (hoy el slot devuelve price 0); el pago es
+   en el club.
+4. Slots `reserved` están bloqueados (solapan una Game existente de esa cancha).
 5. GPS se solicita **on-demand**, solo cuando se abre `SearchPlayScreen`.
+6. **Ubicación estática solo en clubs**: el mapa usa `latitude/longitude` del club
+   (`isClub=true`); el player no tiene ubicación persistida (su GPS es runtime).
 
 ---
 
-## 🔌 API esperada (contratos del backend)
+## 🔌 API real (lo que la app consume)
 
-Endpoints que el backend tiene que exponer. Cuando estén listos, sustituir
-las `MOCK_*` por hooks reales.
+Endpoints reales que la app llama hoy (vía `api/*` y `hooks/use*`). El backend
+envuelve toda respuesta en `{ data, statusCode }`; los clientes desenvuelven `data`.
+Las features sin endpoint todavía muestran **estado vacío** (no mocks).
 
 ### Auth
 
@@ -245,63 +248,69 @@ POST /highlights/:id/like        → like/unlike de un highlight
 POST /highlights/:id/comments    { text } → Comment
 ```
 
-`HomeScreen` consume `GET /game/live` vía el hook `hooks/useLiveGames.ts`
-(mapea la respuesta del backend → `LiveGameData`). El contenedor `MainPlayer`
-en `App.tsx` cae a `MOCK_LIVE_GAMES` si la lista real viene vacía (login de dev
-sin token, o sin partidas en vivo de tus seguidos).
+`HomeScreen` consume `GET /game/live` vía `hooks/useLiveGames.ts` (mapea →
+`LiveGameData`). Si la lista real viene vacía, muestra su **estado vacío** —
+ya no hay fallback a mocks.
 
-### Feed (club admin)
-
-```
-GET /clubs/:id/dashboard     → { liveCount, courtsTotal, viewers, viewersDelta, pendingPayments }
-GET /clubs/:id/today         → ClubTodayReservation[]
-```
-
-### Club público (POV player)
+### Usuarios — `api/users.ts`
 
 ```
-GET    /clubs/:id            → ClubPublic
-GET    /clubs/:id/highlights → { live: Game[], clips: Clip[] }
-GET    /clubs/:id/upcoming   → Game[]   (status='SCHEDULED')
-GET    /clubs/:id/members    → DirectoryPlayer[]
-GET    /clubs/:id/photos     → Photo[]
-POST   /clubs/:id/follow     → { isFollowing: true,  followers }
-DELETE /clubs/:id/follow     → { isFollowing: false, followers }
+GET /user/profile/:id   → perfil público + followersCount/followingCount/isFollowing + lat/lng
+                          (useUserProfile → PlayerProfilePublicView; también arma ClubPublic)
+GET /user/search?q=     → jugadores (GlobalSearchScreen + overlay de invitar)
+GET /user/players       → directorio de jugadores (usePlayers → PlayersScreen)
+GET /highlights?userId= → highlights PÚBLICOS de un usuario (useUserProfile → carrusel del perfil, desc)
+GET /highlights/my      → TODOS mis highlights, públicos + privados (useMyHighlights → perfil propio + librería)
+POST /highlights        { …, isPublic } → crea highlight con visibilidad (editor)
+PATCH /highlights/:id/toggle → invierte público/privado (pill de MyLibraryScreen)
 ```
 
-### Player público
+> **Visibilidad de highlights**: públicos aparecen en el perfil (más reciente→más antiguo);
+> privados solo en `MyLibraryScreen`. En el backend la visibilidad se guarda en `isEnabled`.
+
+### Club admin (home)
+
+> No existen `/clubs/:id/dashboard` ni `/today`. `ClubHomeScreen` usa **estado vacío** por ahora.
+
+### Club público (POV player) — `App.tsx` ruta `ClubProfile`
 
 ```
-GET    /players/:id          → PlayerPublic
-POST   /players/:id/follow   → { isFollowing: true }
-DELETE /players/:id/follow   → { isFollowing: false }
-POST   /players/:id/invite   { reservationDraftId?, message? } → 200
+GET    /club/:id            → club  (los clubs son users isClub=true)
+GET    /club/nearby?lat=&lng=&radius= → clubes cercanos (SearchPlayScreen, GPS)
+POST   /follow             { userId } → seguir
+POST   /follow/unfollow    { userId } → dejar de seguir
 ```
 
-### Canchas y reservas
+### Player público — `hooks/useUserProfile.ts`
 
 ```
-GET    /courts/:id/slots?date=YYYY-MM-DD → Slot[]
-POST   /reservations  { courtId, date, slotStart, partnerUserId, mode,
-                        opponents? } → 201 Reservation
-DELETE /reservations/:id      → 204   (>4h antes; sino 409)
-POST   /reservations/:id/join { mode: 'solo'|'with-partner',
-                                partnerUserId? } → 200 Reservation
-GET    /players?q=&clubId=    → InvitablePlayer[]   (para overlay search)
+GET  /user/profile/:id   → PlayerPublic (identidad + conteos reales)
+GET  /highlights?userId= → clips del jugador
+POST /follow | /follow/unfollow  { userId }
 ```
 
-### Search play (GPS)
+### Canchas y reservas — `api/clubs.ts`
 
 ```
-GET /search/nearby?lat=&lng=&radius= → { courts: NearbyCourt[], players: NearbyPlayer[] }
+GET  /padel-court?clubId=            → canchas del club (ReserveStep1)
+GET  /padel-court/:id                → una cancha
+GET  /padel-court/:id/slots?date=    → Slot[] del día (ReserveStep2)
+POST /game/reserve  { courtId, date, slotStart, durationMinutes, mode,
+                      partnerUserId?, opponentUserIds? } → crea la partida (ReserveStep3)
 ```
 
-### Game detail (visor HLS)
+### Subidas a B2 — `api/profile.ts` (avatar/portada) + `services/highlightService.ts` (highlights)
 
 ```
-GET  /games/:id              → GameDetail (con cameras[])
-GET  /games/:id/comments     → Comment[]
-POST /games/:id/comments     → Comment
+GET   /files/upload-url?key=&contentType=  → presigned PUT a B2
+GET   /files/stream?key=                   → presigned GET (playback)
+PATCH /user/me { profilePicture | frontPage } → persiste la URL pública
+```
+
+### Game detail (visor HLS) — `hooks/useGameDetail.ts`
+
+```
+GET  /game/:id   → detalle con cameras[] (stream HLS en camera.streamingUrl)
 ```
 
 > Nota: la app **NO** crea ni edita Courts, Slots ni Cameras. Esos
@@ -322,12 +331,15 @@ POST /games/:id/comments     → Comment
 | **Tipografía** | Helvetica (manual de marca) — TODO migrar H1 a Coolvetica |
 | **SVG** | `react-native-svg` (`<Svg>`, `<Rect>`, `<Line>`, `<Path>`) |
 | **Video / HLS** | `expo-av` ~14.0.7 (reproductor HLS) |
+| **Mapas** | `react-native-webview` (mapa OSM/Leaflet en `ClubMap.tsx`) — **sin API key ni billing**. NO se usa Google Maps ni `react-native-maps` |
+| **Ubicación** | `expo-location` ~17.0.1 (GPS on-demand para "clubes cerca") |
+| **Subida de archivos** | `expo-file-system` ~17.0.1 (`uploadAsync` binario → B2 presigned) |
 | **Gestos** | `react-native-gesture-handler` ~2.16.1 (swipe entre cámaras, editor) |
 | **Fuentes** | `expo-font` ~12.0.0 (carga de .ttf custom) |
 | **Procesamiento de video** | `ffmpeg-kit-react-native` ^6.0.2 (trim de highlights — **solo production build**, no incluir en `package.json` para dev; incompatible con el config plugin de Expo en Node moderno) |
 | **Splash / icon** | `assets/torna-icon.png` (1024×1024) · fondo `#2d4c75` |
 | **Bundle IDs** | iOS: `io.torna` · Android package: `io.torna` |
-| **Auth** | `@react-native-firebase/auth` v24 · `@react-native-google-signin` · `expo-apple-authentication` |
+| **Auth** | `@react-native-firebase/auth` v20 (SDK 51-compatible; v21+ es ESM y rompe `@expo/config-plugins@8`) · `@react-native-google-signin` v13 · `expo-apple-authentication` |
 | **Storage** | `expo-secure-store` (auth tokens) · `@react-native-async-storage` (tema) |
 
 ---
@@ -501,15 +513,24 @@ expo/
 ├── contexts/
 │   └── AuthContext.tsx      # useAuth() · session restore (SecureStore) · social login
 ├── hooks/
-│   ├── useOwnMedia.ts       # fetch /media/my, retorna photos/videos con refresh
-│   └── useFollow.ts         # follow/unfollow con optimistic update
+│   ├── useLiveGames.ts      # GET /game/live → LiveGameData[]
+│   ├── useOpenGames.ts      # GET /game/open → partidas abiertas
+│   ├── usePlayerMatches.ts  # GET /game/player/:id/history → LibraryMatch[]
+│   ├── useGameDetail.ts     # GET /game/:id → GameDetailData (cámaras/HLS) + recordingUrl
+│   ├── usePlayers.ts        # GET /user/players → PlayerData[]
+│   ├── useUserProfile.ts    # GET /user/profile/:id + /highlights?userId= → PlayerPublic
+│   └── useLocation.ts       # expo-location: permiso GPS on-demand + coords
 ├── api/
-│   ├── highlights.ts        # createHighlightApi · listSavedHighlights
-│   └── video.ts             # upload helpers + presigned URL
+│   ├── users.ts            # fetchUserProfile · searchUsers
+│   ├── clubs.ts            # fetchNearbyClubs · fetchClubCourts · fetchCourt · fetchCourtSlots · createReservation
+│   ├── highlights.ts       # fetchUserHighlights (GET /highlights?userId=)
+│   └── profile.ts          # uploadProfilePicture · uploadFrontPage (expo-file-system → B2)
 ├── services/
-│   └── highlightService.ts  # orquestación: trim → upload → index
+│   └── highlightService.ts  # orquestación: trim (FFmpeg on-device) → upload B2 → POST /highlights
+├── components/
+│   └── ClubMap.tsx          # mapa OSM (Leaflet en WebView) con pin del club, sin API key
 └── data/
-    └── mocks.ts            # MOCK_* + tipos públicos (ClubPublic, NearbyCourt, etc.)
+    └── types.ts            # tipos públicos (ClubPublic, NearbyClub, PlayerPublic, Slot, etc.) — sin mocks
 ```
 
 ---
@@ -610,23 +631,25 @@ Cualquier `<Text>` nuevo debe usar `typography.*`, `manropeFont(weight)` o
 
 ### Conectar la API real
 
-Cuando un endpoint esté listo:
+Ya no quedan mocks de datos. Patrón vigente para sumar/usar un endpoint:
 
-1. Crear hook `hooks/useFoo.ts` con tipo de retorno = el tipo del mock.
+1. Cliente en `api/*.ts` (fetch con token de SecureStore, desenvuelve `{ data }`)
+   y/o hook en `hooks/use*.ts` con tipo de retorno = el tipo de `data/types.ts`.
 2. La pantalla recibe los datos por props; el hook se llama en el
-   container/route component de `App.tsx`.
-3. **No** importar mocks directamente desde la pantalla — siempre por props.
-4. Borrar el `MOCK_*` correspondiente solo cuando el hook esté probado.
+   container/route component de `App.tsx` (o el cliente se pasa como callback,
+   p. ej. `onSearchPlayers`).
+3. **No** importar `api/*` ni hacer fetch directo desde una pantalla reusable —
+   siempre por props; los screens son presentacionales.
+4. Si el endpoint no existe todavía, la pantalla muestra **estado vacío**
+   (lista vacía / "no disponible"), nunca datos inventados.
 
-Patron sugerido (TanStack Query):
+Patrón real (cliente + hook):
 ```ts
-// hooks/useClubPublic.ts
-export function useClubPublic(id: string) {
-  return useQuery({
-    queryKey: ['club', id],
-    queryFn: () => api.get<ClubPublic>(`/clubs/${id}`).then(r => r.data),
-  });
+// api/users.ts
+export function fetchUserProfile(id: string): Promise<UserProfile> {
+  return authedGet<UserProfile>(`/user/profile/${id}`);
 }
+// hooks/useUserProfile.ts → mapea UserProfile (+ /highlights) → PlayerPublic
 ```
 
 ### Antes de cada commit
@@ -661,15 +684,15 @@ npm start                   # arranca sin warnings en Metro
    - Bonus: también arreglar el bug de modo claro/oscuro (header está
      hardcoded en azul oscuro; debería seguir tema).
 
-3. ~~**`MainPlayer.profile` muestra `MOCK_PROFILE`** que es club profile.~~ **RESUELTO**: el tab Perfil del player ahora usa `PlayerOwnProfileScreen` con `MOCK_OWNER`; incluye `MyLibraryScreen` y `PlayerSettingsScreen`.
+3. ~~**`MainPlayer.profile` muestra el club profile**~~ **RESUELTO**: el tab Perfil del player usa `PlayerOwnProfileScreen` con `owner` derivado del usuario autenticado (`useAuth` + conteos reales de `useUserProfile`); incluye `MyLibraryScreen` y `PlayerSettingsScreen`.
 
 4. **`Manrope*` removido pero `manropeFont` helper sigue ahí** por
    back-compat. Es cosmético — funciona, pero está mal nombrado. Rename a
    `helveticaFont(weight)` en próximo refactor.
 
-5. **Search overlay sin debounce**. `PlayerSearchOverlay` filtra
-   localmente en cada keystroke. Cuando se conecte la API real
-   (`GET /players?q=`), agregar debounce (~300 ms).
+5. ~~**Search overlay sin debounce**~~ **RESUELTO**: `PlayerSearchOverlay` y
+   `GlobalSearchScreen` aceptan un `onSearch`/`onSearchPlayers` async que pega a
+   `GET /user/search` con debounce ~300 ms; si no se provee, filtran la lista local.
 
 6. **`MainPlayer` no se acuerda del tab activo** entre navegaciones.
    `useState<TabId>('home')` se reinicia al volver de otra ruta. Si se
@@ -689,15 +712,26 @@ npm start                   # arranca sin warnings en Metro
 
 10. **HLS player** — **PARCIALMENTE RESUELTO**: `expo-av` está integrado en `GameDetailScreen`. Funciona con stream HLS real; muestra un SVG placeholder si no hay `streamUrl`. Para producción verificar soporte de DRM y bajo-latencia.
 
-11. **Mini mapa** en `SearchPlayScreen` y `ClubProfilePlayerView` es un
-    SVG decorativo. Reemplazar con `react-native-maps` (o `mapbox-gl`).
-    El espacio reservado (132px alto en SearchPlay, 120px en
-    ClubProfile) ya tiene las dimensiones correctas.
+11. ~~**Mini mapa** SVG decorativo~~ **RESUELTO**: el mapa del club es real vía
+    `components/ClubMap.tsx` — OpenStreetMap (Leaflet) dentro de `react-native-webview`,
+    **sin API key ni billing** (elección MVP). Se usa en `ClubProfilePlayerView` y
+    `ReserveStep1Screen`. Muestra un pin en la lat/lng del club (solo clubs tienen
+    ubicación) + botón "Cómo llegar" (Linking). Fallback "Ubicación no disponible" si
+    no hay coords. Requiere build del dev-client (no Expo Go). `SearchPlayScreen` ya no
+    usa mini-mapa (lista de clubes cercanos).
 
 12. **`torna-logo.svg`** en assets no se usa en runtime — borrarlo o
     convertirlo a componente RN-SVG.
 
 13. ~~**Typo en `.env`**: `api.tora.io` en lugar de `api.torna.io`~~ **RESUELTO**: corregido — todas las llamadas API ahora apuntan al dominio correcto.
+
+14. **Logs de debug de subida a B2** — `api/profile.ts` tiene logs temporales
+    marcados `[UPLOAD DEBUG]` (solo `__DEV__`) para diagnosticar la subida de foto de
+    perfil. **Borrarlos antes de producción.**
+
+15. **Reserva: precio y canchas de clubs fake**. El slot devuelve `price: 0` (no hay
+    fuente de precio en el modelo). Los clubs fake de los seeds no tienen canchas con
+    `clubId`, así que al reservar en ellos la lista de canchas sale vacía.
 
 ---
 
@@ -705,8 +739,8 @@ npm start                   # arranca sin warnings en Metro
 
 - Prototipo web visual: `prototype.html` (raíz del proyecto).
 - CSS tokens spec: `colors_and_type.css` (raíz).
-- CLAUDE.md general (raíz): visión de producto y reglas.
-- Mocks de datos: `data/mocks.ts` (con tipos).
+- Tipos del modelo: `data/types.ts` (solo tipos — la app no tiene mocks).
+- Backend: `torna-api/CLAUDE.md` (endpoints, módulos, gotchas).
 - Tests: ninguno por ahora.
 
 Cuando trabajes con esta app:

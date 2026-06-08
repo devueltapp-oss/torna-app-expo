@@ -12,7 +12,7 @@ import { Eye, Camera, Heart, MessageCircle, Play, WifiOff } from 'lucide-react-n
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { Avatar, AvatarStack, StatusBadge, SurfaceChip, ClubPill, GameStatus } from './ui';
-import type { FeedPost as FeedPostData, UpcomingGameData } from '../data/mocks';
+import type { FeedPost as FeedPostData, UpcomingGameData } from '../data/types';
 
 export interface MatchParticipant { username: string; name?: string; profilePicture?: string; }
 

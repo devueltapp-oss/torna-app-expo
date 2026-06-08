@@ -4,14 +4,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronRight, Search as SearchIcon, X } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { AppHeader, Avatar } from '../components/ui';
-import type { InvitablePlayer } from '../data/mocks';
+import type { InvitablePlayer } from '../data/types';
 
 interface Props {
   /** Title shown in the header — depends on which slot is being filled. */
   slotLabel: string;
-  /** Full list of candidates; filtering happens locally. In prod replace
-   *  with a debounced /players?q= query. */
-  players: InvitablePlayer[];
+  /** Lista local de candidatos (fallback si no se provee `onSearch`). */
+  players?: InvitablePlayer[];
+  /** Búsqueda real contra la API (GET /user/search). Si se provee, se usa con
+   *  debounce en vez de filtrar `players` localmente. */
+  onSearch?: (q: string) => Promise<InvitablePlayer[]>;
   onSelect: (p: InvitablePlayer) => void;
   onClose: () => void;
 }
@@ -25,10 +27,11 @@ interface Props {
  * In production:
  *   GET /players?q=&clubId=  → InvitablePlayer[]
  */
-export function PlayerSearchOverlay({ slotLabel, players, onSelect, onClose }: Props) {
+export function PlayerSearchOverlay({ slotLabel, players = [], onSearch, onSelect, onClose }: Props) {
   const { colors } = useTheme();
   const inputRef = React.useRef<TextInput>(null);
   const [value, setValue] = React.useState('');
+  const [apiResults, setApiResults] = React.useState<InvitablePlayer[]>([]);
 
   React.useEffect(() => {
     // Autofocus on mount.
@@ -36,13 +39,28 @@ export function PlayerSearchOverlay({ slotLabel, players, onSelect, onClose }: P
     return () => clearTimeout(t);
   }, []);
 
+  // Búsqueda real contra la API con debounce (~300 ms).
+  React.useEffect(() => {
+    if (!onSearch) return;
+    const term = value.trim();
+    if (term.length < 2) { setApiResults([]); return; }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      onSearch(term)
+        .then((res) => { if (!cancelled) setApiResults(res); })
+        .catch(() => { if (!cancelled) setApiResults([]); });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [value, onSearch]);
+
   const filtered = React.useMemo(() => {
+    if (onSearch) return apiResults;
     const q = value.trim().toLowerCase();
     if (!q) return players;
     return players.filter(p =>
       p.name.toLowerCase().includes(q) || p.username.toLowerCase().includes(q)
     );
-  }, [players, value]);
+  }, [players, apiResults, onSearch, value]);
 
   return (
     <SafeAreaView style={{
@@ -77,7 +95,7 @@ export function PlayerSearchOverlay({ slotLabel, players, onSelect, onClose }: P
         <Text style={{ fontSize: 10, color: colors.muted2, fontWeight: '700', letterSpacing: 0.8, marginTop: 10, paddingHorizontal: 4 }}>
           {value
             ? `${filtered.length} RESULTADO${filtered.length === 1 ? '' : 'S'}`
-            : 'JUGADORES DEL CLUB'}
+            : onSearch ? 'BUSCÁ POR NOMBRE O @USUARIO' : 'JUGADORES DEL CLUB'}
         </Text>
       </View>
 
@@ -99,7 +117,9 @@ export function PlayerSearchOverlay({ slotLabel, players, onSelect, onClose }: P
             <Avatar name={p.name} size={36}/>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>{p.name}</Text>
-              <Text style={{ fontSize: 11, color: colors.muted2 }}>{p.username} · ★ {p.rating}</Text>
+              <Text style={{ fontSize: 11, color: colors.muted2 }}>
+                {p.username}{p.rating != null ? ` · ★ ${p.rating}` : ''}
+              </Text>
             </View>
             <ChevronRight size={16} color={colors.muted2}/>
           </Pressable>

@@ -12,13 +12,13 @@
  *   npx expo install @react-native-google-signin/google-signin
  *   npx expo install react-native-fbsdk-next
  *
- * Token storage key: @torna/auth-token  (expo-secure-store)
+ * Token storage key: torna_auth_token  (expo-secure-store)
  * Theme storage key: @torna/theme-mode  (async-storage — separate concern)
  */
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
-import firebaseAuth, { GoogleAuthProvider, OAuthProvider } from '@react-native-firebase/auth';
+import firebaseAuth from '@react-native-firebase/auth';
 import * as AppleAuthentication from 'expo-apple-authentication';
 
 // ---------------------------------------------------------------------------
@@ -33,6 +33,8 @@ export interface TornaUser {
   phone?: string;
   region?: string;
   isClub: boolean;
+  profilePicture?: string;
+  frontPage?: string;
   authProvider?: 'email' | 'google' | 'apple' | 'facebook';
 }
 
@@ -53,12 +55,15 @@ interface AuthContextValue {
   user: TornaUser | null;
   token: string | null;
   isLoading: boolean;
-  loginAsMock: (role: 'player' | 'club') => void;
   loginWithEmailPassword: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<LoginResult>;
   loginWithApple: () => Promise<LoginResult>;
   loginWithFacebook: () => Promise<LoginResult>;
   register: (idToken: string, dto: RegisterDto) => Promise<void>;
+  /** Actualiza la foto de perfil en el estado local tras subirla (PATCH /user/me). */
+  updateProfilePicture: (url: string) => void;
+  /** Actualiza la foto de portada en el estado local tras subirla (PATCH /user/me). */
+  updateFrontPage: (url: string) => void;
   logout: () => Promise<void>;
 }
 
@@ -66,7 +71,7 @@ interface AuthContextValue {
 // Secure storage — expo-secure-store (hardware-backed on device)
 // ---------------------------------------------------------------------------
 
-const TOKEN_KEY = '@torna/auth-token';
+const TOKEN_KEY = 'torna_auth_token';
 
 // ---------------------------------------------------------------------------
 // API helpers
@@ -112,6 +117,8 @@ interface BackendUser {
   phone?: string;
   region?: string;
   isClub: boolean;
+  profilePicture?: string;
+  frontPage?: string;
   authProvider?: string;
 }
 
@@ -224,7 +231,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ------------------------------------------------------------------
   async function registerNotificationId(idToken: string): Promise<void> {
     try {
-      const OneSignal = require('react-native-onesignal').default;
+      const OneSignal = require('react-native-onesignal').OneSignal;
       const subId: string | null = await OneSignal.User.pushSubscription.getIdAsync();
       if (!subId) return;
       await fetch(`${API_URL}/user/update-notification-id`, {
@@ -236,21 +243,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('[AuthContext] registerNotificationId failed (non-critical):', err);
     }
   }
-
-  // ------------------------------------------------------------------
-  // loginAsMock — dev bypass: skips API, sets a hardcoded user in memory
-  // ------------------------------------------------------------------
-  const loginAsMock = useCallback((role: 'player' | 'club') => {
-    setUser({
-      id: 'mock-dev',
-      email: 'dev@torna.io',
-      username: role === 'club' ? 'mock_club' : 'mock_player',
-      name: role === 'club' ? 'Club Demo' : 'Player Demo',
-      isClub: role === 'club',
-      authProvider: 'email',
-    });
-    setToken('mock-token-dev');
-  }, []);
 
   // ------------------------------------------------------------------
   // loginWithEmailPassword
@@ -270,6 +262,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         phone: user.phone,
         region: user.region,
         isClub: user.isClub,
+        profilePicture: user.profilePicture,
+        frontPage: user.frontPage,
         authProvider: 'email',
       });
       await registerNotificationId(tokens.idToken);
@@ -286,7 +280,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     await GoogleSignin.hasPlayServices();
     const { data } = await GoogleSignin.signIn();
-    const googleCredential = GoogleAuthProvider.credential(data!.idToken);
+    const googleCredential = firebaseAuth.GoogleAuthProvider.credential(data!.idToken);
     const userCredential = await firebaseAuth().signInWithCredential(googleCredential);
     const firebaseIdToken = await userCredential.user.getIdToken();
     return _socialLogin(firebaseIdToken);
@@ -304,10 +298,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     const { identityToken } = appleCredential;
     if (!identityToken) throw new Error('Apple Sign-In no retornó identityToken');
-    const oauthCredential = new OAuthProvider('apple.com').credential({
-      idToken: identityToken,
-      rawNonce: undefined,
-    });
+    const oauthCredential = new firebaseAuth.OAuthProvider('apple.com').credential(
+      identityToken,
+    );
     const userCredential = await firebaseAuth().signInWithCredential(oauthCredential);
     const firebaseIdToken = await userCredential.user.getIdToken();
     return _socialLogin(firebaseIdToken);
@@ -366,6 +359,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         username: u.username,
         name: u.name,
         isClub: u.isClub,
+        profilePicture: u.profilePicture,
+        frontPage: u.frontPage,
         authProvider: (u.authProvider as TornaUser['authProvider']) ?? 'google',
       };
 
@@ -407,6 +402,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   // ------------------------------------------------------------------
+  // updateProfilePicture — sincroniza el estado local tras subir la foto
+  // (la subida + PATCH /user/me las hace expo/api/profile.ts)
+  // ------------------------------------------------------------------
+  const updateProfilePicture = useCallback((url: string) => {
+    setUser((u) => (u ? { ...u, profilePicture: url } : u));
+  }, []);
+
+  // ------------------------------------------------------------------
+  // updateFrontPage — sincroniza el estado local tras subir la portada
+  // (la subida + PATCH /user/me las hace expo/api/profile.ts)
+  // ------------------------------------------------------------------
+  const updateFrontPage = useCallback((url: string) => {
+    setUser((u) => (u ? { ...u, frontPage: url } : u));
+  }, []);
+
+  // ------------------------------------------------------------------
   // logout
   // ------------------------------------------------------------------
   const logout = useCallback(async (): Promise<void> => {
@@ -420,12 +431,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     token,
     isLoading,
-    loginAsMock,
     loginWithEmailPassword,
     loginWithGoogle,
     loginWithApple,
     loginWithFacebook,
     register,
+    updateProfilePicture,
+    updateFrontPage,
     logout,
   };
 

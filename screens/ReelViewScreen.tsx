@@ -9,7 +9,7 @@ import { StatusBadge, AvatarStack } from '../components/ui';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import type { LiveGameData } from '../components/cards';
 import type { UpcomingGameData } from './HomeScreen';
-import type { FeedPost } from '../data/mocks';
+import type { FeedPost } from '../data/types';
 
 export type ReelSection = 'live' | 'upcoming' | 'highlights';
 
@@ -44,11 +44,9 @@ const TONE_FG: Record<string, string> = {
 
 /* ─── Live reel item ─── */
 
-const LIVE_MOCK_COMMENTS = [
-  { id: '1', user: 'carlos_padel',  text: '¡Qué punto! Tremendo nivel 🔥', time: '2m' },
-  { id: '2', user: 'marta.rq',      text: 'El de la derecha está rompiendo', time: '5m' },
-  { id: '3', user: 'padelero92',    text: 'Increíble el remate desde el fondo', time: '8m' },
-];
+// Comentarios en vivo — vacío hasta que exista el endpoint de comentarios del
+// stream. Sin datos falsos.
+const LIVE_COMMENTS: { id: string; user: string; text: string; time: string }[] = [];
 
 function LiveReelItem({
   game,
@@ -238,7 +236,7 @@ function LiveReelItem({
 
         {/* Comment list */}
         <FlatList
-          data={LIVE_MOCK_COMMENTS}
+          data={LIVE_COMMENTS}
           keyExtractor={(c) => c.id}
           contentContainerStyle={{ padding: 16, gap: 20 }}
           renderItem={({ item }) => (
@@ -511,7 +509,7 @@ export function ReelViewScreen({
   const [listHeight, setListHeight] = React.useState(0);
   const [currentIndex, setCurrentIndex] = React.useState(initialIndex);
 
-  const items =
+  const items: (LiveGameData | UpcomingGameData | FeedPost)[] =
     section === 'live'     ? liveGames :
     section === 'upcoming' ? upcomingGames :
     feedPosts;

@@ -9,13 +9,17 @@
  * persistido en AsyncStorage por la propia provider.
  */
 import React from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
+import { View, Text, Pressable, ScrollView, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronRight, Lock, Sun, Moon, MonitorSmartphone } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useTheme, ThemeMode } from '../theme';
 import { Avatar, Button, Input, AppHeader, SectionHeader } from '../components/ui';
+import { ImageViewerModal } from '../components/ImageViewerModal';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
-import type { ProfileOwner } from '../data/mocks';
+import { useAuth } from '../contexts/AuthContext';
+import { uploadProfilePicture, uploadFrontPage } from '../api/profile';
+import type { ProfileOwner } from '../data/types';
 
 type Section = 'overview' | 'profile' | 'password';
 
@@ -29,12 +33,62 @@ export interface PlayerSettingsScreenProps {
 
 export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onChangeTab }: PlayerSettingsScreenProps) {
   const { colors, mode, setMode } = useTheme();
+  const { user, updateProfilePicture, updateFrontPage } = useAuth();
   const [section, setSection] = React.useState<Section>('overview');
   const [name, setName]         = React.useState(owner.name);
   const [username, setUsername] = React.useState(owner.username);
   const [pwCurrent, setPwCurrent] = React.useState('');
   const [pwNew, setPwNew]         = React.useState('');
   const [pwConfirm, setPwConfirm] = React.useState('');
+
+  // Foto de perfil — única imagen subible. Sube a B2 y persiste vía PATCH /user/me.
+  const [avatar, setAvatar] = React.useState<string | undefined>(user?.profilePicture);
+  const [uploadingPhoto, setUploadingPhoto] = React.useState(false);
+  const [photoError, setPhotoError] = React.useState<string | null>(null);
+  const [viewer, setViewer] = React.useState(false);
+
+  async function changePhoto() {
+    if (!user?.id) return;
+    setPhotoError(null);
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.85,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    setUploadingPhoto(true);
+    try {
+      const url = await uploadProfilePicture(user.id, result.assets[0].uri);
+      setAvatar(url);
+      updateProfilePicture(url);
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : 'No se pudo actualizar la foto.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
+  // Foto de portada — sube a B2 y persiste vía PATCH /user/me { frontPage }.
+  const [cover, setCover] = React.useState<string | undefined>(user?.frontPage);
+  const [uploadingCover, setUploadingCover] = React.useState(false);
+  const [coverError, setCoverError] = React.useState<string | null>(null);
+
+  async function changeCover() {
+    if (!user?.id) return;
+    setCoverError(null);
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [16, 9], quality: 0.85,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    setUploadingCover(true);
+    try {
+      const url = await uploadFrontPage(user.id, result.assets[0].uri);
+      setCover(url);
+      updateFrontPage(url);
+    } catch (err) {
+      setCoverError(err instanceof Error ? err.message : 'No se pudo actualizar la portada.');
+    } finally {
+      setUploadingCover(false);
+    }
+  }
 
   const titleMap: Record<Section, string> = {
     overview: 'Configuración',
@@ -57,10 +111,11 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: onChangeTab ? 96 : 24 }}>
         {section === 'overview' && (
           <OverviewSection
-            colors={colors} name={name} username={username}
+            colors={colors} name={name} username={username} avatar={avatar}
             mode={mode} onChangeMode={setMode}
             onEditProfile={() => setSection('profile')}
             onChangePassword={() => setSection('password')}
+            onViewPhoto={() => avatar && setViewer(true)}
             onSignOut={onSignOut}
           />
         )}
@@ -68,6 +123,11 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
         {section === 'profile' && (
           <ProfileSection
             colors={colors} name={name} username={username} club={owner.club}
+            avatar={avatar} uploadingPhoto={uploadingPhoto} photoError={photoError}
+            onChangePhoto={changePhoto}
+            onViewPhoto={() => avatar && setViewer(true)}
+            cover={cover} uploadingCover={uploadingCover} coverError={coverError}
+            onChangeCover={changeCover}
             onChangeName={setName} onChangeUsername={setUsername}
             onCancel={() => setSection('overview')}
             onSave={() => setSection('overview')}
@@ -85,7 +145,9 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
         )}
       </ScrollView>
 
-      {onChangeTab && <BottomTabBar role="player" active={activeTab} onChange={onChangeTab}/>}
+      {onChangeTab && <BottomTabBar role="player" active={activeTab ?? 'profile'} onChange={onChangeTab}/>}
+
+      <ImageViewerModal visible={viewer} uri={avatar} onClose={() => setViewer(false)}/>
     </SafeAreaView>
   );
 }
@@ -93,13 +155,14 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
 /* ─────────────────  OVERVIEW  ───────────────── */
 
 function OverviewSection({
-  colors, name, username, mode, onChangeMode,
-  onEditProfile, onChangePassword, onSignOut,
+  colors, name, username, avatar, mode, onChangeMode,
+  onEditProfile, onChangePassword, onViewPhoto, onSignOut,
 }: {
   colors: ReturnType<typeof useTheme>['colors'];
-  name: string; username: string;
+  name: string; username: string; avatar?: string;
   mode: ThemeMode; onChangeMode: (m: ThemeMode) => void;
   onEditProfile: () => void; onChangePassword: () => void;
+  onViewPhoto: () => void;
   onSignOut?: () => void;
 }) {
   return (
@@ -109,7 +172,9 @@ function OverviewSection({
         flexDirection: 'row', alignItems: 'center', gap: 12,
         paddingHorizontal: 16, paddingVertical: 14, backgroundColor: colors.bg2,
       }}>
-        <Avatar name={name} size={56}/>
+        <Pressable onPress={onViewPhoto}>
+          <Avatar name={name} size={56} imageUri={avatar}/>
+        </Pressable>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text }}>{name}</Text>
           <Text style={{ fontSize: 12, color: colors.muted2 }}>{username}</Text>
@@ -180,23 +245,66 @@ function ThemeSegment({ mode, current, label, icon, onChange }: {
 /* ─────────────────  PROFILE  ───────────────── */
 
 function ProfileSection({
-  colors, name, username, club, onChangeName, onChangeUsername, onCancel, onSave,
+  colors, name, username, club, avatar, uploadingPhoto, photoError, onChangePhoto, onViewPhoto,
+  cover, uploadingCover, coverError, onChangeCover,
+  onChangeName, onChangeUsername, onCancel, onSave,
 }: {
   colors: ReturnType<typeof useTheme>['colors'];
   name: string; username: string; club: string;
+  avatar?: string; uploadingPhoto: boolean; photoError: string | null;
+  onChangePhoto: () => void;
+  onViewPhoto: () => void;
+  cover?: string; uploadingCover: boolean; coverError: string | null;
+  onChangeCover: () => void;
   onChangeName: (s: string) => void; onChangeUsername: (s: string) => void;
   onCancel: () => void; onSave: () => void;
 }) {
   return (
     <View style={{ paddingHorizontal: 16, paddingTop: 14, gap: 12 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <Avatar name={name} size={64}/>
-        <Pressable style={{
-          borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.surface,
-          paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
-        }}>
-          <Text style={{ color: colors.text2, fontWeight: '700', fontSize: 12 }}>Cambiar foto</Text>
+        <Pressable onPress={onViewPhoto}>
+          <Avatar name={name} size={64} imageUri={avatar}/>
         </Pressable>
+        <Pressable
+          onPress={uploadingPhoto ? undefined : onChangePhoto}
+          style={{
+            borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.surface,
+            paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+            flexDirection: 'row', alignItems: 'center', gap: 8, opacity: uploadingPhoto ? 0.6 : 1,
+          }}>
+          {uploadingPhoto ? <ActivityIndicator size="small" color={colors.text2}/> : null}
+          <Text style={{ color: colors.text2, fontWeight: '700', fontSize: 12 }}>
+            {uploadingPhoto ? 'Subiendo…' : 'Cambiar foto'}
+          </Text>
+        </Pressable>
+      </View>
+      {photoError ? (
+        <Text style={{ fontSize: 11, color: colors.warnFg, fontWeight: '700' }}>{photoError}</Text>
+      ) : null}
+
+      {/* Foto de portada */}
+      <View style={{ gap: 8 }}>
+        <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text2 }}>Portada</Text>
+        <Pressable
+          onPress={uploadingCover ? undefined : onChangeCover}
+          style={{
+            height: 120, borderRadius: 12, overflow: 'hidden',
+            borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.bg2,
+            alignItems: 'center', justifyContent: 'center', opacity: uploadingCover ? 0.6 : 1,
+          }}>
+          {cover ? (
+            <Image source={{ uri: cover }} style={{ width: '100%', height: '100%' }} resizeMode="cover"/>
+          ) : null}
+          <View style={{ position: 'absolute', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {uploadingCover ? <ActivityIndicator size="small" color={colors.text2}/> : null}
+            <Text style={{ color: colors.text2, fontWeight: '700', fontSize: 12 }}>
+              {uploadingCover ? 'Subiendo…' : cover ? 'Cambiar portada' : 'Agregar portada'}
+            </Text>
+          </View>
+        </Pressable>
+        {coverError ? (
+          <Text style={{ fontSize: 11, color: colors.warnFg, fontWeight: '700' }}>{coverError}</Text>
+        ) : null}
       </View>
 
       <Input label="Nombre" value={name} onChangeText={onChangeName}/>

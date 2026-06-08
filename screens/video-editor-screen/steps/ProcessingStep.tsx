@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, ActivityIndicator, Animated, Easing } from 'react-native';
 import { useTheme } from '../../../theme';
 import { Button } from '../../../components/ui';
-import type { JobStatusName } from '../../../api/video';
+import type { JobStatusName } from '../hooks/useVideoEditorFlow';
 
 export interface ProcessingStepProps {
   status: JobStatusName;

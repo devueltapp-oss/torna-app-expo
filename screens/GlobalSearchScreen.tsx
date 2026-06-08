@@ -8,14 +8,20 @@ import Svg, { G, Ellipse, Path } from 'react-native-svg';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { Avatar, SurfaceChip } from '../components/ui';
-import type { SearchableCourt, SearchablePlayer } from '../data/mocks';
+import type { SearchableCourt, SearchablePlayer, SearchableUser } from '../data/types';
 
 export interface GlobalSearchScreenProps {
   players: SearchablePlayer[];
   courts: SearchableCourt[];
   onBack: () => void;
   onOpenPlayerProfile: (id: string) => void;
+  onOpenClubProfile: (id: string) => void;
   onReserveCourt: (clubId: string, courtId: string) => void;
+  /**
+   * Búsqueda real de jugadores y clubs contra la API (GET /user/search-all). Si se
+   * provee, la pantalla la usa con debounce en vez de filtrar `players` localmente.
+   */
+  onSearchUsers?: (q: string) => Promise<SearchableUser[]>;
 }
 
 function CourtIcon({ size = 20, color = 'black' }: { size?: number; color?: string }) {
@@ -34,11 +40,13 @@ function CourtIcon({ size = 20, color = 'black' }: { size?: number; color?: stri
 }
 
 export function GlobalSearchScreen({
-  players, courts, onBack, onOpenPlayerProfile, onReserveCourt,
+  players, courts, onBack, onOpenPlayerProfile, onOpenClubProfile, onReserveCourt, onSearchUsers,
 }: GlobalSearchScreenProps) {
   const { colors } = useTheme();
   const inputRef = React.useRef<TextInput>(null);
   const [query, setQuery] = React.useState('');
+  const [apiUsers, setApiUsers] = React.useState<SearchableUser[]>([]);
+  const [searching, setSearching] = React.useState(false);
 
   React.useEffect(() => {
     const t = setTimeout(() => inputRef.current?.focus(), 80);
@@ -47,15 +55,40 @@ export function GlobalSearchScreen({
 
   const q = query.trim().toLowerCase();
 
-  const filteredPlayers = React.useMemo(() =>
-    q
-      ? players.filter(p =>
-          p.name.toLowerCase().includes(q) ||
-          p.username.toLowerCase().includes(q),
+  // Búsqueda real contra la API con debounce (~300 ms).
+  React.useEffect(() => {
+    if (!onSearchUsers) return;
+    const term = query.trim();
+    if (term.length < 2) {
+      setApiUsers([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    let cancelled = false;
+    const t = setTimeout(() => {
+      onSearchUsers(term)
+        .then((res) => { if (!cancelled) setApiUsers(res); })
+        .catch(() => { if (!cancelled) setApiUsers([]); })
+        .finally(() => { if (!cancelled) setSearching(false); });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [query, onSearchUsers]);
+
+  const filteredUsers = React.useMemo<SearchableUser[]>(() => {
+    // Si hay búsqueda real, los resultados ya vienen filtrados del backend.
+    if (onSearchUsers) return apiUsers;
+    // Fallback local: los `players` se tratan como jugadores (isClub=false).
+    const base: SearchableUser[] = players.map(p => ({
+      id: p.id, name: p.name, username: p.username, isClub: false,
+    }));
+    return q
+      ? base.filter(u =>
+          u.name.toLowerCase().includes(q) ||
+          u.username.toLowerCase().includes(q),
         )
-      : players,
-    [players, q],
-  );
+      : base;
+  }, [players, apiUsers, onSearchUsers, q]);
 
   const filteredCourts = React.useMemo(() =>
     q
@@ -67,7 +100,7 @@ export function GlobalSearchScreen({
     [courts, q],
   );
 
-  const hasResults = filteredPlayers.length > 0 || filteredCourts.length > 0;
+  const hasResults = filteredUsers.length > 0 || filteredCourts.length > 0;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
@@ -97,7 +130,7 @@ export function GlobalSearchScreen({
             ref={inputRef}
             value={query}
             onChangeText={setQuery}
-            placeholder="Jugadores, canchas, clubes…"
+            placeholder="Jugadores, clubes, canchas…"
             placeholderTextColor={colors.muted}
             style={{ flex: 1, color: colors.text, fontSize: 14, padding: 0, fontFamily: fonts.regular }}
             autoCapitalize="none"
@@ -125,14 +158,14 @@ export function GlobalSearchScreen({
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32, gap: 24 }}
         >
-          {!hasResults && q.length > 0 && (
+          {!hasResults && q.length > 0 && !searching && (
             <View style={{ alignItems: 'center', paddingTop: 48, gap: 10 }}>
               <Search size={36} color={colors.line} strokeWidth={1.5} />
               <Text style={{ color: colors.muted2, fontSize: 14, fontFamily: fonts.bold, textAlign: 'center' }}>
                 Sin resultados para "{query}"
               </Text>
               <Text style={{ color: colors.muted, fontSize: 12, textAlign: 'center', lineHeight: 17 }}>
-                Probá con el nombre del jugador{'\n'}o el nombre de la cancha o club.
+                Probá con el nombre del jugador o club{'\n'}o el nombre de la cancha.
               </Text>
             </View>
           )}
@@ -141,7 +174,7 @@ export function GlobalSearchScreen({
             <View style={{ alignItems: 'center', paddingTop: 48, gap: 10 }}>
               <CourtIcon size={40} color={colors.line} />
               <Text style={{ color: colors.muted2, fontSize: 14, fontFamily: fonts.bold, textAlign: 'center' }}>
-                Buscá jugadores o canchas
+                Buscá jugadores, clubes o canchas
               </Text>
               <Text style={{ color: colors.muted, fontSize: 12, textAlign: 'center', lineHeight: 17 }}>
                 Por nombre, username o nombre del club.
@@ -149,22 +182,21 @@ export function GlobalSearchScreen({
             </View>
           )}
 
-          {/* Sección jugadores */}
-          {filteredPlayers.length > 0 && q.length > 0 && (
+          {/* Sección resultados (jugadores + clubs) */}
+          {filteredUsers.length > 0 && q.length > 0 && (
             <View style={{ gap: 8 }}>
               <Text style={{
                 fontSize: 10, fontFamily: fonts.bold, letterSpacing: 0.8,
                 textTransform: 'uppercase', color: colors.muted2,
               }}>
-                Jugadores · {filteredPlayers.length}
+                Resultados · {filteredUsers.length}
               </Text>
-              {filteredPlayers.map(p => (
-                <PlayerRow
-                  key={p.id}
-                  player={p}
+              {filteredUsers.map(u => (
+                <UserRow
+                  key={u.id}
+                  user={u}
                   colors={colors}
-                  query={q}
-                  onPress={() => onOpenPlayerProfile(p.id)}
+                  onPress={() => (u.isClub ? onOpenClubProfile(u.id) : onOpenPlayerProfile(u.id))}
                 />
               ))}
             </View>
@@ -195,16 +227,15 @@ export function GlobalSearchScreen({
   );
 }
 
-/* ─── Fila de jugador ─── */
+/* ─── Fila de usuario (jugador o club) ─── */
 
-interface PlayerRowProps {
-  player: SearchablePlayer;
+interface UserRowProps {
+  user: SearchableUser;
   colors: ReturnType<typeof useTheme>['colors'];
-  query: string;
   onPress: () => void;
 }
 
-function PlayerRow({ player, colors, onPress }: PlayerRowProps) {
+function UserRow({ user, colors, onPress }: UserRowProps) {
   return (
     <Pressable
       onPress={onPress}
@@ -215,18 +246,36 @@ function PlayerRow({ player, colors, onPress }: PlayerRowProps) {
         opacity: pressed ? 0.85 : 1,
       })}
     >
-      <Avatar name={player.name} size={40} />
+      <Avatar name={user.name} size={40} imageUri={user.profilePicture} />
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={{ fontSize: 14, fontFamily: fonts.bold, color: colors.text }} numberOfLines={1}>
-          {player.name}
+          {user.name}
         </Text>
         <Text style={{ fontSize: 12, color: colors.muted2, marginTop: 1 }} numberOfLines={1}>
-          {player.username}
-          <Text style={{ color: colors.muted }}> · ★ {player.rating.toFixed(1)}</Text>
+          {user.username}
         </Text>
       </View>
+      <TypeChip isClub={user.isClub} colors={colors} />
       <ChevronRight size={16} color={colors.muted2} />
     </Pressable>
+  );
+}
+
+/* ─── Etiqueta de tipo: Club / Jugador (chip outline brand-strict) ─── */
+
+function TypeChip({ isClub, colors }: { isClub: boolean; colors: ReturnType<typeof useTheme>['colors'] }) {
+  return (
+    <View style={{
+      borderWidth: 1, borderColor: colors.line, borderRadius: 999,
+      paddingHorizontal: 8, paddingVertical: 3,
+    }}>
+      <Text style={{
+        fontSize: 9, fontFamily: fonts.bold, letterSpacing: 0.6,
+        textTransform: 'uppercase', color: colors.muted2,
+      }}>
+        {isClub ? 'Club' : 'Jugador'}
+      </Text>
+    </View>
   );
 }
 

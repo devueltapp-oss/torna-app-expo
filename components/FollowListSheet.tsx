@@ -4,7 +4,7 @@ import { ChevronRight } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { Avatar } from './ui';
-import type { FollowItem } from '../data/mocks';
+import type { FollowItem } from '../data/types';
 
 export interface FollowListSheetProps {
   visible: boolean;

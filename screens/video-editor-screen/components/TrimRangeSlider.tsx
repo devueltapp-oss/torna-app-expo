@@ -4,7 +4,7 @@ import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { useTheme } from '../../../theme';
 
 export const TRIM_MIN_SEC = 3;
-export const TRIM_MAX_SEC = 60;
+export const TRIM_MAX_SEC = 180;
 export const FILMSTRIP_H = 72;
 
 export interface TrimRangeSliderProps {
@@ -164,14 +164,14 @@ export function TrimRangeSlider({ duration, value, onChange, currentTime }: Trim
         </View>
         <Text style={{ fontSize: 12, fontWeight: '800', color: warn ? accentColor : '#FFFFFF' }}>
           {fmt(sel)}{' '}
-          <Text style={{ color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>/ {TRIM_MAX_SEC}s máx</Text>
+          <Text style={{ color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>/ {fmt(TRIM_MAX_SEC)} máx</Text>
         </Text>
       </View>
 
       {warn ? (
         <View style={{ backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}>
           <Text style={{ fontSize: 11, color: accentColor, fontWeight: '700' }}>
-            {tooShort ? `El clip debe durar al menos ${TRIM_MIN_SEC}s.` : `El clip no puede pasar de ${TRIM_MAX_SEC}s.`}
+            {tooShort ? `El clip debe durar al menos ${TRIM_MIN_SEC}s.` : `El clip no puede pasar de ${fmt(TRIM_MAX_SEC)}.`}
           </Text>
         </View>
       ) : null}

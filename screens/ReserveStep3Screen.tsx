@@ -5,15 +5,17 @@ import { ChevronLeft, AlertTriangle, Radio, Plus } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { Button, AppHeader, Avatar, Switch } from '../components/ui';
 import { PlayerSearchOverlay } from '../components/PlayerSearchOverlay';
-import type { InvitablePlayer } from '../data/mocks';
+import type { InvitablePlayer } from '../data/types';
 import { StepIndicator } from './reserveCommon';
 
 type SlotKey = 'partner' | 'opp1' | 'opp2';
 
 interface Props {
-  /** Required for the partner search overlay. */
-  invitablePlayers: InvitablePlayer[];
-  /** Optional preselection so the demo screen feels populated. */
+  /** Lista local de candidatos (fallback si no se provee `onSearchPlayers`). */
+  invitablePlayers?: InvitablePlayer[];
+  /** Búsqueda real de usuarios para invitar (GET /user/search). */
+  onSearchPlayers?: (q: string) => Promise<InvitablePlayer[]>;
+  /** Optional preselection. */
   initialPartner?: InvitablePlayer;
   initialOpp1?: InvitablePlayer;
   initialOpp2?: InvitablePlayer;
@@ -39,7 +41,8 @@ interface Props {
  *                       mode, opponents? } → 201 Reservation
  */
 export function ReserveStep3Screen({
-  invitablePlayers,
+  invitablePlayers = [],
+  onSearchPlayers,
   initialPartner,
   initialOpp1,
   initialOpp2,
@@ -161,6 +164,7 @@ export function ReserveStep3Screen({
         <PlayerSearchOverlay
           slotLabel={searchSlot === 'partner' ? 'Buscar compañero' : 'Buscar rival'}
           players={invitablePlayers}
+          onSearch={onSearchPlayers}
           onSelect={(p) => selectFor(searchSlot, p)}
           onClose={() => setSearchSlot(null)}
         />
@@ -194,7 +198,9 @@ function PlayerSlot({ player, onChange }: { player: InvitablePlayer | null; onCh
       <Avatar name={player.name} size={36}/>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>{player.name}</Text>
-        <Text style={{ fontSize: 11, color: colors.muted2 }}>{player.username} · ★ {player.rating}</Text>
+        <Text style={{ fontSize: 11, color: colors.muted2 }}>
+          {player.username}{player.rating != null ? ` · ★ ${player.rating}` : ''}
+        </Text>
       </View>
       <Pressable onPress={onChange} style={{
         backgroundColor: colors.bg2, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,

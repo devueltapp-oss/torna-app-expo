@@ -18,7 +18,7 @@
       "ios": { "simulator": false },
       "env": {
         "APP_ENV": "preview",
-        "EXPO_PUBLIC_API_URL": "https://api.tora.io",
+        "EXPO_PUBLIC_API_URL": "https://api.torna.io",
         "EXPO_PUBLIC_ONESIGNAL_APP_ID": "055f57fd-c4da-43e8-bab7-c1aa3712abd3"
       }
     },
@@ -26,7 +26,7 @@
       "android": { "buildType": "app-bundle" },
       "env": {
         "APP_ENV": "production",
-        "EXPO_PUBLIC_API_URL": "https://api.tora.io",
+        "EXPO_PUBLIC_API_URL": "https://api.torna.io",
         "EXPO_PUBLIC_ONESIGNAL_APP_ID": "055f57fd-c4da-43e8-bab7-c1aa3712abd3"
       }
     }

@@ -18,11 +18,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Lock, Settings, ChevronRight } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { Avatar, Button } from '../components/ui';
+import { ImageViewerModal } from '../components/ImageViewerModal';
 import { ContentThumb } from '../components/ContentThumb';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import type {
-  ProfileOwner, LibraryItem, LibraryMatch, LibraryHighlight, LibraryUpload,
-} from '../data/mocks';
+  ProfileOwner, LibraryItem, LibraryMatch, LibraryHighlight,
+} from '../data/types';
 
 type TabKey = 'highlights' | 'matches' | 'photos';
 
@@ -30,31 +31,36 @@ export interface PlayerOwnProfileScreenProps {
   owner: ProfileOwner;
   matches: LibraryMatch[];
   highlights: LibraryHighlight[];
-  uploads: LibraryUpload[];
-  /** Para sumar más posts al contador (highlight pub + match pub + photo pub). */
+  /** Para sumar más posts al contador (highlight pub + match pub). */
   onOpenLibrary: () => void;
   onOpenSettings: () => void;
   onOpenItem?: (item: LibraryItem) => void;
+  /** Abre la lista de seguidores / seguidos al tocar el conteo. */
+  onOpenFollowers?: () => void;
+  onOpenFollowing?: () => void;
   activeTab: TabId;
   onChangeTab: (id: TabId) => void;
 }
 
 export function PlayerOwnProfileScreen({
-  owner, matches, highlights, uploads,
+  owner, matches, highlights,
   onOpenLibrary, onOpenSettings, onOpenItem,
+  onOpenFollowers, onOpenFollowing,
   activeTab, onChangeTab,
 }: PlayerOwnProfileScreenProps) {
   const { colors } = useTheme();
   const [tab, setTab] = React.useState<TabKey>('highlights');
+  const [viewer, setViewer] = React.useState(false);
 
   const publicHl     = highlights.filter(h => h.isPublic);
   const publicMatch  = matches.filter(m => m.isPublic);
-  const publicPhotos = uploads.filter(u => u.isPublic);
-  const totalPosts   = publicHl.length + publicMatch.length + publicPhotos.length;
+  // El perfil propio aún no recibe fotos como fuente de datos; el tab Fotos
+  // muestra el empty state hasta que se cablee.
+  const publicPhotos: LibraryItem[] = [];
+  const totalPosts   = publicHl.length + publicMatch.length;
 
-  const grid: LibraryItem[] = tab === 'highlights' ? publicHl
-                            : tab === 'matches'    ? publicMatch
-                                                   : publicPhotos;
+  const grid: LibraryItem[] =
+    tab === 'highlights' ? publicHl : tab === 'matches' ? publicMatch : publicPhotos;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
@@ -80,11 +86,13 @@ export function PlayerOwnProfileScreen({
       <ScrollView>
         {/* Avatar + stats row */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18, paddingHorizontal: 16, paddingBottom: 16 }}>
-          <Avatar name={owner.name} size={80}/>
+          <Pressable onPress={() => owner.profilePicture && setViewer(true)}>
+            <Avatar name={owner.name} size={80} imageUri={owner.profilePicture}/>
+          </Pressable>
           <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-around' }}>
             <StatBlock value={totalPosts} label="posts" colors={colors}/>
-            <StatBlock value={owner.followers} label="seguidores" colors={colors}/>
-            <StatBlock value={owner.following} label="siguiendo" colors={colors}/>
+            <StatBlock value={owner.followers} label="seguidores" colors={colors} onPress={onOpenFollowers}/>
+            <StatBlock value={owner.following} label="siguiendo" colors={colors} onPress={onOpenFollowing}/>
           </View>
         </View>
 
@@ -146,6 +154,12 @@ export function PlayerOwnProfileScreen({
       </ScrollView>
 
       <BottomTabBar role="player" active={activeTab} onChange={onChangeTab}/>
+
+      <ImageViewerModal
+        visible={viewer}
+        uri={owner.profilePicture}
+        onClose={() => setViewer(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -174,15 +188,24 @@ function IconButton({ children, onPress, colors, dot }: {
   );
 }
 
-function StatBlock({ value, label, colors }: {
+function StatBlock({ value, label, colors, onPress }: {
   value: number; label: string; colors: ReturnType<typeof useTheme>['colors'];
+  onPress?: () => void;
 }) {
-  return (
-    <View style={{ alignItems: 'center' }}>
+  const content = (
+    <>
       <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{value}</Text>
       <Text style={{ fontSize: 11, color: colors.muted2 }}>{label}</Text>
-    </View>
+    </>
   );
+  if (onPress) {
+    return (
+      <Pressable onPress={onPress} style={({ pressed }) => ({ alignItems: 'center', opacity: pressed ? 0.6 : 1 })}>
+        {content}
+      </Pressable>
+    );
+  }
+  return <View style={{ alignItems: 'center' }}>{content}</View>;
 }
 
 interface TabStripProps {

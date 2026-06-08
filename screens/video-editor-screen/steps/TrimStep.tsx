@@ -38,7 +38,8 @@ export function TrimStep({
   }, [range[0]]);
 
   const sel = range[1] - range[0];
-  const invalid = sel < TRIM_MIN_SEC || sel > TRIM_MAX_SEC;
+  const tooLong = sel > TRIM_MAX_SEC;
+  const invalid = sel < TRIM_MIN_SEC || tooLong;
 
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
@@ -63,7 +64,7 @@ export function TrimStep({
             <ChevronLeft size={20} color="#FFFFFF" />
           </Pressable>
           <View style={styles.stepPill}>
-            <Text style={styles.stepLabel}>RECORTE · {fmt(sel)}</Text>
+            <Text style={styles.stepLabel}>RECORTE · {fmt(range[0])}-{fmt(range[1])}</Text>
           </View>
           <View style={{ width: 36 }} />
         </View>
@@ -103,6 +104,12 @@ export function TrimStep({
           >
             Continuar →
           </Button>
+
+          <Text style={[styles.hint, tooLong && styles.hintWarn]}>
+            {tooLong
+              ? `Máximo ${fmt(TRIM_MAX_SEC)} por highlight — acortá la selección`
+              : `Los highlights pueden durar entre ${TRIM_MIN_SEC}s y ${fmt(TRIM_MAX_SEC)}`}
+          </Text>
         </View>
       </SafeAreaView>
 
@@ -150,5 +157,15 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: 'rgba(0,0,0,0.72)',
+  },
+  hint: {
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.6)',
+  },
+  hintWarn: {
+    color: '#D6FF7E',
+    fontWeight: '800',
   },
 });

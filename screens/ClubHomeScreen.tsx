@@ -6,7 +6,7 @@ import { useTheme } from '../theme';
 import { SectionHeader } from '../components/ui';
 import { LiveGameTile, LiveGameData } from '../components/cards';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
-import type { ClubTodayReservation } from '../data/mocks';
+import type { ClubTodayReservation } from '../data/types';
 
 const tornaLogo = require('../assets/torna-icon.png');
 

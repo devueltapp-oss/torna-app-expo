@@ -6,7 +6,7 @@ import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { Avatar, Button, Switch } from './ui';
 import { PlayerSearchOverlay } from './PlayerSearchOverlay';
-import type { InvitablePlayer, UpcomingGameData } from '../data/mocks';
+import type { InvitablePlayer, UpcomingGameData } from '../data/types';
 
 export interface ApplyMatchSheetProps {
   visible: boolean;
@@ -35,7 +35,7 @@ export function ApplyMatchSheet({ visible, game, invitablePlayers, onClose, onAp
     if (submitting) return;
     setSubmitting(true);
     try {
-      const token = await SecureStore.getItemAsync('@torna/auth-token');
+      const token = await SecureStore.getItemAsync('torna_auth_token');
       const body: { partnerId?: string } = {};
       if (withPartner && partner) body.partnerId = partner.id;
       await fetch(

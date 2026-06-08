@@ -34,7 +34,7 @@ interface Props {
  */
 export function LoginWithRoleScreen({ onLogin, onRegister, onNeedsRegistration, onForgot }: Props) {
   const { colors } = useTheme();
-  const { loginAsMock, loginWithEmailPassword, loginWithGoogle, loginWithApple, isLoading: authLoading } = useAuth();
+  const { loginWithEmailPassword, loginWithGoogle, loginWithApple, isLoading: authLoading } = useAuth();
 
   const [role, setRole] = React.useState<LoginRole>('player');
   const [email, setEmail] = React.useState('');
@@ -50,11 +50,6 @@ export function LoginWithRoleScreen({ onLogin, onRegister, onNeedsRegistration, 
   // Email / password login
   // ------------------------------------------------------------------
   async function handleEmailLogin() {
-    if (!email.trim() && !pass) {
-      loginAsMock(role);
-      onLogin?.(role);
-      return;
-    }
     if (!email.trim() || !pass) {
       setError('Completá el email y la contraseña.');
       return;

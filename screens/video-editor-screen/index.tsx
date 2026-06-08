@@ -1,13 +1,13 @@
 /**
  * VideoEditorScreen — 5-step flow para crear un highlight a partir de la
  * grabación de un partido. Compone los componentes Player + TrimRangeSlider
- * existentes (mockeados en este repo) y orquesta el job de procesamiento
- * vía `useVideoEditorFlow`.
+ * y orquesta el procesamiento real vía `useVideoEditorFlow` (FFmpeg on-device
+ * → upload a B2 con presigned URL → POST /highlights).
  *
  * Route params:  { gameId, recordingUrl, durationSeconds }
  *
  * Notas de adaptación al stack actual (vs el spec original):
- *   - Sin expo-video → Player mock con la misma API (PlayerHandle).
+ *   - Sin expo-video → Player adaptador con la misma API (PlayerHandle).
  *   - Sin unistyles → StyleSheet inline + useTheme.
  *   - Sin gluestack → Button/Input/Switch de components/ui.
  *   - Sin formik/yup → validación inline.
@@ -57,7 +57,7 @@ export function VideoEditorScreen({
       case 'trim':       flow.setStep('preview'); break;
       case 'metadata':   flow.setStep('trim'); break;
       case 'processing': flow.cancelProcessing(); break;
-      case 'result':     onDone?.(); break;
+      case 'result':     onBack?.(); break;
     }
   }
 

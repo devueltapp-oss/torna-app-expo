@@ -7,7 +7,7 @@ import {
   Button, AppHeader, Avatar, SurfaceChip, Switch,
 } from '../components/ui';
 import { PlayerSearchOverlay } from '../components/PlayerSearchOverlay';
-import type { InvitablePlayer, NearbyPlayer } from '../data/mocks';
+import type { InvitablePlayer, NearbyPlayer } from '../data/types';
 
 interface Props {
   host: NearbyPlayer;

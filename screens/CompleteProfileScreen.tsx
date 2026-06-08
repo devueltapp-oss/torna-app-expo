@@ -123,7 +123,7 @@ export function CompleteProfileScreen({
       // The AuthProvider.register() call sets the user in context;
       // the parent (App.tsx) will react to user != null automatically.
       // onComplete is still called for flows that need an explicit callback.
-      const mockUser: TornaUser = {
+      const completedUser: TornaUser = {
         id: '',            // will be filled by context
         email: prefillEmail ?? '',
         username: username.trim(),
@@ -131,7 +131,7 @@ export function CompleteProfileScreen({
         isClub: false,
         authProvider,
       };
-      onComplete(mockUser);
+      onComplete(completedUser);
     } catch (err: any) {
       setSubmitError(
         err?.message ?? 'Ocurrió un error al registrar tu perfil. Intentá de nuevo.',

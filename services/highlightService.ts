@@ -106,7 +106,7 @@ export async function createHighlight(
   onProgress?.(88);
 
   // ── Retrieve auth token from secure storage ──
-  const token = await SecureStore.getItemAsync('@torna/auth-token');
+  const token = await SecureStore.getItemAsync('torna_auth_token');
   if (!token) throw new Error('Usuario no autenticado');
 
   // ── Upload clip via presigned URL ──

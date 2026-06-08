@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, ScrollView, Pressable, Image, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Svg, Rect, Line, Path } from 'react-native-svg';
+import { Svg, Rect, Line } from 'react-native-svg';
 import { Video, ResizeMode } from 'expo-av';
 import {
   ChevronLeft, MoreHorizontal, MapPin, Phone, Clock, Eye, Play, Camera,
@@ -11,7 +11,8 @@ import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { SectionHeader, StatusBadge, Avatar, SurfaceChip } from '../components/ui';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
-import type { ClubPublic } from '../data/mocks';
+import { ClubMap } from '../components/ClubMap';
+import type { ClubPublic } from '../data/types';
 
 const tornaLogo = require('../assets/torna-icon.png');
 
@@ -282,17 +283,13 @@ export function ClubProfilePlayerView({
             <InfoRow icon={<Clock size={16} color={colors.muted2}/>}  label="HORARIO"   value={club.hours}/>
             <InfoRow icon={<Phone size={16} color={colors.muted2}/>}  label="TELÉFONO"  value={club.phone}/>
             <InfoRow icon={<MapPin size={16} color={colors.muted2}/>} label="DIRECCIÓN" value={club.address}/>
-            {/* Mini map placeholder — replace with react-native-maps in prod */}
-            <View style={{ height: 120, backgroundColor: colors.bg3, alignItems: 'center', justifyContent: 'center', borderTopWidth: 1, borderTopColor: colors.line }}>
-              <Svg viewBox="0 0 200 120" width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0, opacity: 0.4 }}>
-                <Path d="M0 80 Q 50 60, 100 70 T 200 50" stroke={colors.muted} strokeWidth={1.5} fill="none"/>
-                <Path d="M20 0 L 30 120" stroke={colors.muted} strokeWidth={1.2} fill="none"/>
-                <Path d="M120 0 L 130 120" stroke={colors.muted} strokeWidth={1.2} fill="none"/>
-              </Svg>
-              <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.live, alignItems: 'center', justifyContent: 'center' }}>
-                <MapPin size={14} color={colors.ink}/>
-              </View>
-            </View>
+            {/* Mapa real del local */}
+            <ClubMap
+              latitude={club.latitude}
+              longitude={club.longitude}
+              title={club.name}
+              style={{ borderTopWidth: 1, borderTopColor: colors.line }}
+            />
           </View>
         </View>
       </ScrollView>

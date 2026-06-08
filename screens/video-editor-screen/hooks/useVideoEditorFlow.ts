@@ -9,20 +9,19 @@
  */
 import React from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { type JobStatusName } from '../../../api/video';
-import { type HighlightRecord } from '../../../api/highlights';
 import { TRIM_MIN_SEC } from '../components/TrimRangeSlider';
 import type { Visibility } from '../steps/MetadataStep';
 
 export type EditorStep = 'preview' | 'trim' | 'metadata' | 'processing' | 'result';
 export type { Visibility } from '../steps/MetadataStep';
 
+/** Estado del procesamiento on-device del highlight (FFmpeg → upload → POST /highlights). */
+export type JobStatusName = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+
 export interface UseVideoEditorFlowParams {
   gameId: string;
   recordingUrl: string;
   durationSeconds: number;
-  /** mock auth — en prod viene de `useAuth().accessToken` */
-  token?: string;
 }
 
 export function useVideoEditorFlow(params: UseVideoEditorFlowParams) {
@@ -43,9 +42,6 @@ export function useVideoEditorFlow(params: UseVideoEditorFlowParams) {
   const [jobProgress, setJobProgress] = React.useState(0);
   const [jobError, setJobError] = React.useState<string | null>(null);
   const [resultUrl, setResultUrl] = React.useState<string | null>(null);
-
-  // Highlight save (populated after createHighlight completes)
-  const [savedHighlight] = React.useState<HighlightRecord | null>(null);
 
   const generate = React.useCallback(async () => {
     setJobError(null);
@@ -72,7 +68,7 @@ export function useVideoEditorFlow(params: UseVideoEditorFlowParams) {
       });
 
       // Guardar metadata en el backend
-      const token = await SecureStore.getItemAsync('@torna/auth-token');
+      const token = await SecureStore.getItemAsync('torna_auth_token');
       const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
       await fetch(`${apiUrl}/highlights`, {
         method: 'POST',
@@ -80,10 +76,13 @@ export function useVideoEditorFlow(params: UseVideoEditorFlowParams) {
         body: JSON.stringify({
           gameId,
           clipUrl: result.streamUrl,
-          start: range[0],
-          end: range[1],
+          // CreateHighlightDto exige enteros (@IsInt); el slider puede dar decimales.
+          start: Math.floor(range[0]),
+          end: Math.ceil(range[1]),
           duration: result.durationSeconds,
           title: result.title,
+          // Visibilidad elegida en MetadataStep → backend la guarda en isEnabled.
+          isPublic: visibility === 'public',
         }),
       });
 
@@ -96,7 +95,7 @@ export function useVideoEditorFlow(params: UseVideoEditorFlowParams) {
       setJobError(err instanceof Error ? err.message : 'No pudimos crear el highlight.');
       setJobStatus('FAILED');
     }
-  }, [gameId, recordingUrl, range, title]);
+  }, [gameId, recordingUrl, range, title, visibility]);
 
   const cancelProcessing = React.useCallback(() => {
     setJobError(null);
@@ -110,7 +109,6 @@ export function useVideoEditorFlow(params: UseVideoEditorFlowParams) {
     visibility, setVisibility,
     jobStatus, jobProgress, jobError, resultUrl,
     generate, cancelProcessing,
-    savedHighlight,
   };
 }
 

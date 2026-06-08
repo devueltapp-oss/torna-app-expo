@@ -5,10 +5,10 @@ import { ChevronLeft, Camera } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { Button, AppHeader } from '../components/ui';
-import type { Slot, ClubCourtPublic } from '../data/mocks';
+import type { Slot, ClubCourtPublic } from '../data/types';
 import { StepIndicator } from './reserveCommon';
 
-interface DayOption { label: string; date: string; dow: string }
+export interface DayOption { label: string; date: string; dow: string; iso?: string }
 
 interface Props {
   court: ClubCourtPublic;
@@ -17,7 +17,9 @@ interface Props {
   days?: DayOption[];
   onBack?: () => void;
   onChangeCourt?: () => void;
-  onContinue?: (slot: Slot, day: string) => void;
+  /** Llamado al cambiar de día — el contenedor refetchea los slots de ese día. */
+  onDayChange?: (day: DayOption) => void;
+  onContinue?: (slot: Slot, day: DayOption) => void;
 }
 
 const DEFAULT_DAYS: DayOption[] = [
@@ -36,11 +38,16 @@ const DEFAULT_DAYS: DayOption[] = [
  *   GET /courts/:id/slots?date=YYYY-MM-DD → Slot[]
  */
 export function ReserveStep2Screen({
-  court, slots, days = DEFAULT_DAYS, onBack, onChangeCourt, onContinue,
+  court, slots, days = DEFAULT_DAYS, onBack, onChangeCourt, onDayChange, onContinue,
 }: Props) {
   const { colors } = useTheme();
   const [dayIdx, setDayIdx] = React.useState(0);
-  const [pickedIdx, setPickedIdx] = React.useState(5);
+  const [pickedIdx, setPickedIdx] = React.useState(0);
+  // Al cambiar los slots (nuevo día), seleccionar el primer slot libre.
+  React.useEffect(() => {
+    const i = slots.findIndex((s) => s.status === 'free');
+    setPickedIdx(i >= 0 ? i : 0);
+  }, [slots]);
   const picked = slots[pickedIdx];
 
   return (
@@ -77,7 +84,7 @@ export function ReserveStep2Screen({
             {days.map((d, i) => {
               const on = i === dayIdx;
               return (
-                <Pressable key={i} onPress={() => setDayIdx(i)}
+                <Pressable key={i} onPress={() => { setDayIdx(i); onDayChange?.(d); }}
                   style={{
                     width: 56, paddingVertical: 8, borderRadius: 12, alignItems: 'center', gap: 2,
                     backgroundColor: on ? colors.primary : colors.surface,
@@ -101,9 +108,15 @@ export function ReserveStep2Screen({
               <Legend swatch={colors.accent} label="Tuya"/>
             </View>
           </View>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {slots.map((s, i) => <SlotChip key={i} slot={s} selected={i === pickedIdx} onPress={() => setPickedIdx(i)}/>)}
-          </View>
+          {slots.length === 0 ? (
+            <Text style={{ fontSize: 13, color: colors.muted2, paddingVertical: 12 }}>
+              No hay horarios disponibles para este día.
+            </Text>
+          ) : (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {slots.map((s, i) => <SlotChip key={i} slot={s} selected={i === pickedIdx} onPress={() => setPickedIdx(i)}/>)}
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -114,9 +127,13 @@ export function ReserveStep2Screen({
       }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text style={{ fontSize: 12, color: colors.muted2, fontWeight: '700' }}>Total estimado</Text>
-          <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text }}>${picked.price.toLocaleString('es-AR')}</Text>
+          <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text }}>
+            {picked ? `$${picked.price.toLocaleString('es-AR')}` : '—'}
+          </Text>
         </View>
-        <Button fullWidth size="lg" onPress={() => onContinue?.(picked, days[dayIdx].label)}>Continuar →</Button>
+        <Button fullWidth size="lg"
+          variant={!picked || picked.status === 'reserved' ? 'disabled' : 'primary'}
+          onPress={() => picked && onContinue?.(picked, days[dayIdx])}>Continuar →</Button>
       </View>
     </SafeAreaView>
   );

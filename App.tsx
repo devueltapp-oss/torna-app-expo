@@ -1,8 +1,9 @@
 /**
  * Torna app entry. React Navigation stack with role-aware main containers
- * (MainPlayer / MainClub) that swap based on what role logged in. All screens
- * pull data from mocks for now; in production the mocks become hooks
- * (useFeed, useClubProfile, useReservation, etc.).
+ * (MainPlayer / MainClub) that swap based on what role logged in. Las pantallas
+ * reciben datos por props desde hooks de API reales (useLiveGames, usePlayers,
+ * useUserProfile, useGameDetail, etc.). No hay mocks: las features sin endpoint
+ * todavía muestran estados vacíos en lugar de datos falsos.
  *
  * Auth architecture:
  *   - <AuthProvider> wraps everything so useAuth() works in every component.
@@ -13,11 +14,11 @@
  *     separate route param, so the AppStack always lands in the right tab container.
  */
 import React, { useCallback, useState, useRef, useEffect } from 'react';
-import { View, Text, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator, Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import OneSignal from 'react-native-onesignal';
+import { OneSignal } from 'react-native-onesignal';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
@@ -39,22 +40,70 @@ import {
   type ReelSection,
 } from './screens';
 import { TabId } from './components/BottomTabBar';
-import { UploadSheet, type UploadResult } from './components/UploadSheet';
 import { FollowListSheet } from './components/FollowListSheet';
 import { VideoPreviewModal } from './components/VideoPreviewModal';
-import { useOwnMedia } from './hooks/useOwnMedia';
 import { useLiveGames } from './hooks/useLiveGames';
 import { useOpenGames } from './hooks/useOpenGames';
-import {
-  MOCK_LIVE_GAMES, MOCK_GAMES_LIST, MOCK_COURTS, MOCK_PLAYERS,
-  MOCK_GAME_DETAIL, MOCK_PROFILE, MOCK_UPCOMING_GAMES, MOCK_FEED_POSTS,
-  MOCK_CLUB_TODAY,
-  MOCK_CLUB_PUBLIC, MOCK_PLAYER_PUBLIC, MOCK_FAKE_PLAYER,
-  MOCK_NEARBY, MOCK_INVITABLE_PLAYERS, MOCK_SLOTS,
-  MOCK_OWNER, MOCK_MY_MATCHES_V2, MOCK_MY_HIGHLIGHTS_V2, MOCK_MY_UPLOADS,
-  MOCK_SEARCHABLE_PLAYERS, MOCK_SEARCHABLE_COURTS,
-  type LibraryItem, type LibraryMatch, type LibraryHighlight, type LibraryUpload,
-} from './data/mocks';
+import { usePlayerMatches } from './hooks/usePlayerMatches';
+import { useGameDetail } from './hooks/useGameDetail';
+import { usePlayers } from './hooks/usePlayers';
+import { useUserProfile } from './hooks/useUserProfile';
+import { useMyHighlights } from './hooks/useMyHighlights';
+import { searchUsers, searchUsersAndClubs, fetchUserProfile } from './api/users';
+import { toggleHighlightVisibility } from './api/highlights';
+import { fetchClubCourts, fetchCourt, fetchCourtSlots, createReservation } from './api/clubs';
+import type { DayOption } from './screens/ReserveStep2Screen';
+import type {
+  LibraryItem, LibraryMatch, LibraryHighlight,
+  ProfileOwner, ClubProfile, ClubPublic, ClubCourtPublic,
+  SearchableUser, PlayerPublic, Slot,
+} from './data/types';
+
+/** Antepone '@' al username si no lo trae. */
+function atHandle(username?: string | null): string {
+  if (!username) return '';
+  return username.startsWith('@') ? username : '@' + username;
+}
+
+/** Cancha vacía para pantallas de reserva sin backend (estado vacío). */
+function emptyCourt(id: string): ClubCourtPublic {
+  return { id, name: '', surface: 'HARD', cams: 0, indoor: false, nextSlot: '' };
+}
+
+const DOW = ['DOM', 'LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB'];
+/** Próximos N días con su ISO (YYYY-MM-DD) para el selector de la reserva. */
+function buildDays(n = 6): DayOption[] {
+  const pad = (x: number) => String(x).padStart(2, '0');
+  const today = new Date();
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    return {
+      label: i === 0 ? 'Hoy' : i === 1 ? 'Mañana' : DOW[d.getDay()],
+      date: String(d.getDate()),
+      dow: DOW[d.getDay()],
+      iso: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    };
+  });
+}
+
+/** Detalle de partido vacío mientras carga / si no hay datos (sin cámaras → placeholder). */
+function emptyGameDetail(id: string): GameDetailData {
+  return {
+    id, court: '', floor: 'HARD', club: '', clubHandle: '', clubFollowers: 0,
+    time: '', date: '', viewers: 0, isLive: false, players: [], cameras: [],
+  };
+}
+
+/** Club público vacío (sin endpoint): solo identidad real, resto en estado vacío. */
+function emptyClubPublic(id: string): ClubPublic {
+  return {
+    id, name: '', handle: '', city: '', followers: 0, isFollowing: false,
+    hours: '', phone: '', address: '', latitude: null, longitude: null,
+    highlights: { live: [], clips: [] },
+    courts: [], upcoming: [], members: [], photos: [],
+  };
+}
 
 /* ─────────── Error boundary ─────────── */
 
@@ -112,8 +161,15 @@ type AppStackParamList = {
   GlobalSearch: undefined;
   ReserveCourt: { clubId: string; courtId?: string };
   ReserveTime: { courtId: string };
-  ReserveInvite: { courtId: string; date: string; slot: string };
-  ReserveOk: { reservationId: string };
+  ReserveInvite: {
+    courtId: string;
+    courtLabel: string;
+    date: string;
+    slotStart: string;
+    slotEnd: string;
+    durationMinutes: number;
+  };
+  ReserveOk: { reservationId: string; courtLabel: string; whenLabel: string };
   VideoEditor: {
     gameId: string;
     recordingUrl: string;
@@ -251,26 +307,55 @@ function MainPlayer({ navigation }: any) {
   const [reelSection, setReelSection] = React.useState<ReelSection | null>(null);
   const [reelInitialIndex, setReelInitialIndex] = React.useState(0);
   const [profileView, setProfileView] = React.useState<'profile' | 'library' | 'settings'>('profile');
+  const [ownSheet, setOwnSheet] = React.useState<'followers' | 'following' | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Partidas en vivo reales (GET /game/live). Fallback a mocks si está vacío
-  // (p. ej. login de dev sin token Firebase, o sin seguidos en vivo).
-  const { liveGames: liveGamesApi, refresh: refreshLive } = useLiveGames();
-  const liveGames = liveGamesApi.length > 0 ? liveGamesApi : MOCK_LIVE_GAMES;
+  // Partidas en vivo reales (GET /game/live). Si viene vacío, HomeScreen
+  // muestra su estado vacío — sin datos falsos.
+  const { liveGames, refresh: refreshLive } = useLiveGames();
 
   // Partidas abiertas reales (GET /game/open) para postularse.
   const { openGames, refresh: refreshOpen } = useOpenGames();
+
+  // "Mis partidos" reales (GET /game/player/:id/history) — el recordingUrl de
+  // cada uno es el video almacenado en B2 que el editor recorta on-device.
+  const { user } = useAuth();
+  const { matches: apiMatches, refresh: refreshMatches } = usePlayerMatches(user?.id);
+
+  // Directorio de jugadores reales (GET /user/players).
+  const { players: playerList, refresh: refreshPlayers } = usePlayers();
+
+  // Perfil propio: identidad del usuario autenticado + conteos REALES de
+  // seguidores/seguidos (count en BD vía GET /user/profile/:id).
+  const { player: ownProfile, refresh: refreshOwnProfile } = useUserProfile(user?.id);
+
+  // Mis highlights reales (GET /highlights/my): públicos + privados. Los públicos
+  // se muestran en el perfil; los privados solo en la librería.
+  const { highlights: apiHighlights, refresh: refreshHighlights } = useMyHighlights(user?.id);
+
+  const owner: ProfileOwner = {
+    name: user?.name ?? user?.username ?? '',
+    username: atHandle(user?.username),
+    club: '',
+    location: user?.region ?? '',
+    followers: ownProfile?.followers ?? 0,
+    following: ownProfile?.followingCount ?? 0,
+    profilePicture: user?.profilePicture,
+  };
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([
       refreshLive(),
       refreshOpen(),
+      refreshMatches(),
+      refreshPlayers(),
+      refreshOwnProfile(),
+      refreshHighlights(),
       new Promise<void>((r) => setTimeout(r, 800)),
     ]);
     setRefreshing(false);
-  }, [refreshLive, refreshOpen]);
-  const [uploadOpen, setUploadOpen]   = React.useState(false);
+  }, [refreshLive, refreshOpen, refreshMatches, refreshPlayers, refreshOwnProfile, refreshHighlights]);
   const [previewVideo, setPreviewVideo] = React.useState<{
     url: string; title: string; durationSeconds: number;
   } | null>(null);
@@ -283,47 +368,24 @@ function MainPlayer({ navigation }: any) {
     }
   }, []);
 
-  const [matches, setMatches]       = React.useState<LibraryMatch[]>(MOCK_MY_MATCHES_V2);
-  const [highlights, setHighlights] = React.useState<LibraryHighlight[]>(MOCK_MY_HIGHLIGHTS_V2);
-  const [uploads, setUploads]       = React.useState<LibraryUpload[]>(MOCK_MY_UPLOADS);
+  const [matches, setMatches]       = React.useState<LibraryMatch[]>([]);
+  React.useEffect(() => { setMatches(apiMatches); }, [apiMatches]);
 
-  // Real media from backend — replaces mock uploads once API is live
-  const { photos: apiPhotos, videos: apiVideos, refresh: refreshMedia } = useOwnMedia();
-  const uploadsFromApi: LibraryUpload[] = [...apiPhotos, ...apiVideos].map((m) => ({
-    id: m.id,
-    kind: (m.kind === 'photo' ? 'upload-photo' : 'upload-video') as 'upload-photo' | 'upload-video',
-    title: m.title ?? '',
-    isPublic: m.visibility === 'public',
-    date: m.createdAt,
-  }));
-  // Use API uploads when available, fall back to local state (mock or newly added items)
-  const effectiveUploads: LibraryUpload[] = uploadsFromApi.length > 0 ? uploadsFromApi : uploads;
+  const [highlights, setHighlights] = React.useState<LibraryHighlight[]>([]);
+  React.useEffect(() => { setHighlights(apiHighlights); }, [apiHighlights]);
 
   const toggleVisibility = (item: LibraryItem) => {
-    if (item.kind === 'match')          setMatches(xs    => xs.map(x => x.id === item.id ? { ...x, isPublic: !x.isPublic } : x));
-    else if (item.kind === 'highlight') setHighlights(xs => xs.map(x => x.id === item.id ? { ...x, isPublic: !x.isPublic } : x));
-    else                                setUploads(xs    => xs.map(x => x.id === item.id ? { ...x, isPublic: !x.isPublic } : x));
-  };
-
-  const handleUpload = (r: UploadResult) => {
-    setUploadOpen(false);
-    // Refresh real media from API after a successful upload
-    refreshMedia();
-    const id = (r.kind === 'highlight' ? 'H-' : 'U-') + Math.random().toString(36).slice(2, 6).toUpperCase();
-    if (r.kind === 'highlight') {
-      setHighlights(xs => [{
-        id, kind: 'highlight', title: r.title || 'Highlight sin título',
-        durationSeconds: 24, durationLabel: '0:24', date: 'Recién', isPublic: r.visibility === 'public',
-      }, ...xs]);
-    } else {
-      setUploads(xs => [{
-        id, kind: r.kind === 'photo' ? 'upload-photo' : 'upload-video',
-        title: r.title || (r.kind === 'photo' ? 'Foto sin título' : 'Video sin título'),
-        durationSeconds: r.kind === 'video' ? 38 : undefined,
-        durationLabel:   r.kind === 'video' ? '0:38' : undefined,
-        date: 'Recién', isPublic: r.visibility === 'public',
-      }, ...xs]);
+    if (item.kind === 'match') {
+      // Los partidos no tienen visibilidad en el backend; toggle local/cosmético.
+      setMatches(xs => xs.map(x => x.id === item.id ? { ...x, isPublic: !x.isPublic } : x));
+      return;
     }
+    // Highlight: flip optimista + persistir en el backend (PATCH /highlights/:id/toggle).
+    setHighlights(xs => xs.map(x => x.id === item.id ? { ...x, isPublic: !x.isPublic } : x));
+    toggleHighlightVisibility(item.id).catch(() => {
+      // revertir si falla
+      setHighlights(xs => xs.map(x => x.id === item.id ? { ...x, isPublic: !x.isPublic } : x));
+    });
   };
 
   const { logout } = useAuth();
@@ -346,8 +408,8 @@ function MainPlayer({ navigation }: any) {
             <ReelViewScreen
               section={reelSection}
               liveGames={liveGames}
-              upcomingGames={MOCK_UPCOMING_GAMES}
-              feedPosts={MOCK_FEED_POSTS}
+              upcomingGames={[]}
+              feedPosts={[]}
               onBack={() => setReelSection(null)}
               onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id })}
               activeTab="home"
@@ -358,11 +420,11 @@ function MainPlayer({ navigation }: any) {
         }
         return (
           <HomeScreen
-            greeting="Maxi"
+            greeting={user?.name ?? user?.username ?? ''}
             liveGames={liveGames}
-            upcomingGames={MOCK_UPCOMING_GAMES}
+            upcomingGames={[]}
             openGames={openGames}
-            feedPosts={MOCK_FEED_POSTS}
+            feedPosts={[]}
             activeTab="home" onChangeTab={handleTab}
             onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id })}
             onOpenSearch={() => navigation.navigate('GlobalSearch')}
@@ -370,23 +432,23 @@ function MainPlayer({ navigation }: any) {
             refreshing={refreshing}
             onRefresh={handleRefresh}
             onOpenPlayerProfile={(playerId) => navigation.navigate('PlayerProfile', { playerId })}
-            invitablePlayers={MOCK_INVITABLE_PLAYERS}
+            invitablePlayers={[]}
           />
         );
       case 'games':
         return (
-          <GamesScreen games={MOCK_GAMES_LIST} activeTab="games" onChangeTab={handleTab} role="player"
+          <GamesScreen games={[]} activeTab="games" onChangeTab={handleTab} role="player"
             emptyImage={require('./assets/racket.png')}
             onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id })}
           />
         );
       case 'players':
-        return <PlayersScreen players={MOCK_PLAYERS} activeTab="players" onChangeTab={handleTab} role="player" onOpenPlayerProfile={(id) => navigation.navigate('PlayerProfile', { playerId: id })} />;
+        return <PlayersScreen players={playerList} activeTab="players" onChangeTab={handleTab} role="player" onOpenPlayerProfile={(id) => navigation.navigate('PlayerProfile', { playerId: id })} />;
       case 'profile': {
         if (profileView === 'settings') {
           return (
             <PlayerSettingsScreen
-              owner={MOCK_OWNER}
+              owner={owner}
               onBack={() => setProfileView('profile')}
               onSignOut={async () => {
                 await logout();
@@ -398,49 +460,58 @@ function MainPlayer({ navigation }: any) {
         }
         if (profileView === 'library') {
           return (
-            <>
-              <MyLibraryScreen
-                matches={matches} highlights={highlights} uploads={effectiveUploads}
-                onBack={() => setProfileView('profile')}
-                onOpenUpload={() => setUploadOpen(true)}
-                onCreateHighlight={(m) => navigation.navigate('VideoEditor', {
-                  gameId: m.id,
-                  recordingUrl: m.recordingUrl,
-                  durationSeconds: m.durationSeconds,
-                  onHighlightCreated: (result) => {
-                    setHighlights(prev => [{
-                      id: 'H-' + Math.random().toString(36).slice(2, 6).toUpperCase(),
-                      kind: 'highlight' as const,
-                      title: result.title || 'Highlight',
-                      durationSeconds: result.durationSeconds,
-                      durationLabel: formatDurationLabel(result.durationSeconds),
-                      date: 'Recién',
-                      isPublic: result.visibility === 'public',
-                      streamUrl: result.streamUrl || undefined,
-                    }, ...prev]);
-                  },
-                })}
-                onToggleVisibility={toggleVisibility}
-                onOpenItem={openPreview}
-                activeTab="profile" onChangeTab={handleTab}
-              />
-              <UploadSheet
-                visible={uploadOpen}
-                onClose={() => setUploadOpen(false)}
-                onConfirm={handleUpload}
-              />
-            </>
+            <MyLibraryScreen
+              matches={matches} highlights={highlights}
+              onBack={() => setProfileView('profile')}
+              onCreateHighlight={(m) => navigation.navigate('VideoEditor', {
+                gameId: m.id,
+                recordingUrl: m.recordingUrl,
+                durationSeconds: m.durationSeconds,
+                onHighlightCreated: (result: { streamUrl: string; durationSeconds: number; title: string; visibility: 'public' | 'private' }) => {
+                  // Prepend optimista para feedback inmediato…
+                  setHighlights(prev => [{
+                    id: 'H-' + Math.random().toString(36).slice(2, 6).toUpperCase(),
+                    kind: 'highlight' as const,
+                    title: result.title || 'Highlight',
+                    durationSeconds: result.durationSeconds,
+                    durationLabel: formatDurationLabel(result.durationSeconds),
+                    date: 'Recién',
+                    isPublic: result.visibility === 'public',
+                    streamUrl: result.streamUrl || undefined,
+                  }, ...prev]);
+                  // …y luego sincronizar con el backend (id/orden reales).
+                  refreshHighlights();
+                },
+              })}
+              onToggleVisibility={toggleVisibility}
+              onOpenItem={openPreview}
+              activeTab="profile" onChangeTab={handleTab}
+            />
           );
         }
         return (
-          <PlayerOwnProfileScreen
-            owner={MOCK_OWNER}
-            matches={matches} highlights={highlights} uploads={effectiveUploads}
-            onOpenLibrary={() => setProfileView('library')}
-            onOpenSettings={() => setProfileView('settings')}
-            onOpenItem={openPreview}
-            activeTab="profile" onChangeTab={handleTab}
-          />
+          <>
+            <PlayerOwnProfileScreen
+              owner={owner}
+              matches={matches} highlights={highlights}
+              onOpenLibrary={() => setProfileView('library')}
+              onOpenSettings={() => setProfileView('settings')}
+              onOpenItem={openPreview}
+              onOpenFollowers={() => setOwnSheet('followers')}
+              onOpenFollowing={() => setOwnSheet('following')}
+              activeTab="profile" onChangeTab={handleTab}
+            />
+            <FollowListSheet
+              visible={ownSheet !== null}
+              title={ownSheet === 'followers' ? 'Seguidores' : 'Siguiendo'}
+              users={ownSheet === 'followers' ? (ownProfile?.followersList ?? []) : (ownProfile?.followingList ?? [])}
+              onClose={() => setOwnSheet(null)}
+              onOpenProfile={(id) => {
+                setOwnSheet(null);
+                navigation.navigate('PlayerProfile', { playerId: id });
+              }}
+            />
+          </>
         );
       }
       default:
@@ -466,34 +537,44 @@ function MainPlayer({ navigation }: any) {
 
 function MainClub({ navigation }: any) {
   const [tab, setTab] = React.useState<TabId>('home');
-  const { logout } = useAuth();
+  const { user } = useAuth();
+
+  // Perfil del club derivado del usuario autenticado (no hay mock).
+  const clubProfile: ClubProfile = {
+    name: user?.name ?? user?.username ?? '',
+    username: atHandle(user?.username),
+    address: '',
+    phone: user?.phone ?? '',
+    description: '',
+    region: user?.region ?? '',
+  };
 
   switch (tab) {
     case 'home':
       return (
         <ClubHomeScreen
-          clubName="Club Pádel BSAS"
-          liveGames={MOCK_LIVE_GAMES}
-          todayReservations={MOCK_CLUB_TODAY}
+          clubName={clubProfile.name}
+          liveGames={[]}
+          todayReservations={[]}
           activeTab="home" onChangeTab={setTab}
           onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id })}
         />
       );
     case 'games':
       return (
-        <GamesScreen games={MOCK_GAMES_LIST} activeTab="games" onChangeTab={setTab} role="club"
+        <GamesScreen games={[]} activeTab="games" onChangeTab={setTab} role="club"
           emptyImage={require('./assets/racket.png')}
           onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id })}
         />
       );
     case 'courts':
-      return <CourtsScreen courts={MOCK_COURTS} activeTab="courts" onChangeTab={setTab} role="club" />;
+      return <CourtsScreen courts={[]} activeTab="courts" onChangeTab={setTab} role="club" />;
     case 'players':
-      return <PlayersScreen players={MOCK_PLAYERS} activeTab="players" onChangeTab={setTab} role="club" />;
+      return <PlayersScreen players={[]} activeTab="players" onChangeTab={setTab} role="club" />;
     case 'profile':
       return (
         <ProfileScreen
-          profile={MOCK_PROFILE}
+          profile={clubProfile}
           activeTab="profile"
           onChangeTab={setTab}
           role="club"
@@ -524,19 +605,24 @@ function AppNavigator() {
       <AppStack.Screen name="GameDetail">
         {({ navigation, route }) => {
           const [following, setFollowing] = React.useState(false);
-          const game: GameDetailData = route.params?.clipData ?? MOCK_GAME_DETAIL;
           const isClip = !!route.params?.clipData;
+          // Trae el partido real (cámaras + stream HLS) y el recordingUrl para el editor.
+          const { game: apiGame, detail } = useGameDetail(route.params?.gameId);
+          const game: GameDetailData =
+            route.params?.clipData ?? detail ?? emptyGameDetail(route.params?.gameId ?? '');
+          const recordingUrl = apiGame?.recordingUrl ?? null;
+          const canCreateHighlight = !isClip && !!recordingUrl;
           return (
             <GameDetailScreen
               game={game}
               isFollowing={following}
               onToggleFollow={() => setFollowing(f => !f)}
               onBack={() => navigation.goBack()}
-              onCreateHighlight={isClip ? undefined : () => navigation.navigate('VideoEditor', {
-                gameId: MOCK_GAME_DETAIL.id,
-                recordingUrl: `https://cdn.torna.io/games/${MOCK_GAME_DETAIL.id}.m3u8`,
-                durationSeconds: 142,
-              })}
+              onCreateHighlight={canCreateHighlight ? () => navigation.navigate('VideoEditor', {
+                gameId: apiGame!.id,
+                recordingUrl: recordingUrl!,
+                durationSeconds: apiGame!.durationSeconds ?? 0,
+              }) : undefined}
             />
           );
         }}
@@ -544,8 +630,29 @@ function AppNavigator() {
 
       {/* Player POV flows */}
       <AppStack.Screen name="ClubProfile">
-        {({ navigation }) => {
-          const [club, setClub] = React.useState(MOCK_CLUB_PUBLIC);
+        {({ navigation, route }) => {
+          const clubId = route.params?.clubId ?? '';
+          const [club, setClub] = React.useState<ClubPublic>(() => emptyClubPublic(clubId));
+          // Los clubes son usuarios (isClub=true): traemos su identidad real.
+          // Highlights/canchas/miembros quedan vacíos hasta tener sus endpoints.
+          React.useEffect(() => {
+            if (!clubId) return;
+            fetchUserProfile(clubId)
+              .then((p) => setClub((c) => ({
+                ...c,
+                id: p.id,
+                name: p.name ?? p.username,
+                handle: atHandle(p.username),
+                city: p.region ?? '',
+                followers: p.followersCount ?? 0,
+                isFollowing: p.isFollowing ?? false,
+                phone: p.phone ?? '',
+                address: p.address ?? '',
+                latitude: p.latitude,
+                longitude: p.longitude,
+              })))
+              .catch(() => {});
+          }, [clubId]);
           return (
             <ClubProfilePlayerView
               club={club}
@@ -553,7 +660,7 @@ function AppNavigator() {
               onToggleFollow={() => {
                 const wasFollowing = club.isFollowing;
                 setClub(c => ({ ...c, isFollowing: !wasFollowing, followers: c.followers + (wasFollowing ? -1 : 1) }));
-                SecureStore.getItemAsync('@torna/auth-token').then(token => {
+                SecureStore.getItemAsync('torna_auth_token').then(token => {
                   const endpoint = wasFollowing ? '/follow/unfollow' : '/follow';
                   fetch(`${process.env.EXPO_PUBLIC_API_URL ?? ''}${endpoint}`, {
                     method: 'POST',
@@ -573,10 +680,14 @@ function AppNavigator() {
       </AppStack.Screen>
 
       <AppStack.Screen name="PlayerProfile">
-        {({ navigation }) => {
-          const [player, setPlayer] = React.useState(MOCK_FAKE_PLAYER);
+        {({ navigation, route }) => {
+          const playerId = route.params?.playerId ?? '';
+          const { player: fetched } = useUserProfile(playerId);
+          const [player, setPlayer] = React.useState<PlayerPublic | null>(null);
+          React.useEffect(() => { setPlayer(fetched); }, [fetched]);
           const [sheet, setSheet] = React.useState<'followers' | 'following' | null>(null);
           const [clipModal, setClipModal] = React.useState<{ url: string; title: string } | null>(null);
+          if (!player) return <SplashScreen />;
           return (
             <>
               <PlayerProfilePublicView
@@ -584,20 +695,20 @@ function AppNavigator() {
                 onBack={() => navigation.goBack()}
                 onToggleFollow={() => {
                   const wasFollowing = player.isFollowing;
-                  setPlayer(p => ({ ...p, isFollowing: !wasFollowing, followers: p.followers + (wasFollowing ? -1 : 1) }));
-                  SecureStore.getItemAsync('@torna/auth-token').then(token => {
+                  setPlayer(p => p ? ({ ...p, isFollowing: !wasFollowing, followers: p.followers + (wasFollowing ? -1 : 1) }) : p);
+                  SecureStore.getItemAsync('torna_auth_token').then(token => {
                     const endpoint = wasFollowing ? '/follow/unfollow' : '/follow';
                     fetch(`${process.env.EXPO_PUBLIC_API_URL ?? ''}${endpoint}`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                       body: JSON.stringify({ userId: player.id }),
                     }).catch(() => {
-                      setPlayer(p => ({ ...p, isFollowing: wasFollowing, followers: p.followers + (wasFollowing ? 1 : -1) }));
+                      setPlayer(p => p ? ({ ...p, isFollowing: wasFollowing, followers: p.followers + (wasFollowing ? 1 : -1) }) : p);
                     });
                   });
                 }}
                 onToggleNotify={() => {
-                  setPlayer(p => ({ ...p, notifyOnMatch: !p.notifyOnMatch }));
+                  setPlayer(p => p ? ({ ...p, notifyOnMatch: !p.notifyOnMatch }) : p);
                 }}
                 onOpenLive={(gameId) => navigation.navigate('GameDetail', { gameId })}
                 onOpenClip={(clip) => clip.videoUrl && setClipModal({ url: clip.videoUrl, title: clip.title })}
@@ -630,11 +741,8 @@ function AppNavigator() {
       <AppStack.Screen name="SearchPlay">
         {({ navigation }) => (
           <SearchPlayScreen
-            courts={MOCK_NEARBY.courts}
-            players={MOCK_NEARBY.players}
-            invitablePlayers={MOCK_INVITABLE_PLAYERS}
             onBack={() => navigation.goBack()}
-            onReserveCourt={(courtId) => navigation.navigate('ReserveCourt', { clubId: MOCK_CLUB_PUBLIC.id, courtId })}
+            onOpenClub={(clubId) => navigation.navigate('ReserveCourt', { clubId })}
           />
         )}
       </AppStack.Screen>
@@ -642,10 +750,21 @@ function AppNavigator() {
       <AppStack.Screen name="GlobalSearch">
         {({ navigation }) => (
           <GlobalSearchScreen
-            players={MOCK_SEARCHABLE_PLAYERS}
-            courts={MOCK_SEARCHABLE_COURTS}
+            players={[]}
+            courts={[]}
+            onSearchUsers={async (q): Promise<SearchableUser[]> => {
+              const res = await searchUsersAndClubs(q);
+              return res.map((u) => ({
+                id: u.id,
+                name: u.name ?? u.username,
+                username: atHandle(u.username),
+                profilePicture: u.profilePicture ?? undefined,
+                isClub: u.isClub,
+              }));
+            }}
             onBack={() => navigation.goBack()}
             onOpenPlayerProfile={(id) => navigation.navigate('PlayerProfile', { playerId: id })}
+            onOpenClubProfile={(id) => navigation.navigate('ClubProfile', { clubId: id })}
             onReserveCourt={(clubId, courtId) => navigation.navigate('ReserveCourt', { clubId, courtId })}
           />
         )}
@@ -655,10 +774,25 @@ function AppNavigator() {
       <AppStack.Screen name="ReserveCourt">
         {({ route, navigation }) => {
           const { clubId, courtId } = route.params || {};
+          const [courts, setCourts] = React.useState<ClubCourtPublic[]>([]);
+          const [clubName, setClubName] = React.useState('');
+          const [clubLoc, setClubLoc] = React.useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null });
+          React.useEffect(() => {
+            if (!clubId) return;
+            fetchClubCourts(clubId).then(setCourts).catch(() => setCourts([]));
+            fetchUserProfile(clubId)
+              .then((p) => {
+                setClubName(p.name ?? p.username);
+                setClubLoc({ lat: p.latitude, lng: p.longitude });
+              })
+              .catch(() => {});
+          }, [clubId]);
           return (
             <ReserveStep1Screen
-              clubName={MOCK_CLUB_PUBLIC.name}
-              courts={MOCK_CLUB_PUBLIC.courts}
+              clubName={clubName}
+              courts={courts}
+              latitude={clubLoc.lat}
+              longitude={clubLoc.lng}
               initialCourtId={courtId}
               onBack={() => navigation.goBack()}
               onContinue={(id) => navigation.navigate('ReserveTime', { courtId: id })}
@@ -670,15 +804,32 @@ function AppNavigator() {
       <AppStack.Screen name="ReserveTime">
         {({ route, navigation }) => {
           const { courtId } = route.params || {};
-          const court = MOCK_CLUB_PUBLIC.courts.find(c => c.id === courtId) || MOCK_CLUB_PUBLIC.courts[0];
+          const days = React.useMemo(() => buildDays(6), []);
+          const [court, setCourt] = React.useState<ClubCourtPublic>(() => emptyCourt(courtId ?? ''));
+          const [slots, setSlots] = React.useState<Slot[]>([]);
+          React.useEffect(() => {
+            if (courtId) fetchCourt(courtId).then(setCourt).catch(() => {});
+          }, [courtId]);
+          const loadSlots = React.useCallback((iso?: string) => {
+            if (!courtId || !iso) { setSlots([]); return; }
+            fetchCourtSlots(courtId, iso).then(setSlots).catch(() => setSlots([]));
+          }, [courtId]);
+          React.useEffect(() => { loadSlots(days[0].iso); }, [loadSlots, days]);
           return (
             <ReserveStep2Screen
               court={court}
-              slots={MOCK_SLOTS}
+              slots={slots}
+              days={days}
               onBack={() => navigation.goBack()}
               onChangeCourt={() => navigation.goBack()}
+              onDayChange={(d) => loadSlots(d.iso)}
               onContinue={(slot, day) => navigation.navigate('ReserveInvite', {
-                courtId, date: day, slot: slot.start,
+                courtId: courtId ?? '',
+                courtLabel: `${court.name} · ${court.surface}`,
+                date: day.iso ?? '',
+                slotStart: slot.start,
+                slotEnd: slot.end,
+                durationMinutes: slot.duration,
               })}
             />
           );
@@ -687,17 +838,48 @@ function AppNavigator() {
 
       <AppStack.Screen name="ReserveInvite">
         {({ route, navigation }) => {
-          const { date, slot } = route.params || {};
+          const { courtId, courtLabel, date, slotStart, slotEnd, durationMinutes } = route.params || ({} as any);
+          const submitting = React.useRef(false);
           return (
             <ReserveStep3Screen
-              invitablePlayers={MOCK_INVITABLE_PLAYERS}
+              onSearchPlayers={async (q): Promise<{ id: string; name: string; username: string }[]> => {
+                const res = await searchUsers(q);
+                return res.map((u) => ({ id: u.id, name: u.name ?? u.username, username: atHandle(u.username) }));
+              }}
               summary={{
-                title: 'CANCHA 3 · HARD',
-                subtitle: `${date} ${slot} – 15:30 · 90 min`,
-                priceLabel: '$6.500',
+                title: courtLabel || 'Cancha',
+                subtitle: `${date} · ${slotStart}–${slotEnd} · ${durationMinutes} min`,
+                priceLabel: 'Pago en el club',
               }}
               onBack={() => navigation.goBack()}
-              onConfirm={() => navigation.replace('ReserveOk', { reservationId: 'R-7421' })}
+              onConfirm={async (payload) => {
+                if (submitting.current) return;
+                submitting.current = true;
+                try {
+                  const opponents = (payload.opponents ?? []).filter((x): x is string => !!x);
+                  const created = await createReservation({
+                    courtId,
+                    date,
+                    slotStart,
+                    durationMinutes,
+                    mode: payload.mode,
+                    partnerUserId: payload.partnerUserId,
+                    opponentUserIds: opponents,
+                  });
+                  navigation.replace('ReserveOk', {
+                    reservationId: created.id,
+                    courtLabel: courtLabel || '',
+                    whenLabel: `${date} · ${slotStart}–${slotEnd}`,
+                  });
+                } catch (e) {
+                  Alert.alert(
+                    'No se pudo crear la reserva',
+                    e instanceof Error ? e.message : 'Intentá de nuevo.',
+                  );
+                } finally {
+                  submitting.current = false;
+                }
+              }}
             />
           );
         }}
@@ -705,17 +887,16 @@ function AppNavigator() {
 
       <AppStack.Screen name="ReserveOk">
         {({ route, navigation }) => {
-          const { reservationId } = route.params || {};
+          const { reservationId, courtLabel, whenLabel } = route.params || ({} as any);
           return (
             <ReserveSuccessScreen
               summary={[
-                { label: 'Club',    value: MOCK_CLUB_PUBLIC.name },
-                { label: 'Cancha',  value: '3 · HARD' },
-                { label: 'Horario', value: 'Hoy 14:00 – 15:30 (90 min)' },
-                { label: 'Pago',    value: '$6.500 · en el club' },
+                { label: 'Cancha',  value: courtLabel || '—' },
+                { label: 'Horario', value: whenLabel || '—' },
+                { label: 'Pago',    value: 'En el club' },
                 { label: 'Código',  value: <MonoValue>{reservationId}</MonoValue> },
               ]}
-              heroLine="Te esperamos hoy a las 14:00 en Cancha 3."
+              heroLine="¡Reserva confirmada! Te esperamos en la cancha."
               onBackToClub={() => navigation.popToTop()}
               onShare={() => {}}
             />

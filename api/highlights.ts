@@ -1,49 +1,73 @@
 /**
- * Mock highlight creation API. Mirrors the prompt-spec signature:
+ * Cliente de highlights.
  *
- *   createHighlightApi(token, { gameId, recordingUrl, start, end, title? })
- *     → { id, gameId, title, durationSec, publicUrl, createdAt }
+ *   GET   /highlights?userId=<id>  → highlights públicos de un usuario (perfil)
+ *   GET   /highlights/my           → TODOS los highlights del dueño (librería privada)
+ *   PATCH /highlights/:id/toggle   → invierte visibilidad (isEnabled público/privado)
  *
- * Persists in-memory so screens can list "my highlights" after the result
- * step. Replace with a real `POST /highlights` when the backend ships.
+ * Para highlights, `isEnabled` ES la visibilidad: true = público, false = privado.
+ * El backend envuelve toda respuesta en { data, statusCode }; los helpers desenvuelven `data`.
  */
+import * as SecureStore from 'expo-secure-store';
 
-export interface CreateHighlightInput {
-  gameId: string;
-  recordingUrl: string;
-  start: number;
-  end: number;
-  title?: string;
-}
+const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
+const TOKEN_KEY = 'torna_auth_token';
 
-export interface HighlightRecord {
+export interface UserHighlight {
   id: string;
-  gameId: string;
-  title: string;
-  durationSec: number;
-  publicUrl: string;
+  title: string | null;
+  clipUrl: string;
+  thumbnailUrl: string | null;
+  duration: number; // segundos
   createdAt: string;
+  likesCount: number;
 }
 
-const SAVED: HighlightRecord[] = [];
-
-export async function createHighlightApi(
-  _token: string,
-  input: CreateHighlightInput,
-): Promise<HighlightRecord> {
-  await new Promise(r => setTimeout(r, 320));
-  const rec: HighlightRecord = {
-    id: 'hl_' + Math.random().toString(36).slice(2, 10),
-    gameId: input.gameId,
-    title: input.title?.trim() || 'Highlight sin título',
-    durationSec: Math.round(input.end - input.start),
-    publicUrl: `https://cdn.torna.io/highlights/${input.gameId}.mp4`,
-    createdAt: new Date().toISOString(),
-  };
-  SAVED.unshift(rec);
-  return rec;
+/** Highlight propio (GET /highlights/my): incluye visibilidad (`isEnabled`). */
+export interface MyHighlight extends UserHighlight {
+  gameId: string;
+  isEnabled: boolean; // true = público, false = privado
 }
 
-export function listSavedHighlights(): HighlightRecord[] {
-  return SAVED.slice();
+async function token(): Promise<string> {
+  return (await SecureStore.getItemAsync(TOKEN_KEY)) ?? '';
+}
+
+function unwrap<T>(json: any): T {
+  return (json && typeof json === 'object' && 'data' in json ? json.data : json) as T;
+}
+
+async function authedGet<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: { Authorization: `Bearer ${await token()}` },
+  });
+  if (!res.ok) {
+    const err = new Error(`HTTP ${res.status}`);
+    (err as any).status = res.status;
+    throw err;
+  }
+  return unwrap<T>(await res.json().catch(() => ({})));
+}
+
+/** Highlights públicos (isEnabled) de un usuario, ordenados por fecha desc. */
+export function fetchUserHighlights(userId: string): Promise<UserHighlight[]> {
+  return authedGet<UserHighlight[]>(`/highlights?userId=${encodeURIComponent(userId)}`);
+}
+
+/** TODOS los highlights del usuario autenticado (públicos + privados), fecha desc. */
+export function fetchMyHighlights(): Promise<MyHighlight[]> {
+  return authedGet<MyHighlight[]>('/highlights/my');
+}
+
+/** Invierte la visibilidad pública/privada de un highlight propio. */
+export async function toggleHighlightVisibility(id: string): Promise<void> {
+  const res = await fetch(`${API_URL}/highlights/${encodeURIComponent(id)}/toggle`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${await token()}` },
+  });
+  if (!res.ok) {
+    const err = new Error(`HTTP ${res.status}`);
+    (err as any).status = res.status;
+    throw err;
+  }
 }

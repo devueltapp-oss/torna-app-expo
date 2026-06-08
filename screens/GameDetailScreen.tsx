@@ -34,7 +34,7 @@ export function GameDetailScreen({ game, onBack, isFollowing = false, onToggleFo
   game: GameDetailData; onBack?: () => void; isFollowing?: boolean; onToggleFollow?: () => void;
   onCreateHighlight?: () => void;
 }) {
-  const { colors, fonts, radii } = useTheme();
+  const { colors, radii } = useTheme();
   const [camIdx, setCamIdx] = React.useState(
     Math.max(0, game.cameras.findIndex(c => c.state === 'available'))
   );
@@ -218,7 +218,7 @@ export function GameDetailScreen({ game, onBack, isFollowing = false, onToggleFo
       <Modal visible={isFullscreen} animationType="fade" statusBarTranslucent>
         <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center' }}>
           <Video
-            source={{ uri: activeCam?.streamUrl }}
+            source={{ uri: activeCam?.streamUrl ?? '' }}
             style={StyleSheet.absoluteFill}
             resizeMode={ResizeMode.CONTAIN}
             shouldPlay

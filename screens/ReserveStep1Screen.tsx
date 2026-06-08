@@ -5,12 +5,16 @@ import { Svg, Rect, Line } from 'react-native-svg';
 import { ChevronLeft, Check, Camera } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { Button, AppHeader, SurfaceChip } from '../components/ui';
-import type { ClubCourtPublic } from '../data/mocks';
+import { ClubMap } from '../components/ClubMap';
+import type { ClubCourtPublic } from '../data/types';
 import { StepIndicator } from './reserveCommon';
 
 interface Props {
   clubName: string;
   courts: ClubCourtPublic[];
+  /** Ubicación del club para el mapa. */
+  latitude?: number | null;
+  longitude?: number | null;
   /** Initial selection (e.g. court tapped from ClubProfile's Reservar CTA). */
   initialCourtId?: string;
   onBack?: () => void;
@@ -22,7 +26,7 @@ interface Props {
  * In production:
  *   GET /clubs/:id  → ClubPublic (with courts[])
  */
-export function ReserveStep1Screen({ clubName, courts, initialCourtId, onBack, onContinue }: Props) {
+export function ReserveStep1Screen({ clubName, courts, latitude, longitude, initialCourtId, onBack, onContinue }: Props) {
   const { colors } = useTheme();
   const [selected, setSelected] = React.useState<string>(initialCourtId || courts[0]?.id || '');
 
@@ -41,6 +45,15 @@ export function ReserveStep1Screen({ clubName, courts, initialCourtId, onBack, o
           <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted2, letterSpacing: 0.8 }}>CLUB</Text>
           <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text, letterSpacing: -0.3 }}>{clubName}</Text>
         </View>
+
+        {/* Mapa del local */}
+        <ClubMap
+          latitude={latitude}
+          longitude={longitude}
+          title={clubName}
+          height={140}
+          style={{ borderRadius: 14, borderWidth: 1, borderColor: colors.line }}
+        />
 
         <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text }}>Elegí la cancha</Text>
         <View style={{ gap: 10 }}>

@@ -9,12 +9,12 @@ import { LiveGameTile, FeedPost, LiveGameData, UpcomingGameTile } from '../compo
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import { VideoPreviewModal } from '../components/VideoPreviewModal';
 import { UpcomingMatchSheet } from '../components/UpcomingMatchSheet';
-import type { FeedPost as FeedPostData, InvitablePlayer, UpcomingGameData, UpcomingGamePlayer } from '../data/mocks';
+import type { FeedPost as FeedPostData, InvitablePlayer, UpcomingGameData, UpcomingGamePlayer } from '../data/types';
 import type { ReelSection } from './ReelViewScreen';
 
 const tornaLogo = require('../assets/torna-icon.png');
 
-export type { UpcomingGamePlayer, UpcomingGameData } from '../data/mocks';
+export type { UpcomingGamePlayer, UpcomingGameData } from '../data/types';
 
 interface Props {
   greeting?: string;

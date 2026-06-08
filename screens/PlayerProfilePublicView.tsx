@@ -9,7 +9,7 @@ import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { SectionHeader, StatusBadge, Avatar, Button } from '../components/ui';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
-import type { PlayerPublic, PlayerClip } from '../data/mocks';
+import type { PlayerPublic, PlayerClip } from '../data/types';
 
 interface Props {
   player: PlayerPublic;
@@ -118,6 +118,11 @@ export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onTogg
           <SectionHeader title="Momentos destacados"
             action={<Text style={{ fontSize: 11, fontWeight: '700', color: colors.accentText }}>Ver todos</Text>}/>
         </View>
+        {player.clips.length === 0 && !(player.isLiveNow && player.liveGame) ? (
+          <View style={{ paddingHorizontal: 16, paddingVertical: 16 }}>
+            <Text style={{ fontSize: 13, color: colors.muted2 }}>Sin highlights disponibles</Text>
+          </View>
+        ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 16, gap: 10, paddingBottom: 8 }}>
           {/* LIVE preview — first tile when player is currently playing */}
@@ -179,6 +184,7 @@ export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onTogg
             </Pressable>
           ))}
         </ScrollView>
+        )}
 
         {/* Photos */}
         <View style={{ paddingHorizontal: 16, marginTop: 12 }}>

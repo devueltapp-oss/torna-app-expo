@@ -1,8 +1,7 @@
 import React from 'react';
 import { View, Text } from 'react-native';
 import { useTheme } from '../../../theme';
-import { Button, Input } from '../../../components/ui';
-import { VisibilityCard } from '../../../components/UploadSheet';
+import { Button, Input, VisibilityCard } from '../../../components/ui';
 
 const TITLE_MAX = 50;
 

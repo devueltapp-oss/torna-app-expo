@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import type { UpcomingGameData } from '../data/mocks';
+import type { UpcomingGameData } from '../data/types';
 
 /**
  * useOpenGames — partidas ABIERTAS a las que el usuario puede postularse.
@@ -14,7 +14,7 @@ import type { UpcomingGameData } from '../data/mocks';
  */
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
-const TOKEN_KEY = '@torna/auth-token';
+const TOKEN_KEY = 'torna_auth_token';
 
 interface BackendOpenGame {
   id: string;

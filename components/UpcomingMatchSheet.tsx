@@ -6,7 +6,7 @@ import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { Avatar, Button, StatusBadge } from './ui';
 import { ApplyMatchSheet } from './ApplyMatchSheet';
-import type { GameApplication, InvitablePlayer, UpcomingGameData, UpcomingGamePlayer } from '../data/mocks';
+import type { GameApplication, InvitablePlayer, UpcomingGameData, UpcomingGamePlayer } from '../data/types';
 
 export interface UpcomingMatchSheetProps {
   visible: boolean;
@@ -44,7 +44,7 @@ export function UpcomingMatchSheet({
   const handleAccept = async (appId: string) => {
     setLocalApplications(prev => prev.filter(a => a.id !== appId));
     onAcceptApplication?.(game?.id ?? '', appId);
-    const token = await SecureStore.getItemAsync('@torna/auth-token');
+    const token = await SecureStore.getItemAsync('torna_auth_token');
     fetch(
       `${process.env.EXPO_PUBLIC_API_URL ?? ''}/game/${game?.id}/applications/${appId}/accept`,
       { method: 'PATCH', headers: { Authorization: `Bearer ${token ?? ''}` } },
@@ -54,7 +54,7 @@ export function UpcomingMatchSheet({
   const handleReject = async (appId: string) => {
     setLocalApplications(prev => prev.filter(a => a.id !== appId));
     onRejectApplication?.(game?.id ?? '', appId);
-    const token = await SecureStore.getItemAsync('@torna/auth-token');
+    const token = await SecureStore.getItemAsync('torna_auth_token');
     fetch(
       `${process.env.EXPO_PUBLIC_API_URL ?? ''}/game/${game?.id}/applications/${appId}/reject`,
       { method: 'PATCH', headers: { Authorization: `Bearer ${token ?? ''}` } },
@@ -65,7 +65,7 @@ export function UpcomingMatchSheet({
     if (!game || watching) return;
     setWatching(true);
     try {
-      const token = await SecureStore.getItemAsync('@torna/auth-token');
+      const token = await SecureStore.getItemAsync('torna_auth_token');
       const method = isWatching ? 'DELETE' : 'POST';
       const res = await fetch(
         `${process.env.EXPO_PUBLIC_API_URL ?? ''}/game/${game.id}/watch`,

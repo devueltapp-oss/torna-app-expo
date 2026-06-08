@@ -13,7 +13,7 @@ import type { LiveGameData } from '../components/cards';
  */
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
-const TOKEN_KEY = '@torna/auth-token';
+const TOKEN_KEY = 'torna_auth_token';
 
 interface BackendLiveGame {
   id: string;
