@@ -1,10 +1,12 @@
 import React from 'react';
-import { View, Text, ScrollView, Image, Pressable } from 'react-native';
+import { View, Text, ScrollView, Image, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Lock, MapPin } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { Button, Input } from '../components/ui';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
+import { useAuth } from '../contexts/AuthContext';
+import { friendlyPasswordError } from './PlayerSettingsScreen';
 
 const tornaLogo = require('../assets/torna-icon.png');
 
@@ -56,12 +58,36 @@ function PasswordChecklist({ next, confirm }: { next: string; confirm: string })
 
 export function ProfileScreen({ profile, onSave, onChangePassword, onChangeTab, activeTab = 'profile', role = 'club' }: Props) {
   const { colors } = useTheme();
+  const { changePassword } = useAuth();
   const [tab, setTab] = React.useState<'profile' | 'security'>('profile');
   const [form, setForm] = React.useState<ClubProfile>(profile);
   const [pwCurrent, setPwCurrent] = React.useState('');
   const [pwNext, setPwNext] = React.useState('');
   const [pwConfirm, setPwConfirm] = React.useState('');
+  const [pwSubmitting, setPwSubmitting] = React.useState(false);
+  const [pwError, setPwError] = React.useState<string | null>(null);
   const set = (k: keyof ClubProfile) => (v: string) => setForm(s => ({ ...s, [k]: v }));
+
+  const pwRulesOk = PASSWORD_RULES(pwNext, pwConfirm).every(r => r.ok);
+  const canSubmitPw = !!pwCurrent && pwRulesOk && !pwSubmitting;
+
+  async function handleChangePassword() {
+    if (!canSubmitPw) return;
+    setPwError(null);
+    setPwSubmitting(true);
+    try {
+      await changePassword(pwCurrent, pwNext);
+      // Compat: si el contenedor pasó un callback, avisarle también.
+      onChangePassword?.(pwCurrent, pwNext);
+      setPwCurrent(''); setPwNext(''); setPwConfirm('');
+      setTab('profile');
+      Alert.alert('Listo', 'La contraseña del club fue actualizada.');
+    } catch (err: any) {
+      setPwError(friendlyPasswordError(err));
+    } finally {
+      setPwSubmitting(false);
+    }
+  }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
@@ -106,11 +132,17 @@ export function ProfileScreen({ profile, onSave, onChangePassword, onChangeTab, 
           </>
         ) : (
           <>
-            <Input label="Contraseña actual"     icon={<Lock size={18} color={colors.muted2}/>} value={pwCurrent} onChangeText={setPwCurrent} secureTextEntry />
-            <Input label="Nueva contraseña"      icon={<Lock size={18} color={colors.muted2}/>} value={pwNext} onChangeText={setPwNext} secureTextEntry />
-            <Input label="Confirmar contraseña"  icon={<Lock size={18} color={colors.muted2}/>} value={pwConfirm} onChangeText={setPwConfirm} secureTextEntry />
+            <Input label="Contraseña actual"     icon={<Lock size={18} color={colors.muted2}/>} value={pwCurrent} onChangeText={(v) => { setPwCurrent(v); setPwError(null); }} secureTextEntry />
+            <Input label="Nueva contraseña"      icon={<Lock size={18} color={colors.muted2}/>} value={pwNext} onChangeText={(v) => { setPwNext(v); setPwError(null); }} secureTextEntry />
+            <Input label="Confirmar contraseña"  icon={<Lock size={18} color={colors.muted2}/>} value={pwConfirm} onChangeText={(v) => { setPwConfirm(v); setPwError(null); }} secureTextEntry />
             <PasswordChecklist next={pwNext} confirm={pwConfirm}/>
-            <Button fullWidth variant="primary" onPress={() => onChangePassword?.(pwCurrent, pwNext)}>
+            {pwError ? (
+              <View style={{ backgroundColor: colors.warnBg, borderRadius: 10, padding: 12 }}>
+                <Text style={{ fontSize: 13, color: colors.warnFg, lineHeight: 18 }}>{pwError}</Text>
+              </View>
+            ) : null}
+            <Button fullWidth variant={canSubmitPw ? 'primary' : 'disabled'} loading={pwSubmitting}
+              onPress={canSubmitPw ? handleChangePassword : undefined}>
               Actualizar contraseña
             </Button>
           </>

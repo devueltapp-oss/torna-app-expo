@@ -20,6 +20,7 @@ export interface UpcomingGamePlayer {
   username: string;
   name?: string;
   profilePicture?: string;
+  team?: 1 | 2;
 }
 
 export interface GameApplication {
@@ -42,6 +43,15 @@ export interface UpcomingGameData {
   maxPlayers?: number;
   isCreator?: boolean;
   applications?: GameApplication[];
+  /** Estado real de la partida (SCHEDULED/WAITING/LIVE/…). */
+  status?: string;
+  /** Equipo del usuario autenticado (1 = lado owner, 2 = pareja retadora). */
+  myTeam?: 1 | 2;
+  /** True si el usuario autenticado participa de la partida. */
+  viewerIsParticipant?: boolean;
+  /** Ubicación del club (para abrir el pin exacto en Google Maps). */
+  clubLat?: number | null;
+  clubLng?: number | null;
 }
 
 /* ─────────── Club admin: reservas del día ─────────── */
@@ -162,8 +172,8 @@ export interface PlayerPublic {
   isLiveNow: boolean;
   liveGame: PlayerLiveGame | null;
   clips: PlayerClip[];
-  /** Grid de fotos. URLs en prod. */
-  photos: number[];
+  /** Legacy: el perfil ya no muestra fotos sueltas (el contenido son highlights). */
+  photos?: number[];
   notifyOnMatch?: boolean;
   followingCount: number;
   followersList: FollowItem[];
@@ -274,6 +284,8 @@ export interface LibraryMatch extends LibraryItemBase {
   /** URL del HLS del partido completo — se pasa al VideoEditor al recortar. */
   recordingUrl: string;
   durationSeconds: number;
+  /** True si ya se registró el resultado propio (gané/perdí) de esta partida. */
+  resultRegistered?: boolean;
 }
 
 export interface LibraryHighlight extends LibraryItemBase {

@@ -5,7 +5,7 @@ import { Svg, Rect, Line } from 'react-native-svg';
 import { ChevronLeft, Check, Camera } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { Button, AppHeader, SurfaceChip } from '../components/ui';
-import { ClubMap } from '../components/ClubMap';
+import { MapsButton } from '../components/MapsButton';
 import type { ClubCourtPublic } from '../data/types';
 import { StepIndicator } from './reserveCommon';
 
@@ -46,14 +46,8 @@ export function ReserveStep1Screen({ clubName, courts, latitude, longitude, init
           <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text, letterSpacing: -0.3 }}>{clubName}</Text>
         </View>
 
-        {/* Mapa del local */}
-        <ClubMap
-          latitude={latitude}
-          longitude={longitude}
-          title={clubName}
-          height={140}
-          style={{ borderRadius: 14, borderWidth: 1, borderColor: colors.line }}
-        />
+        {/* Referencia a Google Maps (sin mapa embebido) */}
+        <MapsButton latitude={latitude} longitude={longitude} query={clubName} />
 
         <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text }}>Elegí la cancha</Text>
         <View style={{ gap: 10 }}>

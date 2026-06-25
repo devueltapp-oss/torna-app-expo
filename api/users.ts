@@ -32,23 +32,41 @@ export interface UserProfile {
   followersCount: number;
   followingCount: number;
   isFollowing: boolean;
+  /** Si el usuario autenticado tiene activadas las notificaciones de partidos de :id. */
+  notifyOnMatch: boolean;
 }
 
 export interface UserSearchResult {
   id: string;
   username: string;
   name: string | null;
-  email: string;
+  /** `/user/search-all` no devuelve email; opcional para reflejar la realidad. */
+  email?: string;
   profilePicture: string | null;
   region: string | null;
   isClub: boolean;
 }
 
-async function authedGet<T>(path: string): Promise<T> {
+async function authedGet<T>(path: string, timeoutMs = 15000): Promise<T> {
   const token = await SecureStore.getItemAsync(TOKEN_KEY);
-  const res = await fetch(`${API_URL}${path}`, {
-    headers: { Authorization: `Bearer ${token ?? ''}` },
-  });
+  // Timeout: sin esto, una request que cuelga deja la pantalla cargando para
+  // siempre (no hay forma de que el hook resuelva). AbortController la corta.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      headers: { Authorization: `Bearer ${token ?? ''}` },
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    if ((e as any)?.name === 'AbortError') {
+      throw new Error(`La petición tardó demasiado (timeout ${timeoutMs / 1000}s): ${path}`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) {
     const err = new Error(`HTTP ${res.status}`);
     (err as any).status = res.status;
@@ -120,4 +138,22 @@ export async function fetchFollowing(id: string): Promise<FollowItem[]> {
     `/follow/following/${encodeURIComponent(id)}`,
   );
   return (res?.data ?? []).map((row) => toFollowItem(row.user));
+}
+
+/**
+ * Activa/desactiva las notificaciones de partidos de un usuario seguido
+ * (PATCH /follow/notify/:userId). Persiste `Follower.notifyOnMatch`.
+ */
+export async function setFollowNotify(userId: string, notify: boolean): Promise<void> {
+  const token = await SecureStore.getItemAsync(TOKEN_KEY);
+  const res = await fetch(`${API_URL}/follow/notify/${encodeURIComponent(userId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token ?? ''}` },
+    body: JSON.stringify({ notify }),
+  });
+  if (!res.ok) {
+    const err = new Error(`HTTP ${res.status}`);
+    (err as any).status = res.status;
+    throw err;
+  }
 }

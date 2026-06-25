@@ -56,37 +56,50 @@ export function useUserProfile(id: string | undefined) {
     }
     setLoading(true);
     setError(null);
+
+    // 1) Perfil = lo crítico. En cuanto resuelve, la pantalla ya puede renderizar.
+    //    NO lo metemos en el mismo Promise.all que los datos secundarios: si uno
+    //    de esos cuelga, no debe dejar el perfil (y la pantalla) cargando para
+    //    siempre.
+    let p: Awaited<ReturnType<typeof fetchUserProfile>>;
     try {
-      // El perfil es lo crítico; highlights y listas de follow degradan a [] si fallan.
-      const [p, highlights, followersList, followingList] = await Promise.all([
-        fetchUserProfile(id),
-        fetchUserHighlights(id).catch(() => [] as UserHighlight[]),
-        fetchFollowers(id).catch(() => []),
-        fetchFollowing(id).catch(() => []),
-      ]);
-      setPlayer({
-        id: p.id,
-        name: p.name ?? p.username,
-        username: withAt(p.username),
-        club: '',
-        location: p.region ?? '',
-        followers: p.followersCount ?? 0,
-        isFollowing: p.isFollowing ?? false,
-        notifyOnMatch: false,
-        isLiveNow: false,
-        liveGame: null,
-        clips: highlights.map(mapHighlight),
-        photos: [],
-        followingCount: p.followingCount ?? 0,
-        followersList,
-        followingList,
-      });
+      p = await fetchUserProfile(id);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo cargar el perfil.');
       setPlayer(null);
-    } finally {
       setLoading(false);
+      return;
     }
+
+    setPlayer({
+      id: p.id,
+      name: p.name ?? p.username,
+      username: withAt(p.username),
+      club: '',
+      location: p.region ?? '',
+      followers: p.followersCount ?? 0,
+      isFollowing: p.isFollowing ?? false,
+      notifyOnMatch: p.notifyOnMatch ?? false,
+      isLiveNow: false,
+      liveGame: null,
+      clips: [],
+      photos: [],
+      followingCount: p.followingCount ?? 0,
+      followersList: [],
+      followingList: [],
+    });
+    setLoading(false);
+
+    // 2) Datos secundarios (highlights + listas de follow): enriquecen el perfil
+    //    ya visible. Degradan a [] si fallan y NO bloquean el render.
+    const [highlights, followersList, followingList] = await Promise.all([
+      fetchUserHighlights(id).catch(() => [] as UserHighlight[]),
+      fetchFollowers(id).catch(() => []),
+      fetchFollowing(id).catch(() => []),
+    ]);
+    setPlayer((prev) =>
+      prev ? { ...prev, clips: highlights.map(mapHighlight), followersList, followingList } : prev,
+    );
   }, [id]);
 
   useEffect(() => {

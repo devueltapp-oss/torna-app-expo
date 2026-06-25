@@ -4,11 +4,11 @@
  * see players, follow the club. NO stream control, NO BLE pairing.
  */
 import React from 'react';
-import { View, Text, Pressable, ScrollView, Image, StyleSheet, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, Pressable, ScrollView, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Svg, Rect, Line } from 'react-native-svg';
 import { Video, ResizeMode } from 'expo-av';
-import { ChevronLeft, MoreHorizontal, Eye, Play, ChevronRight, Scissors, Maximize2, Minimize2 } from 'lucide-react-native';
+import { ChevronLeft, MoreHorizontal, Eye, Play, ChevronRight, Scissors, Maximize2 } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { Avatar, AvatarStack, Button, StatusBadge, SurfaceChip, SectionHeader } from '../components/ui';
@@ -30,17 +30,35 @@ export interface GameDetailData {
   cameras: CameraAngleData[];
 }
 
-export function GameDetailScreen({ game, onBack, isFollowing = false, onToggleFollow, onCreateHighlight }: {
-  game: GameDetailData; onBack?: () => void; isFollowing?: boolean; onToggleFollow?: () => void;
+export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing = false, onToggleFollow, onCreateHighlight }: {
+  game: GameDetailData; fallbackStreamUrl?: string; onBack?: () => void; isFollowing?: boolean; onToggleFollow?: () => void;
   onCreateHighlight?: () => void;
 }) {
   const { colors, radii } = useTheme();
-  const [camIdx, setCamIdx] = React.useState(
-    Math.max(0, game.cameras.findIndex(c => c.state === 'available'))
-  );
+  const [camIdx, setCamIdx] = React.useState(0);
   const activeCam = game.cameras[camIdx];
   const [streamError, setStreamError] = React.useState(false);
-  const [isFullscreen, setIsFullscreen] = React.useState(false);
+  const videoRef = React.useRef<Video>(null);
+
+  // Reutiliza la URL ya validada por la preview del Home (GET /game/live) si la cámara
+  // activa del detalle (GET /game/:id) todavía no trae stream o el fetch falló.
+  const streamSrc = activeCam?.streamUrl || fallbackStreamUrl;
+
+  if (__DEV__) {
+    console.log('[STREAM DEBUG] GameDetail cameras=', game.cameras.length,
+      'activeCam=', activeCam, 'fallbackStreamUrl=', fallbackStreamUrl, 'streamSrc=', streamSrc);
+  }
+
+  // El detalle carga async: las cámaras llegan después del montaje. Si la cámara
+  // activa no tiene stream (p. ej. una secundaria sin URL tras la unificación, en
+  // la que solo la primaria trae streamingUrl), saltar a la primera disponible.
+  // Evita el "Stream no disponible para esta cámara" al entrar.
+  React.useEffect(() => {
+    const firstAvailable = game.cameras.findIndex((c) => c.state === 'available');
+    if (firstAvailable >= 0 && game.cameras[camIdx]?.state !== 'available') {
+      setCamIdx(firstAvailable);
+    }
+  }, [game.cameras]); // eslint-disable-line react-hooks/exhaustive-deps
 
   React.useEffect(() => { setStreamError(false); }, [activeCam?.id]);
 
@@ -65,10 +83,11 @@ export function GameDetailScreen({ game, onBack, isFollowing = false, onToggleFo
 
         {/* HLS player */}
         <View style={{ marginHorizontal: 16, borderRadius: 18, overflow: 'hidden', aspectRatio: 16/9, backgroundColor: colors.ink2, borderWidth: 1, borderColor: '#334155', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-          {activeCam?.streamUrl && !streamError ? (
+          {streamSrc && !streamError ? (
             <Video
-              key={activeCam.id}
-              source={{ uri: activeCam.streamUrl }}
+              ref={videoRef}
+              key={activeCam?.id ?? game.id}
+              source={{ uri: streamSrc }}
               style={StyleSheet.absoluteFill}
               resizeMode={ResizeMode.COVER}
               shouldPlay
@@ -113,9 +132,9 @@ export function GameDetailScreen({ game, onBack, isFollowing = false, onToggleFo
             <Eye size={14} color="#FFFFFF" />
             <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '600' }}>{game.viewers}</Text>
           </View>
-          {activeCam?.streamUrl && !streamError ? (
+          {streamSrc && !streamError ? (
             <TouchableOpacity
-              onPress={() => setIsFullscreen(true)}
+              onPress={() => videoRef.current?.presentFullscreenPlayer()}
               style={{
                 position: 'absolute',
                 top: 10,
@@ -165,7 +184,7 @@ export function GameDetailScreen({ game, onBack, isFollowing = false, onToggleFo
           <View>
             <Text style={{ color: colors.text, fontWeight: '800', fontSize: 20, letterSpacing: -0.2 }}>{game.court}</Text>
             <Text style={{ color: colors.muted2, fontSize: 13, marginTop: 2 }}>
-              {game.time} · {game.date} · <Text style={{ fontFamily: fonts.mono }}>{game.id}</Text>
+              {[game.time, game.date].filter(Boolean).join(' · ')}
             </Text>
           </View>
           <SurfaceChip surface={game.floor}/>
@@ -215,29 +234,6 @@ export function GameDetailScreen({ game, onBack, isFollowing = false, onToggleFo
           </View>
         ) : null}
       </ScrollView>
-      <Modal visible={isFullscreen} animationType="fade" statusBarTranslucent>
-        <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center' }}>
-          <Video
-            source={{ uri: activeCam?.streamUrl ?? '' }}
-            style={StyleSheet.absoluteFill}
-            resizeMode={ResizeMode.CONTAIN}
-            shouldPlay
-            isMuted={false}
-            isLooping={false}
-          />
-          <TouchableOpacity
-            onPress={() => setIsFullscreen(false)}
-            style={{
-              position: 'absolute', top: 48, right: 16,
-              width: 40, height: 40, borderRadius: 20,
-              backgroundColor: 'rgba(0,0,0,0.55)',
-              alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Minimize2 size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }

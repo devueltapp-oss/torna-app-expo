@@ -12,18 +12,23 @@ export interface ProcessingStepProps {
   onCancel: () => void;
 }
 
-export function ProcessingStep({ status, progress, error, onRetry, onCancel }: ProcessingStepProps) {
+export function ProcessingStep({ status, error, onRetry, onCancel }: ProcessingStepProps) {
   const { colors } = useTheme();
 
-  // Reanimated NO está en el bundle (regla de no agregar deps). Usamos
-  // Animated.Value (core RN) — mismo efecto visual para la barra de progreso.
-  const widthAnim = React.useRef(new Animated.Value(0)).current;
+  // El recorte es server-side y síncrono: no hay porcentaje real. Mostramos una
+  // barra indeterminada (un segmento que recorre el track en loop) mientras corre.
+  // Reanimated NO está en el bundle (regla de no agregar deps) → Animated core RN.
+  const loopAnim = React.useRef(new Animated.Value(0)).current;
   React.useEffect(() => {
-    Animated.timing(widthAnim, {
-      toValue: progress, duration: 320, easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-  }, [progress]);
+    const anim = Animated.loop(
+      Animated.timing(loopAnim, {
+        toValue: 1, duration: 1100, easing: Easing.inOut(Easing.ease),
+        useNativeDriver: false,
+      }),
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [loopAnim]);
 
   return (
     <View style={{ paddingHorizontal: 16, gap: 16 }}>
@@ -35,6 +40,11 @@ export function ProcessingStep({ status, progress, error, onRetry, onCancel }: P
         <Text style={{ fontSize: 13, color: colors.muted2, marginTop: 2 }}>
           {error ? 'No pudimos procesar el corte. Intentá de nuevo.' : 'Esto puede tardar unos segundos. No cierres la app.'}
         </Text>
+        {error ? (
+          <Text style={{ fontSize: 12, color: colors.danger, marginTop: 8, fontFamily: 'Menlo' }}>
+            {error}
+          </Text>
+        ) : null}
       </View>
 
       <View style={{
@@ -52,7 +62,7 @@ export function ProcessingStep({ status, progress, error, onRetry, onCancel }: P
             : <ActivityIndicator size="large" color={colors.ink}/>}
         </View>
         <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700', fontFamily: 'Menlo' }}>
-          {error ? 'FAILED' : `${status} · ${Math.round(progress)}%`}
+          {error ? 'FAILED' : 'Procesando en el servidor…'}
         </Text>
       </View>
 
@@ -60,8 +70,9 @@ export function ProcessingStep({ status, progress, error, onRetry, onCancel }: P
         <View>
           <View style={{ height: 8, backgroundColor: colors.bg2, borderRadius: 4, overflow: 'hidden' }}>
             <Animated.View style={{
-              width: widthAnim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }),
-              height: '100%', backgroundColor: colors.accent,
+              position: 'absolute', top: 0, bottom: 0, width: '40%',
+              backgroundColor: colors.accent, borderRadius: 4,
+              left: loopAnim.interpolate({ inputRange: [0, 1], outputRange: ['-40%', '100%'] }),
             }}/>
           </View>
           <Text style={{ marginTop: 6, fontSize: 11, color: colors.muted2, fontFamily: 'Menlo' }}>

@@ -4,10 +4,14 @@ import {
   FlatList, TextInput, KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { X, Maximize2, MessageCircle, Send } from 'lucide-react-native';
+import { X, Maximize2, MessageCircle, Send, Heart } from 'lucide-react-native';
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
+import {
+  fetchHighlightDetail, toggleHighlightLike, addHighlightComment,
+  type HighlightComment,
+} from '../api/highlights';
 
 export interface VideoPreviewModalProps {
   visible: boolean;
@@ -17,15 +21,36 @@ export interface VideoPreviewModalProps {
   onClose: () => void;
   autoFullscreen?: boolean;
   showComments?: boolean;
+  /** Id del highlight: habilita likes y comentarios reales (GET /highlights/:id). */
+  highlightId?: string;
 }
 
-interface Comment { id: string; user: string; text: string; time: string; }
+/** Fila de comentario ya mapeada para render. */
+interface CommentRow { id: string; user: string; text: string; time: string; }
 
-const INITIAL_COMMENTS: Comment[] = [
-  { id: '1', user: 'carlos_padel', text: '¡Qué punto! Tremendo nivel 🔥', time: '2m' },
-  { id: '2', user: 'marta.rq',     text: 'El remate desde el fondo fue increíble', time: '5m' },
-  { id: '3', user: 'padelero92',   text: 'Clase de juego, lo vi tres veces', time: '12m' },
-];
+function mapComment(c: HighlightComment): CommentRow {
+  return {
+    id: c.id,
+    user: c.name ?? c.username,
+    text: c.content,
+    time: relativeTime(c.createdAt),
+  };
+}
+
+/** ISO → etiqueta corta relativa ("Ahora", "5m", "3h", "2d", o fecha). */
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const diff = Math.max(0, Date.now() - then);
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return 'Ahora';
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d`;
+  return new Date(then).toLocaleDateString('es', { day: 'numeric', month: 'short' });
+}
 
 function fmt(s: number) {
   s = Math.max(0, Math.round(s));
@@ -43,6 +68,7 @@ function fmt(s: number) {
  */
 export function VideoPreviewModal({
   visible, url, title, durationSeconds, onClose, autoFullscreen, showComments = false,
+  highlightId,
 }: VideoPreviewModalProps) {
   const { colors } = useTheme();
   const videoRef = React.useRef<Video>(null);
@@ -51,19 +77,54 @@ export function VideoPreviewModal({
   const [positionSec, setPositionSec] = React.useState(0);
   const [totalSec, setTotalSec] = React.useState(durationSeconds);
   const hasAutoFullscreened = React.useRef(false);
-  const [comments, setComments] = React.useState<Comment[]>(INITIAL_COMMENTS);
+  const [comments, setComments] = React.useState<CommentRow[]>([]);
   const [commentText, setCommentText] = React.useState('');
+  const [sending, setSending] = React.useState(false);
+  const [likesCount, setLikesCount] = React.useState(0);
+  const [isLiked, setIsLiked] = React.useState(false);
 
   React.useEffect(() => {
     if (visible) {
       setPositionSec(0);
       setIsPlaying(false);
-      setComments(INITIAL_COMMENTS);
       setCommentText('');
+      setComments([]);
+      setLikesCount(0);
+      setIsLiked(false);
+      // Comentarios + likes reales del highlight (si el modal recibió highlightId).
+      if (highlightId && showComments) {
+        let cancelled = false;
+        fetchHighlightDetail(highlightId)
+          .then((d) => {
+            if (cancelled) return;
+            setComments(d.comments.map(mapComment));
+            setLikesCount(d.likesCount);
+            setIsLiked(d.isLikedByMe);
+          })
+          .catch(() => { /* sin datos → estado vacío, sin mock */ });
+        return () => { cancelled = true; };
+      }
     } else {
       hasAutoFullscreened.current = false;
     }
-  }, [visible]);
+  }, [visible, highlightId, showComments]);
+
+  async function toggleLike() {
+    if (!highlightId) return;
+    const prevLiked = isLiked;
+    const prevCount = likesCount;
+    // Optimista
+    setIsLiked(!prevLiked);
+    setLikesCount(prevCount + (prevLiked ? -1 : 1));
+    try {
+      const res = await toggleHighlightLike(highlightId);
+      setIsLiked(res.liked);
+      setLikesCount(res.likesCount);
+    } catch {
+      setIsLiked(prevLiked);
+      setLikesCount(prevCount);
+    }
+  }
 
   function handleStatus(status: AVPlaybackStatus) {
     if (!status.isLoaded) return;
@@ -84,15 +145,20 @@ export function VideoPreviewModal({
     else videoRef.current?.playAsync();
   }
 
-  function sendComment() {
-    if (!commentText.trim()) return;
-    setComments(prev => [{
-      id: Date.now().toString(),
-      user: 'vos',
-      text: commentText.trim(),
-      time: 'Ahora',
-    }, ...prev]);
+  async function sendComment() {
+    const text = commentText.trim();
+    if (!text || sending || !highlightId) return;
+    setSending(true);
     setCommentText('');
+    try {
+      const created = await addHighlightComment(highlightId, text);
+      setComments(prev => [mapComment(created), ...prev]);
+    } catch {
+      // Restaurar el texto si falló, para no perder el comentario.
+      setCommentText(text);
+    } finally {
+      setSending(false);
+    }
   }
 
   const pct = totalSec > 0 ? Math.min(1, positionSec / totalSec) : 0;
@@ -216,19 +282,33 @@ export function VideoPreviewModal({
         {/* ── Sección de comentarios ── */}
         {showComments && (
           <>
-            {/* Contador */}
+            {/* Like + contador de comentarios */}
             <View style={{
-              flexDirection: 'row', alignItems: 'center', gap: 6,
+              flexDirection: 'row', alignItems: 'center', gap: 16,
               paddingHorizontal: 16, paddingVertical: 10,
               borderTopWidth: 1, borderTopColor: colors.line,
             }}>
-              <MessageCircle size={14} color={colors.muted2}/>
-              <Text style={{
-                color: colors.muted2, fontSize: 12,
-                fontFamily: fonts.bold,
-              }}>
-                {comments.length} comentario{comments.length !== 1 ? 's' : ''}
-              </Text>
+              <Pressable
+                onPress={toggleLike}
+                disabled={!highlightId}
+                hitSlop={8}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+              >
+                <Heart
+                  size={16}
+                  color={isLiked ? colors.live : colors.muted2}
+                  fill={isLiked ? colors.live : 'none'}
+                />
+                <Text style={{ color: colors.muted2, fontSize: 12, fontFamily: fonts.bold }}>
+                  {likesCount}
+                </Text>
+              </Pressable>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <MessageCircle size={14} color={colors.muted2}/>
+                <Text style={{ color: colors.muted2, fontSize: 12, fontFamily: fonts.bold }}>
+                  {comments.length} comentario{comments.length !== 1 ? 's' : ''}
+                </Text>
+              </View>
             </View>
 
             {/* Lista */}
@@ -237,6 +317,11 @@ export function VideoPreviewModal({
               data={comments}
               keyExtractor={(c) => c.id}
               contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8, gap: 18 }}
+              ListEmptyComponent={
+                <Text style={{ color: colors.muted2, fontSize: 13, paddingTop: 16, textAlign: 'center' }}>
+                  Sé el primero en comentar.
+                </Text>
+              }
               renderItem={({ item }) => (
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <View style={{
@@ -279,8 +364,9 @@ export function VideoPreviewModal({
                 <TextInput
                   value={commentText}
                   onChangeText={setCommentText}
-                  placeholder="Escribe un comentario..."
+                  placeholder={highlightId ? 'Escribe un comentario...' : 'Comentarios no disponibles'}
                   placeholderTextColor={colors.muted2}
+                  editable={!!highlightId && !sending}
                   returnKeyType="send"
                   onSubmitEditing={sendComment}
                   style={{
@@ -296,14 +382,14 @@ export function VideoPreviewModal({
                 />
                 <Pressable
                   onPress={sendComment}
-                  disabled={!commentText.trim()}
+                  disabled={!commentText.trim() || sending || !highlightId}
                   style={{
                     width: 42, height: 42, borderRadius: 12,
-                    backgroundColor: commentText.trim() ? colors.accent : colors.line,
+                    backgroundColor: commentText.trim() && !sending ? colors.accent : colors.line,
                     alignItems: 'center', justifyContent: 'center',
                   }}
                 >
-                  <Send size={18} color={commentText.trim() ? colors.ink : colors.muted2}/>
+                  <Send size={18} color={commentText.trim() && !sending ? colors.ink : colors.muted2}/>
                 </Pressable>
               </View>
             </KeyboardAvoidingView>

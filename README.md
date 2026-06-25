@@ -42,13 +42,15 @@ setMode('system');  // seguir al SO
 
 ## 🔌 Integración con la API real
 
-Por defecto cada pantalla recibe sus datos por props desde `MOCK_*`
-exports en `data/mocks.ts`. Para conectar a la API real:
+La app **ya no usa mocks de datos**: consume la API real vía clientes
+(`api/*`) y hooks (`hooks/use*`). `data/types.ts` (antes `mocks.ts`) solo
+exporta tipos. Donde todavía no hay endpoint, la pantalla muestra **estado
+vacío** — nunca datos falsos. Patrón para sumar/usar un endpoint:
 
-1. Crear hook `hooks/useFoo.ts` con tipo de retorno = tipo del mock.
-2. La pantalla sigue recibiendo datos por props.
+1. Crear cliente `api/foo.ts` y/o hook `hooks/useFoo.ts` con tipo de retorno
+   = el tipo de `data/types.ts`.
+2. La pantalla (presentacional) recibe los datos por props.
 3. El container/route en `App.tsx` llama al hook y le pasa los datos.
-4. Borrar el `MOCK_*` solo cuando el hook esté probado.
 
-Endpoints esperados están documentados en `CLAUDE.md` → "API esperada
-(contratos del backend)".
+Los endpoints reales que la app consume están documentados en `CLAUDE.md`
+→ "API real (lo que la app consume)".

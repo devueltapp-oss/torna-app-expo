@@ -9,7 +9,7 @@
  * persistido en AsyncStorage por la propia provider.
  */
 import React from 'react';
-import { View, Text, Pressable, ScrollView, ActivityIndicator, Image } from 'react-native';
+import { View, Text, Pressable, ScrollView, ActivityIndicator, Image, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronRight, Lock, Sun, Moon, MonitorSmartphone } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -33,13 +33,30 @@ export interface PlayerSettingsScreenProps {
 
 export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onChangeTab }: PlayerSettingsScreenProps) {
   const { colors, mode, setMode } = useTheme();
-  const { user, updateProfilePicture, updateFrontPage } = useAuth();
+  const { user, updateProfilePicture, updateFrontPage, changePassword } = useAuth();
   const [section, setSection] = React.useState<Section>('overview');
   const [name, setName]         = React.useState(owner.name);
   const [username, setUsername] = React.useState(owner.username);
   const [pwCurrent, setPwCurrent] = React.useState('');
   const [pwNew, setPwNew]         = React.useState('');
   const [pwConfirm, setPwConfirm] = React.useState('');
+  const [pwSubmitting, setPwSubmitting] = React.useState(false);
+  const [pwError, setPwError]     = React.useState<string | null>(null);
+
+  async function handleChangePassword() {
+    setPwError(null);
+    setPwSubmitting(true);
+    try {
+      await changePassword(pwCurrent, pwNew);
+      setPwCurrent(''); setPwNew(''); setPwConfirm('');
+      setSection('overview');
+      Alert.alert('Listo', 'Tu contraseña fue actualizada.');
+    } catch (err: any) {
+      setPwError(friendlyPasswordError(err));
+    } finally {
+      setPwSubmitting(false);
+    }
+  }
 
   // Foto de perfil — única imagen subible. Sube a B2 y persiste vía PATCH /user/me.
   const [avatar, setAvatar] = React.useState<string | undefined>(user?.profilePicture);
@@ -138,9 +155,13 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
           <PasswordSection
             colors={colors}
             pwCurrent={pwCurrent} pwNew={pwNew} pwConfirm={pwConfirm}
-            onChangeCurrent={setPwCurrent} onChangeNew={setPwNew} onChangeConfirm={setPwConfirm}
+            onChangeCurrent={(v) => { setPwCurrent(v); setPwError(null); }}
+            onChangeNew={(v) => { setPwNew(v); setPwError(null); }}
+            onChangeConfirm={(v) => { setPwConfirm(v); setPwError(null); }}
+            submitting={pwSubmitting}
+            error={pwError}
             onCancel={() => setSection('overview')}
-            onSave={() => setSection('overview')}
+            onSave={handleChangePassword}
           />
         )}
       </ScrollView>
@@ -329,11 +350,13 @@ function PasswordSection({
   colors,
   pwCurrent, pwNew, pwConfirm,
   onChangeCurrent, onChangeNew, onChangeConfirm,
+  submitting, error,
   onCancel, onSave,
 }: {
   colors: ReturnType<typeof useTheme>['colors'];
   pwCurrent: string; pwNew: string; pwConfirm: string;
   onChangeCurrent: (s: string) => void; onChangeNew: (s: string) => void; onChangeConfirm: (s: string) => void;
+  submitting: boolean; error: string | null;
   onCancel: () => void; onSave: () => void;
 }) {
   const mismatch = pwConfirm && pwNew !== pwConfirm;
@@ -343,7 +366,7 @@ function PasswordSection({
     { ok: /[0-9]/.test(pwNew),          label: 'Un número' },
     { ok: !!pwCurrent,                  label: 'Contraseña actual ingresada' },
   ];
-  const allOk = checks.every(c => c.ok) && !mismatch;
+  const allOk = checks.every(c => c.ok) && !mismatch && !submitting;
 
   return (
     <View style={{ paddingHorizontal: 16, paddingTop: 14, gap: 12 }}>
@@ -369,10 +392,17 @@ function PasswordSection({
         ))}
       </View>
 
+      {error ? (
+        <View style={{ backgroundColor: colors.warnBg, borderRadius: 10, padding: 12 }}>
+          <Text style={{ fontSize: 13, color: colors.warnFg, lineHeight: 18 }}>{error}</Text>
+        </View>
+      ) : null}
+
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
         <Button variant="soft" size="lg" onPress={onCancel}>Cancelar</Button>
         <View style={{ flex: 1 }}>
           <Button fullWidth size="lg" variant={allOk ? 'primary' : 'disabled'}
+            loading={submitting}
             onPress={allOk ? onSave : undefined}>
             Actualizar
           </Button>
@@ -383,6 +413,31 @@ function PasswordSection({
 }
 
 /* ─────────────────  Helpers  ───────────────── */
+
+// Mapea errores de Firebase a mensajes legibles para el cambio de contraseña.
+export function friendlyPasswordError(err: any): string {
+  const msg: string = err?.code ?? err?.message ?? '';
+
+  if (msg.includes('wrong-password') || msg.includes('invalid-credential')) {
+    return 'La contraseña actual es incorrecta.';
+  }
+  if (msg.includes('weak-password')) {
+    return 'La nueva contraseña es muy débil. Usá al menos 8 caracteres.';
+  }
+  if (msg.includes('requires-recent-login')) {
+    return 'Por seguridad, volvé a iniciar sesión e intentá de nuevo.';
+  }
+  if (msg.includes('too-many-requests')) {
+    return 'Demasiados intentos. Esperá unos minutos y volvé a intentar.';
+  }
+  if (msg.includes('user-not-found') || msg.includes('user-mismatch')) {
+    return 'Esta cuenta no usa contraseña (entraste con Google/Apple).';
+  }
+  if (msg.includes('network') || msg.includes('Network')) {
+    return 'Sin conexión a internet. Verificá tu red e intentá de nuevo.';
+  }
+  return 'No se pudo actualizar la contraseña. Intentá de nuevo.';
+}
 
 function SettingsRow({ label, value, onPress }: {
   label: string; value: string; onPress?: () => void;

@@ -60,7 +60,6 @@ function LiveReelItem({
   const { colors } = useTheme();
   const videoRef = React.useRef<Video>(null);
   const [isBuffering, setIsBuffering] = React.useState(true);
-  const [isFullscreen, setIsFullscreen] = React.useState(false);
   const [showComments, setShowComments] = React.useState(false);
   const [commentText, setCommentText] = React.useState('');
   const lastTapRef = React.useRef<number>(0);
@@ -82,15 +81,9 @@ function LiveReelItem({
   function handleVideoPress() {
     const now = Date.now();
     if (now - lastTapRef.current < 300) {
-      videoRef.current?.pauseAsync().catch(() => {});
-      setIsFullscreen(true);
+      videoRef.current?.presentFullscreenPlayer().catch(() => {});
     }
     lastTapRef.current = now;
-  }
-
-  function closeFullscreen() {
-    setIsFullscreen(false);
-    if (isActive) videoRef.current?.playAsync().catch(() => {});
   }
 
   function sendComment() {
@@ -131,12 +124,15 @@ function LiveReelItem({
           />
         )}
 
-        <View style={{
-          position: 'absolute', top: 12, right: 12, zIndex: 2,
-          backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 8, padding: 7,
-        }}>
+        <Pressable
+          onPress={() => videoRef.current?.presentFullscreenPlayer().catch(() => {})}
+          hitSlop={8}
+          style={{
+            position: 'absolute', top: 12, right: 12, zIndex: 2,
+            backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 8, padding: 7,
+          }}>
           <Maximize2 size={16} color="#FFFFFF" />
-        </View>
+        </Pressable>
       </Pressable>
 
       {/* Info */}
@@ -179,38 +175,6 @@ function LiveReelItem({
         </Pressable>
       </View>
     </View>
-
-    {/* Fullscreen modal */}
-    <Modal
-      visible={isFullscreen}
-      animationType="fade"
-      presentationStyle="fullScreen"
-      supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']}
-      onRequestClose={closeFullscreen}
-    >
-      <View style={{ flex: 1, backgroundColor: '#000' }}>
-        {isFullscreen && game.streamUrl ? (
-          <Video
-            source={{ uri: game.streamUrl }}
-            style={StyleSheet.absoluteFill}
-            resizeMode={ResizeMode.CONTAIN}
-            shouldPlay
-            isMuted={false}
-            isLooping
-          />
-        ) : null}
-        <Pressable
-          onPress={closeFullscreen}
-          hitSlop={12}
-          style={{
-            position: 'absolute', top: 48, right: 16, zIndex: 10,
-            backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 8, padding: 8,
-          }}
-        >
-          <X size={20} color="#FFFFFF" />
-        </Pressable>
-      </View>
-    </Modal>
 
     {/* Comments modal */}
     <Modal

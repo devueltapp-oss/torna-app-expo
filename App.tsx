@@ -14,7 +14,7 @@
  *     separate route param, so the AppStack always lands in the right tab container.
  */
 import React, { useCallback, useState, useRef, useEffect } from 'react';
-import { View, Text, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ActivityIndicator, Alert, Pressable } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -26,7 +26,8 @@ import * as SecureStore from 'expo-secure-store';
 import { ThemeProvider, useTheme } from './theme';
 import { AuthProvider, useAuth, type LoginResult } from './contexts/AuthContext';
 import {
-  LoginScreen, LoginWithRoleScreen, RegisterClubScreen, PendingApprovalScreen,
+  LoginScreen, LoginWithRoleScreen, RegisterClubScreen, RegisterPlayerScreen,
+  PendingApprovalScreen,
   CompleteProfileScreen,
   HomeScreen, ClubHomeScreen,
   GamesScreen, GameDetailScreen, CourtsScreen, PlayersScreen, ProfileScreen,
@@ -42,21 +43,24 @@ import {
 import { TabId } from './components/BottomTabBar';
 import { FollowListSheet } from './components/FollowListSheet';
 import { VideoPreviewModal } from './components/VideoPreviewModal';
+import { UpcomingMatchSheet } from './components/UpcomingMatchSheet';
 import { useLiveGames } from './hooks/useLiveGames';
 import { useOpenGames } from './hooks/useOpenGames';
+import { useMyGames } from './hooks/useMyGames';
 import { usePlayerMatches } from './hooks/usePlayerMatches';
+import * as gamesApi from './api/games';
 import { useGameDetail } from './hooks/useGameDetail';
 import { usePlayers } from './hooks/usePlayers';
 import { useUserProfile } from './hooks/useUserProfile';
 import { useMyHighlights } from './hooks/useMyHighlights';
-import { searchUsers, searchUsersAndClubs, fetchUserProfile } from './api/users';
+import { searchUsers, searchUsersAndClubs, fetchUserProfile, setFollowNotify } from './api/users';
 import { toggleHighlightVisibility } from './api/highlights';
 import { fetchClubCourts, fetchCourt, fetchCourtSlots, createReservation } from './api/clubs';
 import type { DayOption } from './screens/ReserveStep2Screen';
 import type {
   LibraryItem, LibraryMatch, LibraryHighlight,
   ProfileOwner, ClubProfile, ClubPublic, ClubCourtPublic,
-  SearchableUser, PlayerPublic, Slot,
+  SearchableUser, PlayerPublic, Slot, UpcomingGameData,
 } from './data/types';
 
 /** Antepone '@' al username si no lo trae. */
@@ -139,6 +143,7 @@ type AuthStackParamList = {
   LoginWithRole: undefined;
   Login: undefined;
   Register: undefined;
+  RegisterPlayer: undefined;
   Pending: undefined;
   CompleteProfile: {
     idToken: string;
@@ -154,7 +159,7 @@ type AuthStackParamList = {
 type AppStackParamList = {
   MainPlayer: undefined;
   MainClub: undefined;
-  GameDetail: { gameId: string; clipData?: GameDetailData };
+  GameDetail: { gameId: string; clipData?: GameDetailData; liveStreamUrl?: string };
   ClubProfile: { clubId: string };
   PlayerProfile: { playerId: string };
   SearchPlay: undefined;
@@ -224,6 +229,32 @@ function SplashScreen() {
   );
 }
 
+/**
+ * Pantalla de error para cuando un perfil no carga. Antes la ruta mostraba
+ * SplashScreen indefinidamente si la request fallaba → "se queda cargando".
+ */
+function ProfileErrorScreen({ error, onBack, onRetry }: {
+  error?: string | null; onBack: () => void; onRetry: () => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 14 }}>
+      <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text }}>No se pudo cargar el perfil</Text>
+      <Text style={{ fontSize: 13, color: colors.muted2, textAlign: 'center' }}>
+        {error ?? 'Ocurrió un error.'}
+      </Text>
+      <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
+        <Pressable onPress={onRetry} style={{ backgroundColor: colors.primary, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 9999 }}>
+          <Text style={{ fontWeight: '800', color: colors.primaryFg }}>Reintentar</Text>
+        </Pressable>
+        <Pressable onPress={onBack} style={{ borderWidth: 1, borderColor: colors.line, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 9999 }}>
+          <Text style={{ fontWeight: '800', color: colors.text }}>Volver</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 /* ─────────── Auth stack navigator ─────────── */
 
 function AuthNavigator() {
@@ -238,7 +269,7 @@ function AuthNavigator() {
               // Nothing to navigate here; the split happens in <Root>.
             }}
             onRegister={(role: LoginRole) =>
-              navigation.navigate(role === 'club' ? 'Register' : 'LoginWithRole')
+              navigation.navigate(role === 'club' ? 'Register' : 'RegisterPlayer')
             }
             onNeedsRegistration={(result: LoginResult & { status: 'needs_registration' }, provider) => {
               navigation.navigate('CompleteProfile', {
@@ -268,6 +299,16 @@ function AuthNavigator() {
           <RegisterClubScreen
             onBack={() => navigation.goBack()}
             onSubmit={() => navigation.replace('Pending')}
+          />
+        )}
+      </AuthStack.Screen>
+
+      <AuthStack.Screen name="RegisterPlayer">
+        {({ navigation }) => (
+          <RegisterPlayerScreen
+            onBack={() => navigation.goBack()}
+            // No onComplete: el player entra al instante. AuthProvider setea
+            // user → Root cambia al AppStack automáticamente.
           />
         )}
       </AuthStack.Screen>
@@ -320,6 +361,10 @@ function MainPlayer({ navigation }: any) {
   // "Mis partidos" reales (GET /game/player/:id/history) — el recordingUrl de
   // cada uno es el video almacenado en B2 que el editor recorta on-device.
   const { user } = useAuth();
+
+  // "Mis partidas" activas (GET /game/mine): para gestionar baja/cancelación.
+  const { myGames, refresh: refreshMyGames } = useMyGames(user?.id);
+  const [myGameSheet, setMyGameSheet] = React.useState<UpcomingGameData | null>(null);
   const { matches: apiMatches, refresh: refreshMatches } = usePlayerMatches(user?.id);
 
   // Directorio de jugadores reales (GET /user/players).
@@ -348,6 +393,7 @@ function MainPlayer({ navigation }: any) {
     await Promise.all([
       refreshLive(),
       refreshOpen(),
+      refreshMyGames(),
       refreshMatches(),
       refreshPlayers(),
       refreshOwnProfile(),
@@ -355,7 +401,22 @@ function MainPlayer({ navigation }: any) {
       new Promise<void>((r) => setTimeout(r, 800)),
     ]);
     setRefreshing(false);
-  }, [refreshLive, refreshOpen, refreshMatches, refreshPlayers, refreshOwnProfile, refreshHighlights]);
+  }, [refreshLive, refreshOpen, refreshMyGames, refreshMatches, refreshPlayers, refreshOwnProfile, refreshHighlights]);
+
+  // Acciones de gestión de "Mis partidas" (cierran el sheet y refrescan la lista).
+  const handleCancelGame = useCallback((id: string) => {
+    gamesApi.cancelGame(id).catch(() => {}).finally(() => refreshMyGames());
+  }, [refreshMyGames]);
+  const handleLeaveGame = useCallback((id: string) => {
+    gamesApi.leaveGame(id).catch(() => {}).finally(() => refreshMyGames());
+  }, [refreshMyGames]);
+  const handleCancelPair = useCallback((id: string) => {
+    gamesApi.cancelChallengerPair(id).catch(() => {}).finally(() => refreshMyGames());
+  }, [refreshMyGames]);
+  // accept/reject los hace el propio sheet (fetch interno); acá solo refrescamos.
+  const handleApplicationChange = useCallback(() => {
+    setTimeout(() => refreshMyGames(), 500);
+  }, [refreshMyGames]);
   const [previewVideo, setPreviewVideo] = React.useState<{
     url: string; title: string; durationSeconds: number;
   } | null>(null);
@@ -373,6 +434,29 @@ function MainPlayer({ navigation }: any) {
 
   const [highlights, setHighlights] = React.useState<LibraryHighlight[]>([]);
   React.useEffect(() => { setHighlights(apiHighlights); }, [apiHighlights]);
+
+  // Registrar resultado (gané/perdí) de un partido finalizado. El backend no
+  // permite cambiarlo luego (segundo intento → 400).
+  const handleRegisterResult = React.useCallback((match: LibraryMatch) => {
+    const submit = (isWinner: boolean) => {
+      gamesApi.registerGameResult(match.id, isWinner)
+        .then(() => {
+          setMatches(xs => xs.map(m => m.id === match.id ? { ...m, resultRegistered: true } : m));
+          Alert.alert('Listo', isWinner ? '¡Registraste que ganaste!' : 'Registraste que perdiste.');
+        })
+        .catch((e: any) => {
+          const msg = e?.status === 400
+            ? 'Ya registraste el resultado o el partido aún no finalizó.'
+            : (e instanceof Error ? e.message : 'No se pudo registrar el resultado.');
+          Alert.alert('No se pudo registrar', msg);
+        });
+    };
+    Alert.alert('Registrar resultado', '¿Cómo te fue en este partido?', [
+      { text: 'Perdí', onPress: () => submit(false) },
+      { text: 'Gané', onPress: () => submit(true) },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
+  }, []);
 
   const toggleVisibility = (item: LibraryItem) => {
     if (item.kind === 'match') {
@@ -411,7 +495,7 @@ function MainPlayer({ navigation }: any) {
               upcomingGames={[]}
               feedPosts={[]}
               onBack={() => setReelSection(null)}
-              onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id })}
+              onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id, liveStreamUrl: liveGames.find(g => g.id === id)?.streamUrl })}
               activeTab="home"
               onChangeTab={handleTab}
               initialIndex={reelInitialIndex}
@@ -426,7 +510,7 @@ function MainPlayer({ navigation }: any) {
             openGames={openGames}
             feedPosts={[]}
             activeTab="home" onChangeTab={handleTab}
-            onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id })}
+            onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id, liveStreamUrl: liveGames.find(g => g.id === id)?.streamUrl })}
             onOpenSearch={() => navigation.navigate('GlobalSearch')}
             onVerMas={(section, idx) => { setReelInitialIndex(idx ?? 0); setReelSection(section); }}
             refreshing={refreshing}
@@ -439,7 +523,9 @@ function MainPlayer({ navigation }: any) {
         return (
           <GamesScreen games={[]} activeTab="games" onChangeTab={handleTab} role="player"
             emptyImage={require('./assets/racket.png')}
-            onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id })}
+            onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id, liveStreamUrl: liveGames.find(g => g.id === id)?.streamUrl })}
+            myGames={myGames}
+            onOpenMyGame={(g) => setMyGameSheet(g)}
           />
         );
       case 'players':
@@ -483,6 +569,7 @@ function MainPlayer({ navigation }: any) {
                   refreshHighlights();
                 },
               })}
+              onRegisterResult={handleRegisterResult}
               onToggleVisibility={toggleVisibility}
               onOpenItem={openPreview}
               activeTab="profile" onChangeTab={handleTab}
@@ -528,6 +615,20 @@ function MainPlayer({ navigation }: any) {
         title={previewVideo?.title ?? ''}
         durationSeconds={previewVideo?.durationSeconds ?? 0}
         onClose={() => setPreviewVideo(null)}
+      />
+      <UpcomingMatchSheet
+        visible={myGameSheet !== null}
+        game={myGameSheet}
+        onClose={() => setMyGameSheet(null)}
+        onOpenPlayerProfile={(playerId) => {
+          setMyGameSheet(null);
+          navigation.navigate('PlayerProfile', { playerId });
+        }}
+        onAcceptApplication={handleApplicationChange}
+        onRejectApplication={handleApplicationChange}
+        onCancelGame={handleCancelGame}
+        onLeaveGame={handleLeaveGame}
+        onCancelPair={handleCancelPair}
       />
     </>
   );
@@ -615,6 +716,7 @@ function AppNavigator() {
           return (
             <GameDetailScreen
               game={game}
+              fallbackStreamUrl={route.params?.liveStreamUrl}
               isFollowing={following}
               onToggleFollow={() => setFollowing(f => !f)}
               onBack={() => navigation.goBack()}
@@ -651,7 +753,10 @@ function AppNavigator() {
                 latitude: p.latitude,
                 longitude: p.longitude,
               })))
-              .catch(() => {});
+              .catch((e) => {
+                // TODO(dev): QUITAR. Log temporal para diagnosticar club que no carga.
+                if (__DEV__) console.warn('[PROFILE DEBUG] fallo cargando club', clubId, e?.message ?? e);
+              });
           }, [clubId]);
           return (
             <ClubProfilePlayerView
@@ -682,12 +787,20 @@ function AppNavigator() {
       <AppStack.Screen name="PlayerProfile">
         {({ navigation, route }) => {
           const playerId = route.params?.playerId ?? '';
-          const { player: fetched } = useUserProfile(playerId);
+          const { player: fetched, error, refresh } = useUserProfile(playerId);
+          // Estado local = perfil del hook + parches optimistas (follow/notify).
+          // Solo lo seteamos cuando `fetched` es válido: así, una vez cargado, nunca
+          // vuelve a null por el desfase de 1 render del espejo (lo que antes hacía
+          // caer en ProfileErrorScreen pese a que la data ya había llegado 200).
           const [player, setPlayer] = React.useState<PlayerPublic | null>(null);
-          React.useEffect(() => { setPlayer(fetched); }, [fetched]);
+          React.useEffect(() => { if (fetched) setPlayer(fetched); }, [fetched]);
           const [sheet, setSheet] = React.useState<'followers' | 'following' | null>(null);
-          const [clipModal, setClipModal] = React.useState<{ url: string; title: string } | null>(null);
-          if (!player) return <SplashScreen />;
+          const [clipModal, setClipModal] = React.useState<{ url: string; title: string; id: string } | null>(null);
+          // Sin perfil todavía: error real → pantalla de error; si no, seguimos cargando.
+          if (!player) {
+            if (error) return <ProfileErrorScreen error={error} onBack={() => navigation.goBack()} onRetry={refresh} />;
+            return <SplashScreen />;
+          }
           return (
             <>
               <PlayerProfilePublicView
@@ -708,10 +821,15 @@ function AppNavigator() {
                   });
                 }}
                 onToggleNotify={() => {
-                  setPlayer(p => p ? ({ ...p, notifyOnMatch: !p.notifyOnMatch }) : p);
+                  const wasNotifying = player.notifyOnMatch;
+                  // Update optimista + persistir; si falla, revertir.
+                  setPlayer(p => p ? ({ ...p, notifyOnMatch: !wasNotifying }) : p);
+                  setFollowNotify(player.id, !wasNotifying).catch(() => {
+                    setPlayer(p => p ? ({ ...p, notifyOnMatch: wasNotifying }) : p);
+                  });
                 }}
                 onOpenLive={(gameId) => navigation.navigate('GameDetail', { gameId })}
-                onOpenClip={(clip) => clip.videoUrl && setClipModal({ url: clip.videoUrl, title: clip.title })}
+                onOpenClip={(clip) => clip.videoUrl && setClipModal({ url: clip.videoUrl, title: clip.title, id: clip.id })}
                 onOpenFollowers={() => setSheet('followers')}
                 onOpenFollowing={() => setSheet('following')}
               />
@@ -731,6 +849,7 @@ function AppNavigator() {
                 title={clipModal?.title ?? ''}
                 durationSeconds={0}
                 onClose={() => setClipModal(null)}
+                highlightId={clipModal?.id}
                 showComments
               />
             </>
@@ -742,7 +861,7 @@ function AppNavigator() {
         {({ navigation }) => (
           <SearchPlayScreen
             onBack={() => navigation.goBack()}
-            onOpenClub={(clubId) => navigation.navigate('ReserveCourt', { clubId })}
+            onOpenPlayerProfile={(playerId) => navigation.navigate('PlayerProfile', { playerId })}
           />
         )}
       </AppStack.Screen>

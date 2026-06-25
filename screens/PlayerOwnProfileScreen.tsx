@@ -25,7 +25,7 @@ import type {
   ProfileOwner, LibraryItem, LibraryMatch, LibraryHighlight,
 } from '../data/types';
 
-type TabKey = 'highlights' | 'matches' | 'photos';
+type TabKey = 'highlights' | 'matches';
 
 export interface PlayerOwnProfileScreenProps {
   owner: ProfileOwner;
@@ -54,13 +54,11 @@ export function PlayerOwnProfileScreen({
 
   const publicHl     = highlights.filter(h => h.isPublic);
   const publicMatch  = matches.filter(m => m.isPublic);
-  // El perfil propio aún no recibe fotos como fuente de datos; el tab Fotos
-  // muestra el empty state hasta que se cablee.
-  const publicPhotos: LibraryItem[] = [];
   const totalPosts   = publicHl.length + publicMatch.length;
 
-  const grid: LibraryItem[] =
-    tab === 'highlights' ? publicHl : tab === 'matches' ? publicMatch : publicPhotos;
+  // Contenido del perfil = highlights + partidos. No hay subidas sueltas de
+  // fotos (la única imagen subible es el avatar).
+  const grid: LibraryItem[] = tab === 'highlights' ? publicHl : publicMatch;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
@@ -117,7 +115,6 @@ export function PlayerOwnProfileScreen({
           tabs={[
             { id: 'highlights', label: '▶ HIGHLIGHTS', count: publicHl.length },
             { id: 'matches',    label: '◫ PARTIDOS',   count: publicMatch.length },
-            { id: 'photos',     label: '▦ FOTOS',      count: publicPhotos.length },
           ]}
           active={tab}
           onChange={(k) => setTab(k as TabKey)}

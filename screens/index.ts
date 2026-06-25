@@ -1,6 +1,7 @@
 export { LoginScreen } from './LoginScreen';
 export { LoginWithRoleScreen, type LoginRole } from './LoginWithRoleScreen';
 export { RegisterClubScreen } from './RegisterClubScreen';
+export { RegisterPlayerScreen, type RegisterPlayerScreenProps } from './RegisterPlayerScreen';
 export { PendingApprovalScreen } from './PendingApprovalScreen';
 export { CompleteProfileScreen, type CompleteProfileScreenProps } from './CompleteProfileScreen';
 

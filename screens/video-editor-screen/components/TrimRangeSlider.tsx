@@ -42,6 +42,11 @@ export function TrimRangeSlider({ duration, value, onChange, currentTime }: Trim
     () =>
       Gesture.Pan()
         .runOnJS(true)
+        // Área táctil amplia + agarre inmediato: el handle visible es angosto
+        // (12px), así que sin esto cuesta agarrarlo y arrastrarlo.
+        .hitSlop({ left: 16, right: 16 })
+        .minDistance(0)
+        .activeOffsetX([-2, 2])
         .onBegin(() => { grantValueRef.current = valueRef.current; })
         .onUpdate((e) => {
           const wNow = widthRef.current;
@@ -59,6 +64,9 @@ export function TrimRangeSlider({ duration, value, onChange, currentTime }: Trim
     () =>
       Gesture.Pan()
         .runOnJS(true)
+        .hitSlop({ left: 16, right: 16 })
+        .minDistance(0)
+        .activeOffsetX([-2, 2])
         .onBegin(() => { grantValueRef.current = valueRef.current; })
         .onUpdate((e) => {
           const wNow = widthRef.current;
@@ -123,34 +131,46 @@ export function TrimRangeSlider({ duration, value, onChange, currentTime }: Trim
           }} pointerEvents="none" />
         )}
 
-        {/* Handle izquierdo */}
+        {/* Handle izquierdo — target táctil ancho (36px) con barra visible 12px */}
         <GestureDetector gesture={startGesture}>
           <View style={{
             position: 'absolute', top: 0, bottom: 0,
-            left: `${pct(start)}%`, marginLeft: -6,
-            width: 12, backgroundColor: accentColor,
-            alignItems: 'center', justifyContent: 'center',
+            left: `${pct(start)}%`, marginLeft: -18,
+            width: 36, alignItems: 'center', justifyContent: 'center',
           }}>
-            <View style={{ gap: 3 }}>
-              <View style={{ width: 2, height: 2, borderRadius: 1, backgroundColor: colors.ink }} />
-              <View style={{ width: 2, height: 2, borderRadius: 1, backgroundColor: colors.ink }} />
-              <View style={{ width: 2, height: 2, borderRadius: 1, backgroundColor: colors.ink }} />
+            <View style={{
+              alignSelf: 'stretch', flex: 1,
+              backgroundColor: accentColor,
+              marginHorizontal: 12,
+              alignItems: 'center', justifyContent: 'center',
+            }}>
+              <View style={{ gap: 3 }}>
+                <View style={{ width: 2, height: 2, borderRadius: 1, backgroundColor: colors.ink }} />
+                <View style={{ width: 2, height: 2, borderRadius: 1, backgroundColor: colors.ink }} />
+                <View style={{ width: 2, height: 2, borderRadius: 1, backgroundColor: colors.ink }} />
+              </View>
             </View>
           </View>
         </GestureDetector>
 
-        {/* Handle derecho */}
+        {/* Handle derecho — target táctil ancho (36px) con barra visible 12px */}
         <GestureDetector gesture={endGesture}>
           <View style={{
             position: 'absolute', top: 0, bottom: 0,
-            left: `${pct(end)}%`, marginLeft: -6,
-            width: 12, backgroundColor: accentColor,
-            alignItems: 'center', justifyContent: 'center',
+            left: `${pct(end)}%`, marginLeft: -18,
+            width: 36, alignItems: 'center', justifyContent: 'center',
           }}>
-            <View style={{ gap: 3 }}>
-              <View style={{ width: 2, height: 2, borderRadius: 1, backgroundColor: colors.ink }} />
-              <View style={{ width: 2, height: 2, borderRadius: 1, backgroundColor: colors.ink }} />
-              <View style={{ width: 2, height: 2, borderRadius: 1, backgroundColor: colors.ink }} />
+            <View style={{
+              alignSelf: 'stretch', flex: 1,
+              backgroundColor: accentColor,
+              marginHorizontal: 12,
+              alignItems: 'center', justifyContent: 'center',
+            }}>
+              <View style={{ gap: 3 }}>
+                <View style={{ width: 2, height: 2, borderRadius: 1, backgroundColor: colors.ink }} />
+                <View style={{ width: 2, height: 2, borderRadius: 1, backgroundColor: colors.ink }} />
+                <View style={{ width: 2, height: 2, borderRadius: 1, backgroundColor: colors.ink }} />
+              </View>
             </View>
           </View>
         </GestureDetector>

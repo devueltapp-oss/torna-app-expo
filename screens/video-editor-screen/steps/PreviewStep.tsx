@@ -11,11 +11,12 @@ export interface PreviewStepProps {
   courtLabel: string;
   clubName: string;
   cameraLabel?: string;
+  onLoad?: (durationSeconds: number) => void;
   onContinue: () => void;
 }
 
 export function PreviewStep({
-  gameId, recordingUrl, durationSeconds, courtLabel, clubName, cameraLabel, onContinue,
+  gameId, recordingUrl, durationSeconds, courtLabel, clubName, cameraLabel, onLoad, onContinue,
 }: PreviewStepProps) {
   const { colors } = useTheme();
   return (
@@ -34,6 +35,7 @@ export function PreviewStep({
         recordingUrl={recordingUrl}
         durationSeconds={durationSeconds}
         label={cameraLabel}
+        onLoad={onLoad}
         autoPlay
       />
 

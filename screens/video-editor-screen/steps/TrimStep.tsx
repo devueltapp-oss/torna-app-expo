@@ -19,12 +19,13 @@ export interface TrimStepProps {
   durationSeconds: number;
   range: [number, number];
   onChangeRange: (r: [number, number]) => void;
+  onLoad?: (durationSeconds: number) => void;
   onBack: () => void;
   onContinue: () => void;
 }
 
 export function TrimStep({
-  recordingUrl, durationSeconds, range, onChangeRange, onBack, onContinue,
+  recordingUrl, durationSeconds, range, onChangeRange, onLoad, onBack, onContinue,
 }: TrimStepProps) {
   const playerRef = React.useRef<PlayerHandle | null>(null);
   const [sliderWidth, setSliderWidth] = React.useState(0);
@@ -55,6 +56,7 @@ export function TrimStep({
         autoPlay
         hideControls
         onProgress={setCurrentTime}
+        onLoad={onLoad}
       />
 
       {/* Header overlay */}

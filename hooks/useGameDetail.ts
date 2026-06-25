@@ -66,13 +66,17 @@ function mapDetail(data: BackendGameDetail): GameDetailData {
       username: '@' + gp.user.username,
       name: gp.user.name ?? gp.user.username,
     })),
-    cameras: cams.map((c, i) => ({
-      id: c.camera.identifier || `cam-${i + 1}`,
-      number: String(i + 1).padStart(2, '0'),
-      label: c.camera.identifier || `Cámara ${i + 1}`,
-      state: c.camera.streamingUrl ? 'available' : 'inactive',
-      streamUrl: c.camera.streamingUrl ?? undefined,
-    })),
+    cameras: cams.map((c, i) => {
+      // String vacío también cuenta como "sin stream" (no solo null/undefined).
+      const url = c.camera.streamingUrl || undefined;
+      return {
+        id: c.camera.identifier || `cam-${i + 1}`,
+        number: String(i + 1).padStart(2, '0'),
+        label: c.camera.identifier || `Cámara ${i + 1}`,
+        state: url ? 'available' : 'inactive',
+        streamUrl: url,
+      };
+    }),
   };
 }
 
@@ -96,6 +100,7 @@ export function useGameDetail(gameId: string | undefined) {
       const res = await fetch(`${API_URL}/game/${gameId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (__DEV__) console.log('[STREAM DEBUG] GET', `${API_URL}/game/${gameId}`, 'status=', res.status);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       const data = json && typeof json === 'object' && 'data' in json ? json.data : json;
@@ -104,8 +109,14 @@ export function useGameDetail(gameId: string | undefined) {
         recordingUrl: data.recordingUrl ?? null,
         durationSeconds: data.durationSeconds ?? null,
       });
-      setDetail(mapDetail(data));
+      const mapped = mapDetail(data);
+      if (__DEV__) {
+        console.log('[STREAM DEBUG] detail cameras=',
+          mapped.cameras.map((c) => ({ id: c.id, state: c.state, streamUrl: c.streamUrl })));
+      }
+      setDetail(mapped);
     } catch (err) {
+      if (__DEV__) console.log('[STREAM DEBUG] GET /game/:id failed:', err);
       setError(err instanceof Error ? err.message : 'No se pudo cargar el partido.');
       setDetail(null);
     } finally {

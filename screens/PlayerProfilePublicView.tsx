@@ -185,29 +185,6 @@ export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onTogg
           ))}
         </ScrollView>
         )}
-
-        {/* Photos */}
-        <View style={{ paddingHorizontal: 16, marginTop: 12 }}>
-          <SectionHeader title={`Fotos · ${player.photos.length}`}
-            action={<Text style={{ fontSize: 11, fontWeight: '700', color: colors.accentText }}>Ver todas</Text>}/>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-            {player.photos.map((i, idx) => {
-              const isLime = idx % 2 === 0;
-              return (
-                <View key={i} style={{
-                  width: '23.5%', aspectRatio: 1, borderRadius: 10, overflow: 'hidden',
-                  backgroundColor: isLime ? colors.accent : colors.ink,
-                  alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <Text style={{
-                    fontFamily: fonts.mono, fontSize: 10, fontWeight: '700',
-                    color: isLime ? 'rgba(45,76,117,0.7)' : 'rgba(255,255,255,0.6)',
-                  }}>foto {i}</Text>
-                </View>
-              );
-            })}
-          </View>
-        </View>
       </ScrollView>
 
       {onChangeTab && <BottomTabBar active={activeTab} onChange={onChangeTab} role="player"/>}

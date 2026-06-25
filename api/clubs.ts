@@ -23,10 +23,26 @@ function unwrap<T>(json: any): T {
   return (json && typeof json === 'object' && 'data' in json ? json.data : json) as T;
 }
 
-async function authedGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    headers: { Authorization: `Bearer ${await token()}` },
-  });
+async function authedGet<T>(path: string, timeoutMs = 15000): Promise<T> {
+  // Timeout: una request colgada (sin esto) dejaría la pantalla de reserva
+  // cargando para siempre. AbortController la corta a los 15s. Mismo patrón que
+  // api/users.ts.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      headers: { Authorization: `Bearer ${await token()}` },
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    if ((e as any)?.name === 'AbortError') {
+      throw new Error(`La petición tardó demasiado (timeout ${timeoutMs / 1000}s): ${path}`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) {
     const err = new Error(`HTTP ${res.status}`);
     (err as any).status = res.status;

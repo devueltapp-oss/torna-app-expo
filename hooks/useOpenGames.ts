@@ -25,7 +25,13 @@ interface BackendOpenGame {
     camera: {
       identifier: string;
       cameraConfig?: {
-        user?: { id: string; username: string; name?: string | null } | null;
+        user?: {
+          id: string;
+          username: string;
+          name?: string | null;
+          latitude?: number | null;
+          longitude?: number | null;
+        } | null;
       } | null;
     };
   }>;
@@ -51,10 +57,8 @@ function fmtDate(iso?: string | null): string | undefined {
 function mapOpenGame(g: BackendOpenGame): UpcomingGameData {
   const primary =
     g.cameras?.find((c) => c.isPrimary)?.camera ?? g.cameras?.[0]?.camera;
-  const club =
-    primary?.cameraConfig?.user?.name ??
-    primary?.cameraConfig?.user?.username ??
-    'Club';
+  const clubUser = primary?.cameraConfig?.user;
+  const club = clubUser?.name ?? clubUser?.username ?? 'Club';
 
   return {
     id: g.id,
@@ -62,6 +66,8 @@ function mapOpenGame(g: BackendOpenGame): UpcomingGameData {
     date: fmtDate(g.scheduledStartAt),
     court: g.padelCourt?.name ?? primary?.identifier ?? 'Cancha',
     club,
+    clubLat: clubUser?.latitude ?? null,
+    clubLng: clubUser?.longitude ?? null,
     players: (g.gamePlayers ?? []).map((gp) => ({
       id: gp.user.id,
       username: '@' + gp.user.username,

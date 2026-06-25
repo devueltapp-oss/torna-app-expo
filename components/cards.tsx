@@ -430,7 +430,6 @@ export function PlayerListItem({ player, onPress }: { player: PlayerData; onPres
           {player.username}{player.email ? ` · ${player.email}` : ''}
         </Text>
       </View>
-      <Text style={{ color: colors.muted, fontSize: 11, fontFamily: fonts.mono }}>#{player.id}</Text>
     </Pressable>
   );
 }

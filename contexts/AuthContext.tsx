@@ -44,7 +44,7 @@ export interface RegisterDto {
   phone?: string;
   region?: string;
   isClub?: boolean;
-  authProvider?: 'google' | 'apple' | 'facebook';
+  authProvider?: 'email' | 'google' | 'apple' | 'facebook';
 }
 
 export type LoginResult =
@@ -56,6 +56,24 @@ interface AuthContextValue {
   token: string | null;
   isLoading: boolean;
   loginWithEmailPassword: (email: string, password: string) => Promise<void>;
+  /**
+   * Alta por email/contraseña (solo Player). Crea el usuario en Firebase
+   * (client SDK), obtiene el idToken y lo registra en el backend. El player
+   * queda activo al instante (status=true); el club requeriría aprobación.
+   */
+  registerWithEmailPassword: (
+    email: string,
+    password: string,
+    dto: Omit<RegisterDto, 'authProvider'>,
+  ) => Promise<void>;
+  /**
+   * Cambia la contraseña de la cuenta. Re-autentica con la contraseña actual
+   * (la verifica de verdad) y actualiza la nueva directamente en Firebase.
+   */
+  changePassword: (
+    currentPassword: string,
+    newPassword: string,
+  ) => Promise<void>;
   loginWithGoogle: () => Promise<LoginResult>;
   loginWithApple: () => Promise<LoginResult>;
   loginWithFacebook: () => Promise<LoginResult>;
@@ -92,6 +110,7 @@ async function apiFetch<T>(
   });
 
   if (!res.ok) {
+    if (__DEV__) console.log('[AUTH DEBUG] FAIL', `${API_URL}${path}`, 'status=', res.status);
     const body = await res.json().catch(() => ({})) as { message?: string };
     const err = new Error(body.message ?? `HTTP ${res.status}`);
     (err as any).status = res.status;
@@ -237,7 +256,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await fetch(`${API_URL}/user/update-notification-id`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ notificationId: subId }),
+        body: JSON.stringify({ notificationID: subId }),
       });
     } catch (err) {
       console.error('[AuthContext] registerNotificationId failed (non-critical):', err);
@@ -402,6 +421,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   // ------------------------------------------------------------------
+  // registerWithEmailPassword (solo Player)
+  // Crea la cuenta en Firebase con email/contraseña, obtiene el idToken y
+  // reutiliza register() para darla de alta en el backend. El player entra al
+  // instante (el backend setea status=true para isClub=false).
+  // ------------------------------------------------------------------
+  const registerWithEmailPassword = useCallback(
+    async (
+      email: string,
+      password: string,
+      dto: Omit<RegisterDto, 'authProvider'>,
+    ): Promise<void> => {
+      const credential = await firebaseAuth().createUserWithEmailAndPassword(
+        email.trim(),
+        password,
+      );
+      const idToken = await credential.user.getIdToken();
+      await register(idToken, { ...dto, authProvider: 'email' });
+    },
+    [register],
+  );
+
+  // ------------------------------------------------------------------
+  // changePassword
+  // Re-autentica con la contraseña actual para (a) verificarla y (b) crear una
+  // sesión en el cliente de Firebase — necesaria porque los usuarios que
+  // entraron por email/password lo hicieron vía backend y NO tienen
+  // currentUser en el SDK cliente. Luego actualiza la contraseña en Firebase y
+  // refresca el idToken guardado para que la sesión siga válida.
+  // ------------------------------------------------------------------
+  const changePassword = useCallback(
+    async (currentPassword: string, newPassword: string): Promise<void> => {
+      const email = user?.email;
+      if (!email) throw new Error('No hay una sesión activa.');
+
+      // 1. Verificar la contraseña actual + establecer sesión en el cliente.
+      await firebaseAuth().signInWithEmailAndPassword(email, currentPassword);
+
+      const current = firebaseAuth().currentUser;
+      if (!current) throw new Error('No se pudo validar la sesión.');
+
+      // 2. Actualizar la contraseña en Firebase.
+      await current.updatePassword(newPassword);
+
+      // 3. Refrescar el idToken guardado (el cambio puede invalidar el viejo).
+      const fresh = await current.getIdToken(true);
+      await SecureStore.setItemAsync(TOKEN_KEY, fresh);
+      setToken(fresh);
+    },
+    [user],
+  );
+
+  // ------------------------------------------------------------------
   // updateProfilePicture — sincroniza el estado local tras subir la foto
   // (la subida + PATCH /user/me las hace expo/api/profile.ts)
   // ------------------------------------------------------------------
@@ -432,6 +503,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     token,
     isLoading,
     loginWithEmailPassword,
+    registerWithEmailPassword,
+    changePassword,
     loginWithGoogle,
     loginWithApple,
     loginWithFacebook,

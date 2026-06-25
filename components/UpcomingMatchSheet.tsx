@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, View, Text, Pressable, Image, ScrollView } from 'react-native';
+import { Modal, View, Text, Pressable, Image, ScrollView, Alert } from 'react-native';
 import { Bell, Check, ChevronRight, X } from 'lucide-react-native';
 import * as SecureStore from 'expo-secure-store';
 import { useTheme } from '../theme';
@@ -16,6 +16,12 @@ export interface UpcomingMatchSheetProps {
   onOpenPlayerProfile?: (playerId: string) => void;
   onAcceptApplication?: (gameId: string, appId: string) => void;
   onRejectApplication?: (gameId: string, appId: string) => void;
+  /** (Owner) Cancelar la partida entera. */
+  onCancelGame?: (gameId: string) => void;
+  /** (Miembro no owner) Darse de baja. */
+  onLeaveGame?: (gameId: string) => void;
+  /** (Pareja retadora — equipo 2) Cancelar la pareja. */
+  onCancelPair?: (gameId: string) => void;
 }
 
 export function UpcomingMatchSheet({
@@ -26,6 +32,9 @@ export function UpcomingMatchSheet({
   onOpenPlayerProfile,
   onAcceptApplication,
   onRejectApplication,
+  onCancelGame,
+  onLeaveGame,
+  onCancelPair,
 }: UpcomingMatchSheetProps) {
   const { colors } = useTheme();
   const [watching, setWatching] = React.useState(false);
@@ -59,6 +68,40 @@ export function UpcomingMatchSheet({
       `${process.env.EXPO_PUBLIC_API_URL ?? ''}/game/${game?.id}/applications/${appId}/reject`,
       { method: 'PATCH', headers: { Authorization: `Bearer ${token ?? ''}` } },
     ).catch(() => {});
+  };
+
+  const confirmDestructive = (title: string, message: string, action: () => void) => {
+    Alert.alert(title, message, [
+      { text: 'No', style: 'cancel' },
+      { text: 'Sí', style: 'destructive', onPress: action },
+    ]);
+  };
+
+  const handleCancelGame = () => {
+    if (!game) return;
+    confirmDestructive(
+      'Cancelar partida',
+      'Se cancelará la partida para todos los jugadores. ¿Continuar?',
+      () => { onCancelGame?.(game.id); onClose(); },
+    );
+  };
+
+  const handleLeaveGame = () => {
+    if (!game) return;
+    confirmDestructive(
+      'Darme de baja',
+      'Vas a salir de esta partida y se liberará tu lugar. ¿Continuar?',
+      () => { onLeaveGame?.(game.id); onClose(); },
+    );
+  };
+
+  const handleCancelPair = () => {
+    if (!game) return;
+    confirmDestructive(
+      'Cancelar nuestra pareja',
+      'Se darán de baja los dos jugadores de tu pareja. ¿Continuar?',
+      () => { onCancelPair?.(game.id); onClose(); },
+    );
   };
 
   const handleWatch = async () => {
@@ -102,6 +145,9 @@ export function UpcomingMatchSheet({
               onOpenPlayerProfile={onOpenPlayerProfile}
               onAcceptApplication={handleAccept}
               onRejectApplication={handleReject}
+              onCancelGame={handleCancelGame}
+              onLeaveGame={handleLeaveGame}
+              onCancelPair={handleCancelPair}
             />
           )}
         </Pressable>
@@ -132,14 +178,19 @@ interface SheetContentProps {
   onOpenPlayerProfile?: (playerId: string) => void;
   onAcceptApplication?: (appId: string) => void;
   onRejectApplication?: (appId: string) => void;
+  onCancelGame?: () => void;
+  onLeaveGame?: () => void;
+  onCancelPair?: () => void;
 }
 
 function SheetContent({
   game, colors, hasApplied, isWatching, watching, pendingApplications,
   onOpenApply, onWatch, onOpenPlayerProfile,
   onAcceptApplication, onRejectApplication,
+  onCancelGame, onLeaveGame, onCancelPair,
 }: SheetContentProps) {
   const emptySlots = (game.maxPlayers ?? 4) - game.players.length;
+  const isParticipant = !!game.viewerIsParticipant;
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 16 }}>
@@ -163,29 +214,51 @@ function SheetContent({
           Jugadores
         </Text>
 
-        {game.players.map((p: UpcomingGamePlayer) => (
-          <Pressable
-            key={p.id ?? p.username}
-            onPress={() => p.id && onOpenPlayerProfile?.(p.id)}
-            style={({ pressed }) => ({
-              flexDirection: 'row', alignItems: 'center', gap: 12,
-              paddingVertical: 6, opacity: pressed ? 0.85 : 1,
-            })}
-          >
-            {p.profilePicture ? (
-              <Image source={{ uri: p.profilePicture }} style={{ width: 40, height: 40, borderRadius: 20 }} />
-            ) : (
-              <Avatar name={p.name ?? p.username} size={40} />
-            )}
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={{ color: colors.text, fontSize: 14, fontFamily: fonts.bold }} numberOfLines={1}>
-                {p.name ?? p.username}
-              </Text>
-              <Text style={{ color: colors.muted2, fontSize: 12 }} numberOfLines={1}>{p.username}</Text>
-            </View>
-            {p.id && <ChevronRight size={16} color={colors.muted2} />}
-          </Pressable>
-        ))}
+        {(() => {
+          const renderPlayer = (p: UpcomingGamePlayer) => (
+            <Pressable
+              key={p.id ?? p.username}
+              onPress={() => p.id && onOpenPlayerProfile?.(p.id)}
+              style={({ pressed }) => ({
+                flexDirection: 'row', alignItems: 'center', gap: 12,
+                paddingVertical: 6, opacity: pressed ? 0.85 : 1,
+              })}
+            >
+              {p.profilePicture ? (
+                <Image source={{ uri: p.profilePicture }} style={{ width: 40, height: 40, borderRadius: 20 }} />
+              ) : (
+                <Avatar name={p.name ?? p.username} size={40} />
+              )}
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={{ color: colors.text, fontSize: 14, fontFamily: fonts.bold }} numberOfLines={1}>
+                  {p.name ?? p.username}
+                </Text>
+                <Text style={{ color: colors.muted2, fontSize: 12 }} numberOfLines={1}>{p.username}</Text>
+              </View>
+              {p.id && <ChevronRight size={16} color={colors.muted2} />}
+            </Pressable>
+          );
+
+          const teamLabel = (n: 1 | 2) => (
+            <Text style={{ fontSize: 11, fontFamily: fonts.bold, color: colors.muted2, marginTop: 2 }}>
+              {n === 1 ? 'Equipo 1' : 'Pareja retadora'}
+            </Text>
+          );
+
+          const hasTeams = game.players.some((p) => p.team === 1 || p.team === 2);
+          if (!hasTeams) return game.players.map(renderPlayer);
+
+          const team1 = game.players.filter((p) => p.team === 1);
+          const team2 = game.players.filter((p) => p.team === 2);
+          const noTeam = game.players.filter((p) => p.team !== 1 && p.team !== 2);
+          return (
+            <>
+              {team1.length > 0 && <>{teamLabel(1)}{team1.map(renderPlayer)}</>}
+              {team2.length > 0 && <>{teamLabel(2)}{team2.map(renderPlayer)}</>}
+              {noTeam.map(renderPlayer)}
+            </>
+          );
+        })()}
 
         {game.isOpenForPlayers && emptySlots > 0 && Array.from({ length: emptySlots }).map((_, i) => (
           <View
@@ -241,12 +314,23 @@ function SheetContent({
         </View>
       )}
 
-      {/* Acciones: postularse / campana */}
+      {/* Acciones: postularse / gestión / campana */}
       <View style={{ gap: 10 }}>
-        {game.isOpenForPlayers && !game.isCreator && !hasApplied && (
+        {game.isOpenForPlayers && !isParticipant && !game.isCreator && !hasApplied && (
           <Button variant="primary" fullWidth onPress={onOpenApply}>
             Postularme
           </Button>
+        )}
+
+        {/* Gestión: solo para participantes */}
+        {isParticipant && game.isCreator && (
+          <DangerButton label="Cancelar partida" colors={colors} onPress={() => onCancelGame?.()} />
+        )}
+        {isParticipant && !game.isCreator && (
+          <DangerButton label="Darme de baja" colors={colors} onPress={() => onLeaveGame?.()} />
+        )}
+        {isParticipant && !game.isCreator && game.myTeam === 2 && (
+          <DangerButton label="Cancelar nuestra pareja" colors={colors} onPress={() => onCancelPair?.()} />
         )}
 
         {hasApplied && (
@@ -285,6 +369,25 @@ function SheetContent({
         </Pressable>
       </View>
     </ScrollView>
+  );
+}
+
+/** Botón de acción destructiva (outline, sin rojo — brand-strict 3 colores). */
+function DangerButton({
+  label, colors, onPress,
+}: { label: string; colors: ReturnType<typeof useTheme>['colors']; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => ({
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+        paddingVertical: 12, borderRadius: 12,
+        backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.lineStrong,
+        opacity: pressed ? 0.8 : 1,
+      })}
+    >
+      <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: colors.text }}>{label}</Text>
+    </Pressable>
   );
 }
 

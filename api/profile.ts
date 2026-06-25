@@ -16,22 +16,15 @@
  *   o con headers que rompen la firma de B2). `FileSystem.uploadAsync` con
  *   `BINARY_CONTENT` lee el archivo del disco y hace el PUT crudo — esta es la
  *   forma correcta y confiable de subir directo a B2 desde el dispositivo.
+ *
+ * Nota de producto: la ÚNICA imagen subible desde la app es la del usuario
+ * (avatar/portada). El resto del contenido son highlights creados en la app.
  */
 import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
 const TOKEN_KEY = 'torna_auth_token';
-// Mismo bucket público que usa el resto de la media de la app.
-const B2_PUBLIC_BASE = 'https://f005.backblazeb2.com/file/torna-videos';
-
-// ─────────────────────────────────────────────────────────────────────────
-// TODO(dev): QUITAR antes de producción. Logging temporal para diagnosticar
-// la subida de foto de perfil a B2. Buscar "[UPLOAD DEBUG]" para borrar todo.
-// ─────────────────────────────────────────────────────────────────────────
-function dbg(...args: unknown[]) {
-  if (__DEV__) console.log('[UPLOAD DEBUG]', ...args);
-}
 
 async function getToken(): Promise<string> {
   const token = await SecureStore.getItemAsync(TOKEN_KEY);
@@ -40,27 +33,33 @@ async function getToken(): Promise<string> {
 }
 
 /**
- * Camino directo: presigned PUT cliente→B2. Lanza si falla en cualquier paso.
+ * Camino directo: presigned PUT cliente→B2. Devuelve la URL pública del objeto.
+ * Lanza si falla en cualquier paso.
  */
 async function presignedPutToB2(
   key: string,
   mime: string,
   assetUri: string,
   token: string,
-): Promise<void> {
+): Promise<string> {
   // 1. Presigned URL de B2
   const urlEndpoint = `${API_URL}/files/upload-url?key=${encodeURIComponent(key)}&contentType=${encodeURIComponent(mime)}`;
-  dbg('GET presigned url ->', urlEndpoint);
   const urlRes = await fetch(urlEndpoint, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!urlRes.ok) {
-    const body = await urlRes.text().catch(() => '');
-    dbg('presigned url FALLÓ', urlRes.status, body);
     throw new Error('No se pudo obtener la URL de subida.');
   }
-  const { uploadUrl } = (await urlRes.json()) as { uploadUrl: string };
-  dbg('presigned url OK', uploadUrl.slice(0, 120) + '…');
+  // El backend envuelve las respuestas en { data, statusCode }; desenvolver.
+  const json = (await urlRes.json()) as {
+    data?: { uploadUrl: string; publicUrl: string };
+    uploadUrl?: string;
+    publicUrl?: string;
+  };
+  const { uploadUrl, publicUrl } = json.data ?? json;
+  if (!uploadUrl || !publicUrl) {
+    throw new Error('Respuesta inesperada del servidor de subida.');
+  }
 
   // 2. Subir el archivo directo a B2 (binary, leído del disco).
   let putRes: FileSystem.FileSystemUploadResult;
@@ -71,29 +70,28 @@ async function presignedPutToB2(
       headers: { 'Content-Type': mime },
     });
   } catch (e) {
-    dbg('PUT a B2 lanzó excepción', e);
     throw new Error('No se pudo subir la imagen a B2 (excepción de red).');
   }
-  dbg('PUT a B2 respuesta', { status: putRes.status, body: putRes.body?.slice(0, 300) });
   if (putRes.status < 200 || putRes.status >= 300) {
     throw new Error(
       `No se pudo subir la imagen. B2 respondió ${putRes.status}: ${putRes.body ?? ''}`,
     );
   }
+
+  return publicUrl;
 }
 
 /**
  * Fallback: la app manda el archivo al backend (multipart) y el backend lo sube
- * a B2. Se usa cuando el PUT directo a B2 falla.
+ * a B2. Se usa cuando el PUT directo a B2 falla. Devuelve la URL pública.
  */
 async function backendUploadToB2(
   key: string,
   mime: string,
   assetUri: string,
   token: string,
-): Promise<void> {
+): Promise<string> {
   const endpoint = `${API_URL}/files/upload?key=${encodeURIComponent(key)}`;
-  dbg('POST fallback backend ->', endpoint);
   let res: FileSystem.FileSystemUploadResult;
   try {
     res = await FileSystem.uploadAsync(endpoint, assetUri, {
@@ -104,15 +102,25 @@ async function backendUploadToB2(
       headers: { Authorization: `Bearer ${token}` },
     });
   } catch (e) {
-    dbg('POST fallback lanzó excepción', e);
     throw new Error('No se pudo subir la imagen (fallback backend, excepción de red).');
   }
-  dbg('POST fallback respuesta', { status: res.status, body: res.body?.slice(0, 300) });
   if (res.status < 200 || res.status >= 300) {
     throw new Error(
       `No se pudo subir la imagen vía backend. Respondió ${res.status}: ${res.body ?? ''}`,
     );
   }
+  // El backend devuelve { data: { key, publicUrl }, statusCode } (envelope).
+  let publicUrl: string | undefined;
+  try {
+    const parsed = JSON.parse(res.body ?? '{}');
+    publicUrl = (parsed.data ?? parsed)?.publicUrl;
+  } catch {
+    /* body no-JSON → publicUrl queda undefined */
+  }
+  if (!publicUrl) {
+    throw new Error('No se pudo obtener la URL pública de la imagen subida.');
+  }
+  return publicUrl;
 }
 
 /**
@@ -130,32 +138,17 @@ async function uploadImageToB2(
   const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
   const key = `${folder}/${uid}-${Date.now()}.${ext}`;
 
-  dbg('inicio', { folder, uid, assetUri, ext, mime, key, apiUrl: API_URL });
+  // Verificar que el archivo local existe (causa común de fallo).
+  const info = await FileSystem.getInfoAsync(assetUri);
+  if (!info.exists) throw new Error(`El archivo local no existe: ${assetUri}`);
 
-  // 0. Verificar que el archivo local existe y tiene tamaño (causa común de fallo).
+  // Intentar directo a B2; si falla, fallback vía backend. El publicUrl lo
+  // devuelve el backend (no se hardcodea host/bucket).
   try {
-    const info = await FileSystem.getInfoAsync(assetUri);
-    dbg('archivo local', info);
-    if (!info.exists) throw new Error(`El archivo local no existe: ${assetUri}`);
-  } catch (e) {
-    dbg('error leyendo archivo local', e);
-    throw e;
+    return await presignedPutToB2(key, mime, assetUri, token);
+  } catch {
+    return await backendUploadToB2(key, mime, assetUri, token);
   }
-
-  // 1. Intentar directo a B2; si falla, fallback vía backend.
-  try {
-    await presignedPutToB2(key, mime, assetUri, token);
-    dbg('camino directo OK');
-  } catch (directErr) {
-    dbg('camino directo FALLÓ, intentando fallback backend', directErr);
-    await backendUploadToB2(key, mime, assetUri, token);
-    dbg('camino fallback backend OK');
-  }
-
-  // 2. URL pública (misma key en ambos caminos).
-  const publicUrl = `${B2_PUBLIC_BASE}/${key}`;
-  dbg('subida OK, url pública', publicUrl);
-  return publicUrl;
 }
 
 /** Persiste un campo de imagen del usuario vía PATCH /user/me. */
@@ -164,18 +157,14 @@ async function patchMe(
   token: string,
   errorMsg: string,
 ): Promise<void> {
-  dbg('PATCH /user/me', patch);
   const res = await fetch(`${API_URL}/user/me`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(patch),
   });
   if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    dbg('PATCH /user/me FALLÓ', res.status, body);
     throw new Error(errorMsg);
   }
-  dbg('PATCH /user/me OK');
 }
 
 /** Foto de perfil (avatar). Sube a B2 y persiste en profilePicture. */

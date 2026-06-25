@@ -69,9 +69,10 @@ export function VideoEditorScreen({
     return (
       <TrimStep
         recordingUrl={recordingUrl}
-        durationSeconds={durationSeconds}
+        durationSeconds={flow.effectiveDuration}
         range={flow.range}
         onChangeRange={flow.setRange}
+        onLoad={flow.onVideoLoaded}
         onBack={() => flow.setStep('preview')}
         onContinue={() => flow.setStep('metadata')}
       />
@@ -119,10 +120,11 @@ export function VideoEditorScreen({
           <PreviewStep
             gameId={gameId}
             recordingUrl={recordingUrl}
-            durationSeconds={durationSeconds}
+            durationSeconds={flow.effectiveDuration}
             courtLabel={courtLabel}
             clubName={clubName}
             cameraLabel={cameraLabel}
+            onLoad={flow.onVideoLoaded}
             onContinue={() => flow.setStep('trim')}
           />
         )}

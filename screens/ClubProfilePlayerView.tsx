@@ -11,7 +11,7 @@ import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { SectionHeader, StatusBadge, Avatar, SurfaceChip } from '../components/ui';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
-import { ClubMap } from '../components/ClubMap';
+import { MapsButton } from '../components/MapsButton';
 import type { ClubPublic } from '../data/types';
 
 const tornaLogo = require('../assets/torna-icon.png');
@@ -283,13 +283,10 @@ export function ClubProfilePlayerView({
             <InfoRow icon={<Clock size={16} color={colors.muted2}/>}  label="HORARIO"   value={club.hours}/>
             <InfoRow icon={<Phone size={16} color={colors.muted2}/>}  label="TELÉFONO"  value={club.phone}/>
             <InfoRow icon={<MapPin size={16} color={colors.muted2}/>} label="DIRECCIÓN" value={club.address}/>
-            {/* Mapa real del local */}
-            <ClubMap
-              latitude={club.latitude}
-              longitude={club.longitude}
-              title={club.name}
-              style={{ borderTopWidth: 1, borderTopColor: colors.line }}
-            />
+            {/* Referencia a Google Maps (sin mapa embebido) */}
+            <View style={{ padding: 12 }}>
+              <MapsButton latitude={club.latitude} longitude={club.longitude} query={club.address} />
+            </View>
           </View>
         </View>
       </ScrollView>

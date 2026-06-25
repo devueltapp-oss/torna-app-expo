@@ -12,7 +12,7 @@
 import React from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronDown, Lock, Scissors, Play } from 'lucide-react-native';
+import { ChevronLeft, ChevronDown, Lock, Scissors, Play, Trophy } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { Button, AppHeader, SurfaceChip } from '../components/ui';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
@@ -30,6 +30,8 @@ export interface MyLibraryScreenProps {
   onBack: () => void;
   /** Tap "Crear highlight" en un match → abre VideoEditor con esa grabación. */
   onCreateHighlight: (match: LibraryMatch) => void;
+  /** Registrar resultado (gané/perdí) de un partido finalizado. */
+  onRegisterResult?: (match: LibraryMatch) => void;
   /** Flip privado/público de un item. */
   onToggleVisibility: (item: LibraryItem) => void;
   /** Tap reproducir cualquier item. */
@@ -40,7 +42,7 @@ export interface MyLibraryScreenProps {
 
 export function MyLibraryScreen({
   matches, highlights,
-  onBack, onCreateHighlight, onToggleVisibility, onOpenItem,
+  onBack, onCreateHighlight, onRegisterResult, onToggleVisibility, onOpenItem,
   activeTab, onChangeTab,
 }: MyLibraryScreenProps) {
   const { colors } = useTheme();
@@ -95,6 +97,7 @@ export function MyLibraryScreen({
               <MatchRow
                 key={m.id} match={m}
                 onCreateHighlight={() => onCreateHighlight(m)}
+                onRegisterResult={onRegisterResult ? () => onRegisterResult(m) : undefined}
                 onToggleVisibility={() => onToggleVisibility(m)}
                 onOpen={() => onOpenItem?.(m)}
               />
@@ -164,9 +167,10 @@ function SectionHeader({ title, count, collapsed, onToggle }: {
   );
 }
 
-function MatchRow({ match, onCreateHighlight, onToggleVisibility, onOpen }: {
+function MatchRow({ match, onCreateHighlight, onRegisterResult, onToggleVisibility, onOpen }: {
   match: LibraryMatch;
   onCreateHighlight: () => void;
+  onRegisterResult?: () => void;
   onToggleVisibility: () => void;
   onOpen: () => void;
 }) {
@@ -184,9 +188,6 @@ function MatchRow({ match, onCreateHighlight, onToggleVisibility, onOpen }: {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <VisibilityPill isPublic={match.isPublic} onPress={onToggleVisibility}/>
           <SurfaceChip surface={match.surface}/>
-          <Text style={{ fontSize: 11, color: colors.muted2, fontWeight: '700', fontFamily: 'Menlo' }}>
-            {match.id}
-          </Text>
         </View>
         <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text, lineHeight: 17 }}>
           {match.title}
@@ -215,6 +216,23 @@ function MatchRow({ match, onCreateHighlight, onToggleVisibility, onOpen }: {
             <Play size={11} color={colors.text2}/>
             <Text style={{ color: colors.text2, fontWeight: '700', fontSize: 11 }}>Reproducir</Text>
           </Pressable>
+          {match.resultRegistered ? (
+            <View style={{
+              flexDirection: 'row', alignItems: 'center', gap: 4,
+              paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: colors.bg2,
+            }}>
+              <Trophy size={11} color={colors.muted2}/>
+              <Text style={{ color: colors.muted2, fontWeight: '700', fontSize: 11 }}>Resultado cargado</Text>
+            </View>
+          ) : onRegisterResult ? (
+            <Pressable onPress={onRegisterResult} style={{
+              flexDirection: 'row', alignItems: 'center', gap: 4,
+              borderWidth: 1, borderColor: colors.line, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+            }}>
+              <Trophy size={11} color={colors.text2}/>
+              <Text style={{ color: colors.text2, fontWeight: '700', fontSize: 11 }}>Registrar resultado</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
     </View>
@@ -240,9 +258,6 @@ function ItemRow({ item, onToggleVisibility, onOpen }: {
       <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <VisibilityPill isPublic={item.isPublic} onPress={onToggleVisibility}/>
-          <Text style={{ fontSize: 11, color: colors.muted2, fontWeight: '700', fontFamily: 'Menlo' }}>
-            {item.id}
-          </Text>
         </View>
         <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text, lineHeight: 17 }}>{item.title}</Text>
         {isHighlight && item.fromMatch ? (

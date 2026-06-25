@@ -37,7 +37,6 @@
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Torna necesita el micrófono para reproducir audio de los partidos en vivo.",
-        "NSLocationWhenInUseUsageDescription": "Torna usa tu ubicación para mostrarte canchas y jugadores cercanos.",
         "NSPhotoLibraryUsageDescription": "Torna accede a tu galería para subir fotos y videos.",
         "NSPhotoLibraryAddUsageDescription": "Torna guarda clips en tu galería."
       },

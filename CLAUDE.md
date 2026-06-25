@@ -41,7 +41,7 @@ Torna es una app para **2 tipos de usuario**:
 
 - **Player** — espectadores y jugadores. Pueden ver streams en vivo, seguir
   clubes/players, ver feed social (highlights), **reservar canchas** y
-  **buscar partido cerca tuyo** (GPS).
+  **buscar partido** (partidos abiertos para sumarse).
 - **Club** — admin de un club. Gestiona el perfil propio del club y ve los
   partidos / canchas / jugadores / reservas pendientes del club.
 
@@ -71,10 +71,13 @@ con flujo `Register → Pending → MainClub`.
 - `PlayerProfilePublicView` — perfil público de otro player: avatar grande,
   badge "JUGANDO AHORA" si está en partido en vivo, momentos destacados
   (card LIVE como primera tile cuando aplica + clips), fotos.
-- `SearchPlayScreen` — descubrimiento por GPS:
-  1. Permission gate con explicación y bullets.
-  2. Mini-mapa + radio pill + tabs Canchas/Jugadores.
-  3. Botón **Reservar** (canchas) o **Unirme** (jugadores).
+- `SearchPlayScreen` — **partidos abiertos para sumarse** (GET /game/open vía
+  `useOpenGames`). **Sin GPS ni permiso de ubicación.** Lista cada partido con
+  hora/cancha/club, cupo (X/4) y jugadores; cada card tiene **"Ver detalle"**
+  (abre `UpcomingMatchSheet` → postularse/aceptar vía `POST /game/:id/apply`) y
+  **"Buscar en Maps"** (`MapsButton`, abre Google Maps fuera de la app — pin
+  exacto con lat/lng del club si está, o búsqueda por nombre; siempre sin
+  permiso). Pull-to-refresh; estado vacío si no hay partidos.
 - Flujo de reserva en 3 pasos (`ReserveStep1` → `Step2` → `Step3` →
   `ReserveSuccess`):
   1. Elegir cancha (radio buttons sobre las canchas del club).
@@ -84,12 +87,13 @@ con flujo `Register → Pending → MainClub`.
      - ON: el player + 1 compañero. El partido se publica para que 2 más
        se sumen.
      - **Cambiar** abre `PlayerSearchOverlay` (autofocus + filter local).
-- `JoinMatchScreen` — para players que tocan "Unirme" sobre un nearby
-  player en "Buscar rivales" mode. Switch "Voy con compañero".
+- Sumarse a un partido abierto: desde `SearchPlayScreen` → "Ver detalle" →
+  `UpcomingMatchSheet` → **Postularme** (`POST /game/:id/apply`, con switch "voy con
+  compañero"). (`JoinMatchScreen` es legacy y ya no tiene ruta en `App.tsx`.)
 - **Reservar ahora, pagar en el club.** NO hay pago en la app.
 - `PlayerOwnProfileScreen` — perfil propio del player: avatar, stats (seguidores / siguiendo / partidos / highlights), 3 tabs (Highlights / Partidos / Fotos), grid 3×N de contenido. Accesos a `MyLibraryScreen` y `PlayerSettingsScreen`.
 - `MyLibraryScreen` — librería privada (solo el dueño la ve): 3 secciones colapsables (Mis partidos completos → acción "Crear highlight", Mis highlights con toggle Privado/Público, Mis subidas con foto/video ≤3 min). FAB "+" abre `UploadSheet`.
-- `VideoEditorScreen` — flujo de 5 pasos para crear highlight desde una grabación de partido: Preview → Trim (`TrimRangeSlider`) → Metadata (título + visibilidad) → Procesando (`ffmpeg-kit`) → Resultado.
+- `VideoEditorScreen` — flujo de 5 pasos para crear highlight desde una grabación de partido: Preview → Trim (`TrimRangeSlider`) → Metadata (título + visibilidad) → Procesando → Resultado. **El recorte es server-side**: la app llama `POST /highlights/from-recording` con `{ gameId, start, end, title, isPublic }` y el backend recorta (FFmpeg byte-range), sube el clip a B2 y crea el highlight. (Antes se recortaba on-device con `ffmpeg-kit`, que crasheaba la app.)
 
 **Solo Club:**
 - `ClubHomeScreen` — admin home: 3 stat cards (live, viewers, a cobrar) +
@@ -158,7 +162,8 @@ PlayerPublic {
   photos: number[]
 }
 
-// Search play (GPS)
+// Search play — legacy (ya NO se usan: SearchPlay ahora lista GET /game/open).
+// NearbyClub se mantiene por si vuelve la búsqueda por cercanía; el resto es histórico.
 NearbyCourt  { id, name, club, distanceKm, surface, freeSlots[], hasCameras }
 NearbyPlayer { id, name, username, rating, distanceKm, lookingFor, availability }
 
@@ -210,7 +215,9 @@ ClubTodayReservation {
 3. El precio se muestra pero NO se cobra (hoy el slot devuelve price 0); el pago es
    en el club.
 4. Slots `reserved` están bloqueados (solapan una Game existente de esa cancha).
-5. GPS se solicita **on-demand**, solo cuando se abre `SearchPlayScreen`.
+5. **Sin GPS.** `SearchPlayScreen` ya no pide permiso de ubicación: lista partidos
+   abiertos (GET /game/open) y la ubicación de cada uno se abre en Google Maps fuera
+   de la app (`MapsButton`).
 6. **Ubicación estática solo en clubs**: el mapa usa `latitude/longitude` del club
    (`isClub=true`); el player no tiene ubicación persistida (su GPS es runtime).
 
@@ -232,6 +239,56 @@ POST /auth/register              { idToken, username, name, authProvider } → {
 GET  /auth/me                    Bearer token → TornaUser
 DELETE /auth/logout              → 204
 ```
+
+#### Alta de cuenta (registro)
+
+Toda alta termina en `POST /auth/register`, que **exige un `idToken` de Firebase**
+(no existe un registro server-side por email). El backend setea `status` según el
+rol: **player → `status:true` (entra al instante)**, **club → `status:false`
+(pendiente de aprobación manual)**. Tres caminos según cómo se obtiene el `idToken`:
+
+```
+Email/contraseña (solo Player) — RegisterPlayerScreen
+  Firebase createUserWithEmailAndPassword(email, pass)  → idToken
+  → AuthContext.registerWithEmailPassword(email, pass, { username, name, isClub:false })
+  → POST /auth/register { authProvider:'email', isClub:false }
+  → user seteado → Root cambia al AppStack (sin pasar por Pending)
+
+Social (Google/Apple) — LoginWithRoleScreen → CompleteProfileScreen
+  firebaseAuth().signInWithCredential(...)              → idToken
+  → POST /auth/login → { exists:false } → CompleteProfileScreen (elegir username)
+  → AuthContext.register(idToken, { authProvider:'google'|'apple' })
+
+Club por email — RegisterClubScreen
+  ⚠️ HOY ES UN MOCK: su onSubmit solo hace navigation.replace('Pending'); NO crea la
+  cuenta en Firebase ni llama a la API. Para cablearlo de verdad: usar el mismo
+  registerWithEmailPassword con isClub:true (el backend ya lo deja en status:false).
+```
+
+> El botón **"Crear cuenta de Player"** de `LoginWithRoleScreen` navega a
+> `RegisterPlayer` (`App.tsx`); el de club va a `Register`. El username se valida
+> en vivo contra `GET /auth/check-username?username=` (debounce 400 ms).
+
+#### Cambio de contraseña (player + club)
+
+Se hace **client-side contra Firebase**, NO vía el backend. `AuthContext.changePassword`:
+
+```
+1. firebaseAuth().signInWithEmailAndPassword(email, currentPassword)  → valida la
+   clave actual Y crea sesión en el SDK cliente (necesaria: los que entraron por
+   email/password lo hicieron vía backend, así que currentUser estaba null)
+2. currentUser.updatePassword(newPassword)   → actualiza directamente en Firebase
+3. getIdToken(true) + SecureStore.setItemAsync(TOKEN_KEY, fresh)  → refresca sesión
+```
+
+- **Player**: `PlayerSettingsScreen` → sección `password`.
+- **Club**: `ProfileScreen` → pestaña Seguridad.
+- Ambas usan `useAuth().changePassword` directo (con loading/error inline + `Alert` de
+  éxito) y el helper `friendlyPasswordError` (exportado desde `PlayerSettingsScreen`).
+- ⚠️ El backend `POST /auth/reset-password` existe pero la app **no lo usa** (no
+  verifica la contraseña actual; el camino cliente sí, vía el re-login del paso 1).
+- Cuentas Google/Apple no tienen contraseña: el paso 1 falla y se muestra un mensaje
+  claro ("entraste con Google/Apple").
 
 ### Feed / Inicio (player)
 
@@ -276,7 +333,8 @@ PATCH /highlights/:id/toggle → invierte público/privado (pill de MyLibraryScr
 
 ```
 GET    /club/:id            → club  (los clubs son users isClub=true)
-GET    /club/nearby?lat=&lng=&radius= → clubes cercanos (SearchPlayScreen, GPS)
+GET    /club/nearby?lat=&lng=&radius= → clubes cercanos (existe en el backend; la app
+                                        ya NO lo consume tras quitar el GPS de SearchPlay)
 POST   /follow             { userId } → seguir
 POST   /follow/unfollow    { userId } → dejar de seguir
 ```
@@ -284,10 +342,17 @@ POST   /follow/unfollow    { userId } → dejar de seguir
 ### Player público — `hooks/useUserProfile.ts`
 
 ```
-GET  /user/profile/:id   → PlayerPublic (identidad + conteos reales)
-GET  /highlights?userId= → clips del jugador
-POST /follow | /follow/unfollow  { userId }
+GET   /user/profile/:id        → PlayerPublic (identidad + conteos + isFollowing + notifyOnMatch)
+GET   /highlights?userId=       → clips del jugador
+GET   /follow/followers/:id     → seguidores (FollowListSheet)
+GET   /follow/following/:id     → seguidos (FollowListSheet)
+POST  /follow | /follow/unfollow  { userId } → seguir / dejar de seguir
+PATCH /follow/notify/:userId    { notify }   → toggle "Notificarme" (setFollowNotify, persiste Follower.notifyOnMatch)
 ```
+
+> El toggle de campana del perfil ajeno (`onToggleNotify`) persiste vía
+> `PATCH /follow/notify/:userId` y se rehidrata desde `notifyOnMatch` del perfil. Las
+> listas de seguidores/seguidos son clickeables → navegan a `PlayerProfile` (recursivo).
 
 ### Canchas y reservas — `api/clubs.ts`
 
@@ -299,13 +364,34 @@ POST /game/reserve  { courtId, date, slotStart, durationMinutes, mode,
                       partnerUserId?, opponentUserIds? } → crea la partida (ReserveStep3)
 ```
 
-### Subidas a B2 — `api/profile.ts` (avatar/portada) + `services/highlightService.ts` (highlights)
+### Partidas: postular / mis partidas / bajas — `api/games.ts`
+
+```
+GET   /game/open                              → partidas abiertas (useOpenGames → Home)
+GET   /game/mine                              → mis partidas activas (useMyGames → GamesScreen "Mis partidas")
+POST  /game/:id/apply { partnerId? }          → postularme (ApplyMatchSheet)
+PATCH /game/:id/applications/:appId/accept    → aceptar postulación (owner; UpcomingMatchSheet)
+PATCH /game/:id/applications/:appId/reject    → rechazar postulación (owner)
+PATCH /game/:id/cancel                        → owner cancela toda la partida (→ CANCELLED)
+POST  /game/:id/leave                         → miembro no-owner se da de baja
+POST  /game/:id/cancel-pair                   → la pareja retadora (team=2) se baja
+```
+
+> **Equipos**: cada `GamePlayer` trae `team` (1 = lado owner, 2 = pareja retadora). El tab
+> **Juegos** del player muestra "Mis partidas" (`useMyGames`); tocar una abre `UpcomingMatchSheet`
+> que, según el rol del viewer, ofrece *Cancelar partida* (owner), *Darme de baja* (miembro) y
+> *Cancelar nuestra pareja* (team 2). Las bajas/cancelaciones notifican por push (OneSignal).
+
+### Subidas a B2 — `api/profile.ts` (avatar/portada)
 
 ```
 GET   /files/upload-url?key=&contentType=  → presigned PUT a B2
 GET   /files/stream?key=                   → presigned GET (playback)
 PATCH /user/me { profilePicture | frontPage } → persiste la URL pública
 ```
+
+> Highlights: la app **NO** recorta ni sube el clip. Llama `POST /highlights/from-recording`
+> y el backend hace el recorte (FFmpeg byte-range) + subida a B2 + creación del highlight.
 
 ### Game detail (visor HLS) — `hooks/useGameDetail.ts`
 
@@ -316,6 +402,29 @@ GET  /game/:id   → detalle con cameras[] (stream HLS en camera.streamingUrl)
 > Nota: la app **NO** crea ni edita Courts, Slots ni Cameras. Esos
 > endpoints son de **lectura solamente** desde la app. El admin externo es
 > el único escritor.
+
+### Notificaciones push (OneSignal)
+
+La app usa **`react-native-onesignal`** (NO `expo-notifications`). Init en `App.tsx`
+dentro de `App()`: `OneSignal.initialize(EXPO_PUBLIC_ONESIGNAL_APP_ID)` +
+`requestPermission` + listener de `click`.
+
+```
+PUT /user/update-notification-id  { notificationID }  → registra el push token
+```
+
+- `registerNotificationId()` en `contexts/AuthContext.tsx` se llama tras cada login
+  (email / Google / Apple). Toma el subscription ID de OneSignal
+  (`OneSignal.User.pushSubscription.getIdAsync()`) y lo manda al backend.
+- ⚠️ **El campo DEBE ser `notificationID` (con `ID` mayúscula)** para coincidir con el
+  DTO del backend (`forbidNonWhitelisted`); un `notificationId` con `d` minúscula da
+  **400** y el token nunca se registra → no llega ningún push. El registro es
+  best-effort (catch silencioso), así que el fallo es invisible.
+- El listener de `click` lee `additionalData`; si `type === 'STREAMING_STARTED'` y hay
+  `gameId`, navega a `GameDetail`. Hoy ese es el único tipo manejado (lo dispara el
+  backend cuando una partida pasa a LIVE desde torna-desktop).
+- Env: `EXPO_PUBLIC_ONESIGNAL_APP_ID`. La app **solo recibe** push; no hay WebSocket ni
+  polling en tiempo real (los datos se refrescan al montar o con pull-to-refresh).
 
 ---
 
@@ -330,13 +439,14 @@ GET  /game/:id   → detalle con cameras[] (stream HLS en camera.streamingUrl)
 | **Iconos** | `lucide-react-native` (size 22 default, stroke 2) |
 | **Tipografía** | Helvetica (manual de marca) — TODO migrar H1 a Coolvetica |
 | **SVG** | `react-native-svg` (`<Svg>`, `<Rect>`, `<Line>`, `<Path>`) |
-| **Video / HLS** | `expo-av` ~14.0.7 (reproductor HLS) |
-| **Mapas** | `react-native-webview` (mapa OSM/Leaflet en `ClubMap.tsx`) — **sin API key ni billing**. NO se usa Google Maps ni `react-native-maps` |
-| **Ubicación** | `expo-location` ~17.0.1 (GPS on-demand para "clubes cerca") |
+| **Video / HLS** | `expo-av` ~14.0.7 (reproductor HLS). **Fullscreen unificado**: todos los players expanden con el nativo `videoRef.current.presentFullscreenPlayer()` sobre la misma instancia (NO un `Modal` con un segundo `<Video>`). Aplica a `GameDetailScreen`, `ReelViewScreen`, `VideoPreviewModal` y el `Player` del editor; el botón es siempre `Maximize2` |
+| **Mapas** | Sin mapa embebido ni librería de mapas. La ubicación se referencia con un botón **"Buscar en Maps"** (`components/MapsButton.tsx`) que abre **Google Maps** (URL universal `maps/search/?api=1&query=lat,lng`) vía `Linking`. Antes había Leaflet en `react-native-webview` + MapTiler; se quitó para no requerir dev-client ni API key |
+| **Ubicación** | Sin GPS. Las ubicaciones se abren en **Google Maps** vía `MapsButton` (`Linking`), usando lat/lng del club (pin exacto) o el nombre como fallback. `expo-location` y el hook `useLocation` fueron **eliminados** (también el permiso `NSLocationWhenInUse` de `app.json`) |
 | **Subida de archivos** | `expo-file-system` ~17.0.1 (`uploadAsync` binario → B2 presigned) |
 | **Gestos** | `react-native-gesture-handler` ~2.16.1 (swipe entre cámaras, editor) |
 | **Fuentes** | `expo-font` ~12.0.0 (carga de .ttf custom) |
-| **Procesamiento de video** | `ffmpeg-kit-react-native` ^6.0.2 (trim de highlights — **solo production build**, no incluir en `package.json` para dev; incompatible con el config plugin de Expo en Node moderno) |
+| **Notificaciones** | `react-native-onesignal` ~5.2.10 + `onesignal-expo-plugin` (push; registro vía `notificationID`). Ver "Notificaciones push (OneSignal)" arriba |
+| **Procesamiento de video** | **Server-side** en el backend (`POST /highlights/from-recording`: FFmpeg byte-range → B2). La app ya **no** usa `ffmpeg-kit-react-native` (crasheaba y estaba fuera de `package.json`). |
 | **Splash / icon** | `assets/torna-icon.png` (1024×1024) · fondo `#2d4c75` |
 | **Bundle IDs** | iOS: `io.torna` · Android package: `io.torna` |
 | **Auth** | `@react-native-firebase/auth` v20 (SDK 51-compatible; v21+ es ESM y rompe `@expo/config-plugins@8`) · `@react-native-google-signin` v13 · `expo-apple-authentication` |
@@ -469,11 +579,13 @@ expo/
 │   ├── VideoPreviewModal.tsx    # modal reproductor de video: preview + pantalla completa
 │   ├── FollowListSheet.tsx      # modal lista de seguidores/siguiendo
 │   ├── UpcomingMatchSheet.tsx   # detalles de próximo partido
-│   └── ApplyMatchSheet.tsx      # solicitar unirse a partido abierto
+│   ├── ApplyMatchSheet.tsx      # solicitar unirse a partido abierto
+│   └── MapsButton.tsx           # botón "Buscar en Maps" → abre Google Maps (Linking)
 ├── screens/
 │   ├── LoginScreen.tsx
 │   ├── LoginWithRoleScreen.tsx
-│   ├── RegisterClubScreen.tsx
+│   ├── RegisterClubScreen.tsx       # ⚠️ mock: onSubmit no crea la cuenta (ver Auth)
+│   ├── RegisterPlayerScreen.tsx     # alta Player por email/contraseña (instantánea)
 │   ├── PendingApprovalScreen.tsx
 │   ├── CompleteProfileScreen.tsx   # completar perfil tras social login (username + nombre)
 │   ├── HomeScreen.tsx               # player home
@@ -515,20 +627,17 @@ expo/
 ├── hooks/
 │   ├── useLiveGames.ts      # GET /game/live → LiveGameData[]
 │   ├── useOpenGames.ts      # GET /game/open → partidas abiertas
+│   ├── useMyGames.ts        # GET /game/mine → mis partidas activas (equipos/rol)
 │   ├── usePlayerMatches.ts  # GET /game/player/:id/history → LibraryMatch[]
 │   ├── useGameDetail.ts     # GET /game/:id → GameDetailData (cámaras/HLS) + recordingUrl
 │   ├── usePlayers.ts        # GET /user/players → PlayerData[]
-│   ├── useUserProfile.ts    # GET /user/profile/:id + /highlights?userId= → PlayerPublic
-│   └── useLocation.ts       # expo-location: permiso GPS on-demand + coords
+│   └── useUserProfile.ts    # GET /user/profile/:id + /highlights?userId= → PlayerPublic
 ├── api/
 │   ├── users.ts            # fetchUserProfile · searchUsers
 │   ├── clubs.ts            # fetchNearbyClubs · fetchClubCourts · fetchCourt · fetchCourtSlots · createReservation
-│   ├── highlights.ts       # fetchUserHighlights (GET /highlights?userId=)
+│   ├── games.ts            # fetchMyGames · applyToGame · accept/rejectApplication · cancelGame · leaveGame · cancelChallengerPair
+│   ├── highlights.ts       # fetchUserHighlights · fetchMyHighlights · createHighlightFromRecording (POST /highlights/from-recording)
 │   └── profile.ts          # uploadProfilePicture · uploadFrontPage (expo-file-system → B2)
-├── services/
-│   └── highlightService.ts  # orquestación: trim (FFmpeg on-device) → upload B2 → POST /highlights
-├── components/
-│   └── ClubMap.tsx          # mapa OSM (Leaflet en WebView) con pin del club, sin API key
 └── data/
     └── types.ts            # tipos públicos (ClubPublic, NearbyClub, PlayerPublic, Slot, etc.) — sin mocks
 ```
@@ -551,7 +660,7 @@ Stack único en `App.tsx`. `initialRouteName="LoginWithRole"`.
 | `GameDetail` | Visor HLS | ambos | `{ gameId }` |
 | `ClubProfile` | Perfil público del club | player | `{ clubId }` |
 | `PlayerProfile` | Perfil público de un player | player | `{ playerId }` |
-| `SearchPlay` | Discovery GPS | player | — |
+| `SearchPlay` | Partidos abiertos para sumarse (sin GPS) | player | — |
 | `ReserveCourt` | Paso 1 — elegir cancha | player | `{ clubId, courtId? }` |
 | `ReserveTime` | Paso 2 — fecha + slot | player | `{ courtId }` |
 | `ReserveInvite` | Paso 3 — switch + players | player | `{ courtId, date, slot }` |
@@ -712,13 +821,15 @@ npm start                   # arranca sin warnings en Metro
 
 10. **HLS player** — **PARCIALMENTE RESUELTO**: `expo-av` está integrado en `GameDetailScreen`. Funciona con stream HLS real; muestra un SVG placeholder si no hay `streamUrl`. Para producción verificar soporte de DRM y bajo-latencia.
 
-11. ~~**Mini mapa** SVG decorativo~~ **RESUELTO**: el mapa del club es real vía
-    `components/ClubMap.tsx` — OpenStreetMap (Leaflet) dentro de `react-native-webview`,
-    **sin API key ni billing** (elección MVP). Se usa en `ClubProfilePlayerView` y
-    `ReserveStep1Screen`. Muestra un pin en la lat/lng del club (solo clubs tienen
-    ubicación) + botón "Cómo llegar" (Linking). Fallback "Ubicación no disponible" si
-    no hay coords. Requiere build del dev-client (no Expo Go). `SearchPlayScreen` ya no
-    usa mini-mapa (lista de clubes cercanos).
+11. ~~**Mini mapa** SVG decorativo~~ → ~~Leaflet/MapTiler en WebView~~ **RESUELTO (sin mapa
+    embebido)**: la ubicación se referencia con `components/MapsButton.tsx` — un botón
+    "Buscar en Maps" que abre **Google Maps** (URL universal `maps/search/?api=1&query=...`)
+    vía `Linking`, usando la lat/lng del club (o la dirección/nombre como fallback de
+    búsqueda por texto; "Ubicación no disponible" si no hay ninguno). Se usa en
+    `ClubProfilePlayerView`, `ReserveStep1Screen` y por card en `SearchPlayScreen`. Se
+    eliminaron `ClubMap.tsx`, `NearbyClubsMap.tsx`, `mapTiles.ts`, la dependencia
+    `react-native-webview` y la key `EXPO_PUBLIC_MAPTILER_KEY` (ya no se requiere
+    dev-client para ver la ubicación).
 
 12. **`torna-logo.svg`** en assets no se usa en runtime — borrarlo o
     convertirlo a componente RN-SVG.

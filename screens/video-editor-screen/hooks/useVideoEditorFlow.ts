@@ -1,21 +1,21 @@
 /**
  * Hook que encapsula el flujo del editor: estado de step, range, metadata,
- * procesamiento on-device con FFmpegKit y guardado del highlight.
+ * procesamiento del highlight y guardado.
  *
- *   - FFmpegKit recorta el video on-device (via highlightService)
- *   - highlightService sube el clip a B2 via presigned URL del backend
- *   - el hook llama POST /highlights con la streamUrl resultante
- *   - sin polling, sin BullMQ, sin Redis
+ * El recorte se hace SERVER-SIDE: la app llama POST /highlights/from-recording
+ * con { gameId, start, end, title, isPublic } y el backend recorta la grabación
+ * (FFmpeg byte-range), sube el clip a B2 y crea el highlight. Antes esto se hacía
+ * on-device con ffmpeg-kit-react-native, que crasheaba la app.
  */
 import React from 'react';
-import * as SecureStore from 'expo-secure-store';
+import { createHighlightFromRecording } from '../../../api/highlights';
 import { TRIM_MIN_SEC } from '../components/TrimRangeSlider';
 import type { Visibility } from '../steps/MetadataStep';
 
 export type EditorStep = 'preview' | 'trim' | 'metadata' | 'processing' | 'result';
 export type { Visibility } from '../steps/MetadataStep';
 
-/** Estado del procesamiento on-device del highlight (FFmpeg → upload → POST /highlights). */
+/** Estado del procesamiento del highlight (recorte server-side → B2 → highlight). */
 export type JobStatusName = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
 
 export interface UseVideoEditorFlowParams {
@@ -25,14 +25,43 @@ export interface UseVideoEditorFlowParams {
 }
 
 export function useVideoEditorFlow(params: UseVideoEditorFlowParams) {
-  const { gameId, recordingUrl, durationSeconds } = params;
+  // `recordingUrl` se reproduce en los steps (no acá): el recorte es server-side
+  // y el backend resuelve la grabación a partir de `gameId`.
+  const { gameId, durationSeconds } = params;
 
   const [step, setStep] = React.useState<EditorStep>('preview');
 
-  const [range, setRange] = React.useState<[number, number]>([
-    Math.max(0, Math.floor(durationSeconds / 2) - 6),
-    Math.max(TRIM_MIN_SEC + 1, Math.floor(durationSeconds / 2) + 6),
-  ]);
+  /** Centra una selección por defecto dentro de una duración dada. */
+  const defaultRange = React.useCallback((d: number): [number, number] => {
+    const mid = Math.floor(d / 2);
+    const start = Math.max(0, mid - 6);
+    const end = Math.min(Math.max(d, TRIM_MIN_SEC + 1), Math.max(start + TRIM_MIN_SEC + 1, mid + 6));
+    return [start, end];
+  }, []);
+
+  // Duración efectiva: arranca con la del backend, pero se corrige con la
+  // duración real del video cuando el Player la reporta (onVideoLoaded).
+  const [effectiveDuration, setEffectiveDuration] = React.useState(durationSeconds);
+  const [range, setRangeState] = React.useState<[number, number]>(() => defaultRange(durationSeconds));
+
+  // Marca que el usuario ya tocó el rango: a partir de ahí no lo re-centramos solos.
+  const rangeTouchedRef = React.useRef(false);
+  const setRange = React.useCallback((r: [number, number]) => {
+    rangeTouchedRef.current = true;
+    setRangeState(r);
+  }, []);
+
+  // El video reportó su duración real → corregimos la duración del backend
+  // (que puede venir absurda o en 0) y re-centramos el rango si el usuario aún
+  // no lo tocó.
+  const onVideoLoaded = React.useCallback((realDuration: number) => {
+    if (!Number.isFinite(realDuration) || realDuration <= 0) return;
+    setEffectiveDuration((prev) => {
+      if (Math.abs(prev - realDuration) < 0.5) return prev;
+      if (!rangeTouchedRef.current) setRangeState(defaultRange(realDuration));
+      return realDuration;
+    });
+  }, [defaultRange]);
 
   const [title, setTitle] = React.useState('');
   const [visibility, setVisibility] = React.useState<Visibility>('private');
@@ -50,43 +79,24 @@ export function useVideoEditorFlow(params: UseVideoEditorFlowParams) {
     setStep('processing');
 
     try {
-      const { createHighlight, isHighlightSupported } = await import('../../../services/highlightService');
-
-      if (!isHighlightSupported()) {
-        setJobError('La creación de highlights requiere la build nativa (EAS). No disponible en Expo Go.');
-        setJobStatus('FAILED');
-        return;
-      }
+      // Clampeamos el rango a la duración real del video y a enteros: el backend
+      // exige @IsInt y un rango válido (evita que FFmpeg busque más allá del EOF).
+      const maxDur = effectiveDuration > 0 ? effectiveDuration : range[1];
+      const startSec = Math.max(0, Math.floor(Math.min(range[0], maxDur - TRIM_MIN_SEC)));
+      const endSec = Math.ceil(Math.min(maxDur, Math.max(range[1], startSec + TRIM_MIN_SEC)));
 
       setJobStatus('RUNNING');
-      const result = await createHighlight({
-        videoUrl: recordingUrl,
-        startSec: range[0],
-        endSec: range[1],
+
+      // Recorte + subida + creación del highlight, todo server-side.
+      const result = await createHighlightFromRecording({
+        gameId,
+        start: startSec,
+        end: endSec,
         title: title.trim() || 'Highlight',
-        onProgress: (pct) => setJobProgress(pct),
+        isPublic: visibility === 'public',
       });
 
-      // Guardar metadata en el backend
-      const token = await SecureStore.getItemAsync('torna_auth_token');
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
-      await fetch(`${apiUrl}/highlights`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          gameId,
-          clipUrl: result.streamUrl,
-          // CreateHighlightDto exige enteros (@IsInt); el slider puede dar decimales.
-          start: Math.floor(range[0]),
-          end: Math.ceil(range[1]),
-          duration: result.durationSeconds,
-          title: result.title,
-          // Visibilidad elegida en MetadataStep → backend la guarda en isEnabled.
-          isPublic: visibility === 'public',
-        }),
-      });
-
-      setResultUrl(result.streamUrl);
+      setResultUrl(result.clipUrl);
       setJobProgress(100);
       setJobStatus('COMPLETED');
       setTimeout(() => setStep('result'), 400);
@@ -95,7 +105,7 @@ export function useVideoEditorFlow(params: UseVideoEditorFlowParams) {
       setJobError(err instanceof Error ? err.message : 'No pudimos crear el highlight.');
       setJobStatus('FAILED');
     }
-  }, [gameId, recordingUrl, range, title, visibility]);
+  }, [gameId, range, title, visibility, effectiveDuration]);
 
   const cancelProcessing = React.useCallback(() => {
     setJobError(null);
@@ -105,6 +115,7 @@ export function useVideoEditorFlow(params: UseVideoEditorFlowParams) {
   return {
     step, setStep,
     range, setRange,
+    effectiveDuration, onVideoLoaded,
     title, setTitle,
     visibility, setVisibility,
     jobStatus, jobProgress, jobError, resultUrl,
