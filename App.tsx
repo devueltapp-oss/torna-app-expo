@@ -404,18 +404,30 @@ function MainPlayer({ navigation }: any) {
   }, [refreshLive, refreshOpen, refreshMyGames, refreshMatches, refreshPlayers, refreshOwnProfile, refreshHighlights]);
 
   // Acciones de gestión de "Mis partidas" (cierran el sheet y refrescan la lista).
+  // Si el backend rechaza (p. ej. estado inválido), avisamos en vez de fallar en silencio.
+  const runMyGameAction = useCallback(
+    (action: Promise<unknown>, errorTitle: string) => {
+      action
+        .catch((e: any) =>
+          Alert.alert(errorTitle, e?.message ?? 'Intentá de nuevo.'),
+        )
+        .finally(() => refreshMyGames());
+    },
+    [refreshMyGames],
+  );
   const handleCancelGame = useCallback((id: string) => {
-    gamesApi.cancelGame(id).catch(() => {}).finally(() => refreshMyGames());
-  }, [refreshMyGames]);
+    runMyGameAction(gamesApi.cancelGame(id), 'No se pudo cancelar la partida');
+  }, [runMyGameAction]);
   const handleLeaveGame = useCallback((id: string) => {
-    gamesApi.leaveGame(id).catch(() => {}).finally(() => refreshMyGames());
-  }, [refreshMyGames]);
+    runMyGameAction(gamesApi.leaveGame(id), 'No se pudo dar de baja');
+  }, [runMyGameAction]);
   const handleCancelPair = useCallback((id: string) => {
-    gamesApi.cancelChallengerPair(id).catch(() => {}).finally(() => refreshMyGames());
-  }, [refreshMyGames]);
-  // accept/reject los hace el propio sheet (fetch interno); acá solo refrescamos.
+    runMyGameAction(gamesApi.cancelChallengerPair(id), 'No se pudo cancelar la pareja');
+  }, [runMyGameAction]);
+  // accept/reject pegan al endpoint dentro del sheet (api/games) y luego invocan
+  // este callback solo si la operación tuvo éxito; acá refrescamos "Mis partidas".
   const handleApplicationChange = useCallback(() => {
-    setTimeout(() => refreshMyGames(), 500);
+    refreshMyGames();
   }, [refreshMyGames]);
   const [previewVideo, setPreviewVideo] = React.useState<{
     url: string; title: string; durationSeconds: number;

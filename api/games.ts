@@ -52,7 +52,7 @@ async function authedGet<T>(path: string, timeoutMs = 15000): Promise<T> {
 }
 
 async function authedSend<T>(
-  method: 'POST' | 'PATCH',
+  method: 'POST' | 'PATCH' | 'DELETE',
   path: string,
   body?: unknown,
 ): Promise<T> {
@@ -135,6 +135,16 @@ export function leaveGame(gameId: string): Promise<unknown> {
 
 export function cancelChallengerPair(gameId: string): Promise<unknown> {
   return authedSend('POST', `/game/${gameId}/cancel-pair`);
+}
+
+/** Suscribirse a notificaciones de un partido (POST /game/:id/watch). */
+export function watchGame(gameId: string): Promise<unknown> {
+  return authedSend('POST', `/game/${gameId}/watch`);
+}
+
+/** Cancelar la suscripción de notificaciones de un partido (DELETE /game/:id/watch). */
+export function unwatchGame(gameId: string): Promise<unknown> {
+  return authedSend('DELETE', `/game/${gameId}/watch`);
 }
 
 /**

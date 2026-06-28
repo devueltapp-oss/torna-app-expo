@@ -18,6 +18,7 @@ export interface PlayerProps {
   startAt?: number;
   endAt?: number;
   autoPlay?: boolean;
+  muted?: boolean;
   label?: string;
   onProgress?: (currentTime: number) => void;
   onLoad?: (duration: number) => void;
@@ -38,7 +39,7 @@ export const Player = React.forwardRef<PlayerHandle, PlayerProps>(function Playe
   const { colors } = useTheme();
   const {
     recordingUrl, durationSeconds, startAt = 0, endAt,
-    autoPlay = false, label, onProgress, onLoad, onBuffer,
+    autoPlay = false, muted = false, label, onProgress, onLoad, onBuffer,
     hideControls = false, fullscreen = false, renderOverlay,
   } = props;
 
@@ -103,7 +104,7 @@ export const Player = React.forwardRef<PlayerHandle, PlayerProps>(function Playe
         resizeMode={ResizeMode.CONTAIN}
         shouldPlay={autoPlay}
         isLooping={false}
-        isMuted={false}
+        isMuted={muted}
         useNativeControls={false}
         onPlaybackStatusUpdate={handleStatus}
       />

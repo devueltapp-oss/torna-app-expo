@@ -19,7 +19,7 @@ interface Props {
 }
 
 /**
- * Full-screen overlay used by reservation step 3 and JoinMatch to pick a
+ * Full-screen overlay used by reservation step 3 and ApplyMatchSheet to pick a
  * different partner / opponent from the club's player directory.
  *
  * Input is autofocused; matches by name OR username (case-insensitive).

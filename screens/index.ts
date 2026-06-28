@@ -24,7 +24,6 @@ export { ClubProfilePlayerView } from './ClubProfilePlayerView';
 export { PlayerProfilePublicView } from './PlayerProfilePublicView';
 export { SearchPlayScreen } from './SearchPlayScreen';
 export { GlobalSearchScreen, type GlobalSearchScreenProps } from './GlobalSearchScreen';
-export { JoinMatchScreen } from './JoinMatchScreen';
 
 // Player main profile + library + settings
 export { PlayerOwnProfileScreen, type PlayerOwnProfileScreenProps } from './PlayerOwnProfileScreen';

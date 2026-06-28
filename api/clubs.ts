@@ -1,7 +1,6 @@
 /**
  * Cliente de clubes / canchas / reservas.
  *
- *   GET  /club/nearby?lat=&lng=&radius=   → clubes cercanos
  *   GET  /padel-court?clubId=             → canchas de un club
  *   GET  /padel-court/:id                 → una cancha
  *   GET  /padel-court/:id/slots?date=     → slots de un día
@@ -10,7 +9,7 @@
  * El backend envuelve toda respuesta en { data, statusCode } (TransformInterceptor).
  */
 import * as SecureStore from 'expo-secure-store';
-import type { NearbyClub, ClubCourtPublic, Slot } from '../data/types';
+import type { ClubCourtPublic, Slot } from '../data/types';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
 const TOKEN_KEY = 'torna_auth_token';
@@ -90,13 +89,6 @@ function mapCourt(c: BackendCourt): ClubCourtPublic {
     indoor: false,
     nextSlot: '',
   };
-}
-
-/** Clubes cercanos a un punto. */
-export function fetchNearbyClubs(lat: number, lng: number, radius = 25): Promise<NearbyClub[]> {
-  return authedGet<NearbyClub[]>(
-    `/club/nearby?lat=${lat}&lng=${lng}&radius=${radius}`,
-  );
 }
 
 /** Canchas de un club. */

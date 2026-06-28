@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text } from 'react-native';
 import { useTheme } from '../../../theme';
 import { Button, Input, VisibilityCard } from '../../../components/ui';
+import { Player } from '../components/Player';
 
 const TITLE_MAX = 50;
 
@@ -15,6 +16,8 @@ function fmt(s: number) {
 export type Visibility = 'private' | 'public';
 
 export interface MetadataStepProps {
+  recordingUrl: string;
+  durationSeconds: number;
   range: [number, number];
   title: string;
   onChangeTitle: (s: string) => void;
@@ -34,7 +37,7 @@ export interface MetadataStepProps {
  *   public  → publica al feed + aparece en el perfil público
  */
 export function MetadataStep({
-  range, title, onChangeTitle, visibility, onChangeVisibility, onBack, onGenerate,
+  recordingUrl, durationSeconds, range, title, onChangeTitle, visibility, onChangeVisibility, onBack, onGenerate,
 }: MetadataStepProps) {
   const { colors } = useTheme();
   const titleErr = title.length > TITLE_MAX ? `Máximo ${TITLE_MAX} caracteres.` : null;
@@ -48,23 +51,17 @@ export function MetadataStep({
         </Text>
       </View>
 
-      {/* clip summary */}
-      <View style={{
-        flexDirection: 'row', alignItems: 'center', gap: 12,
-        backgroundColor: colors.bg2, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
-      }}>
-        <View style={{
-          width: 56, height: 40, borderRadius: 8, backgroundColor: colors.ink,
-          alignItems: 'center', justifyContent: 'center',
-        }}>
-          <View style={{
-            width: 0, height: 0, marginLeft: 2,
-            borderLeftWidth: 10, borderLeftColor: colors.accent,
-            borderTopWidth: 7, borderTopColor: 'transparent',
-            borderBottomWidth: 7, borderBottomColor: 'transparent',
-          }}/>
-        </View>
-        <View style={{ flex: 1, minWidth: 0 }}>
+      {/* clip preview — reproduce en loop SOLO el rango elegido (lo que se va a subir) */}
+      <View style={{ gap: 8 }}>
+        <Player
+          recordingUrl={recordingUrl}
+          durationSeconds={durationSeconds}
+          startAt={range[0]}
+          endAt={range[1]}
+          autoPlay
+          muted
+        />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Text style={{ fontSize: 11, color: colors.muted2, fontWeight: '700', letterSpacing: 0.6 }}>CLIP</Text>
           <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text, fontFamily: 'Menlo' }}>
             {fmt(range[0])} → {fmt(range[1])} · {fmt(range[1] - range[0])}

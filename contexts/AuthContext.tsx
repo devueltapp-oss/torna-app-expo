@@ -76,7 +76,6 @@ interface AuthContextValue {
   ) => Promise<void>;
   loginWithGoogle: () => Promise<LoginResult>;
   loginWithApple: () => Promise<LoginResult>;
-  loginWithFacebook: () => Promise<LoginResult>;
   register: (idToken: string, dto: RegisterDto) => Promise<void>;
   /** Actualiza la foto de perfil en el estado local tras subirla (PATCH /user/me). */
   updateProfilePicture: (url: string) => void;
@@ -326,27 +325,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ------------------------------------------------------------------
-  // loginWithFacebook  (TODO: replace with real SDK)
-  // ------------------------------------------------------------------
-  const loginWithFacebook = useCallback(async (): Promise<LoginResult> => {
-    // TODO: replace this block with the real Facebook Login flow:
-    //
-    //   import { LoginManager, AccessToken } from 'react-native-fbsdk-next';
-    //   import auth from '@react-native-firebase/auth';
-    //
-    //   await LoginManager.logInWithPermissions(['public_profile', 'email']);
-    //   const data = await AccessToken.getCurrentAccessToken();
-    //   const credential = auth.FacebookAuthProvider.credential(data!.accessToken);
-    //   const { user: fbUser } = await auth().signInWithCredential(credential);
-    //   const idToken = await fbUser.getIdToken();
-    //
-    //   Then proceed with the same apiLoginWithToken / needs_registration logic below.
-    throw new Error(
-      'Facebook Login no disponible: instala react-native-fbsdk-next y configura el SDK.',
-    );
-  }, []);
-
-  // ------------------------------------------------------------------
   // Shared helper used by social flows once they have an idToken
   // ------------------------------------------------------------------
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -507,7 +485,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     changePassword,
     loginWithGoogle,
     loginWithApple,
-    loginWithFacebook,
     register,
     updateProfilePicture,
     updateFrontPage,

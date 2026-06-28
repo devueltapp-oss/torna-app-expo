@@ -1,11 +1,11 @@
 import React from 'react';
-import { Modal, View, Text, Pressable, ScrollView } from 'react-native';
+import { Modal, View, Text, Pressable, ScrollView, Alert } from 'react-native';
 import { Plus } from 'lucide-react-native';
-import * as SecureStore from 'expo-secure-store';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { Avatar, Button, Switch } from './ui';
 import { PlayerSearchOverlay } from './PlayerSearchOverlay';
+import { applyToGame } from '../api/games';
 import type { InvitablePlayer, UpcomingGameData } from '../data/types';
 
 export interface ApplyMatchSheetProps {
@@ -35,23 +35,12 @@ export function ApplyMatchSheet({ visible, game, invitablePlayers, onClose, onAp
     if (submitting) return;
     setSubmitting(true);
     try {
-      const token = await SecureStore.getItemAsync('torna_auth_token');
-      const body: { partnerId?: string } = {};
-      if (withPartner && partner) body.partnerId = partner.id;
-      await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL ?? ''}/game/${game.id}/apply`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token ?? ''}`,
-          },
-          body: JSON.stringify(body),
-        },
-      );
+      await applyToGame(game.id, withPartner && partner ? partner.id : undefined);
       onApplied();
       onClose();
-    } catch {}
+    } catch (e) {
+      Alert.alert('No se pudo postular', (e as Error)?.message ?? 'Intentá de nuevo.');
+    }
     finally { setSubmitting(false); }
   };
 

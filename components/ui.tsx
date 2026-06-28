@@ -294,7 +294,7 @@ export function AppHeader({ title, left, right }: {
 
 /* ─────────────────────────  Switch  ───────────────────────────────
  * iOS-style toggle. Track lime when on, neutral when off. Knob is white.
- * Used by ReserveStep3 ("Buscar rivales") and JoinMatch ("Voy con compañero").
+ * Used by ReserveStep3 ("Buscar rivales") and ApplyMatchSheet ("Voy con compañero").
  */
 
 export function Switch({ value, onChange, disabled }: {

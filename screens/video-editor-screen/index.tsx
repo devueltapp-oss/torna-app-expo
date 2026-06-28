@@ -130,6 +130,8 @@ export function VideoEditorScreen({
         )}
         {flow.step === 'metadata' && (
           <MetadataStep
+            recordingUrl={recordingUrl}
+            durationSeconds={flow.effectiveDuration}
             range={flow.range}
             title={flow.title}
             onChangeTitle={flow.setTitle}

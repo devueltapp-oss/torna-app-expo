@@ -1,11 +1,11 @@
 import React from 'react';
 import { Modal, View, Text, Pressable, Image, ScrollView, Alert } from 'react-native';
 import { Bell, Check, ChevronRight, X } from 'lucide-react-native';
-import * as SecureStore from 'expo-secure-store';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { Avatar, Button, StatusBadge } from './ui';
 import { ApplyMatchSheet } from './ApplyMatchSheet';
+import { acceptApplication, rejectApplication, watchGame, unwatchGame } from '../api/games';
 import type { GameApplication, InvitablePlayer, UpcomingGameData, UpcomingGamePlayer } from '../data/types';
 
 export interface UpcomingMatchSheetProps {
@@ -50,24 +50,35 @@ export function UpcomingMatchSheet({
     setLocalApplications(game?.applications?.filter(a => a.status === 'PENDING') ?? []);
   }, [game?.id]);
 
+  // Aceptar/rechazar: quitamos la fila optimistamente, pegamos al endpoint real
+  // (api/games) y, si falla, restauramos la fila + avisamos. Al terminar bien,
+  // notificamos al padre para que refresque la lista de "Mis partidas".
   const handleAccept = async (appId: string) => {
+    const gameId = game?.id;
+    if (!gameId) return;
+    const snapshot = localApplications;
     setLocalApplications(prev => prev.filter(a => a.id !== appId));
-    onAcceptApplication?.(game?.id ?? '', appId);
-    const token = await SecureStore.getItemAsync('torna_auth_token');
-    fetch(
-      `${process.env.EXPO_PUBLIC_API_URL ?? ''}/game/${game?.id}/applications/${appId}/accept`,
-      { method: 'PATCH', headers: { Authorization: `Bearer ${token ?? ''}` } },
-    ).catch(() => {});
+    try {
+      await acceptApplication(gameId, appId);
+      onAcceptApplication?.(gameId, appId);
+    } catch (e) {
+      setLocalApplications(snapshot);
+      Alert.alert('No se pudo aceptar', (e as Error)?.message ?? 'Intentá de nuevo.');
+    }
   };
 
   const handleReject = async (appId: string) => {
+    const gameId = game?.id;
+    if (!gameId) return;
+    const snapshot = localApplications;
     setLocalApplications(prev => prev.filter(a => a.id !== appId));
-    onRejectApplication?.(game?.id ?? '', appId);
-    const token = await SecureStore.getItemAsync('torna_auth_token');
-    fetch(
-      `${process.env.EXPO_PUBLIC_API_URL ?? ''}/game/${game?.id}/applications/${appId}/reject`,
-      { method: 'PATCH', headers: { Authorization: `Bearer ${token ?? ''}` } },
-    ).catch(() => {});
+    try {
+      await rejectApplication(gameId, appId);
+      onRejectApplication?.(gameId, appId);
+    } catch (e) {
+      setLocalApplications(snapshot);
+      Alert.alert('No se pudo rechazar', (e as Error)?.message ?? 'Intentá de nuevo.');
+    }
   };
 
   const confirmDestructive = (title: string, message: string, action: () => void) => {
@@ -108,13 +119,9 @@ export function UpcomingMatchSheet({
     if (!game || watching) return;
     setWatching(true);
     try {
-      const token = await SecureStore.getItemAsync('torna_auth_token');
-      const method = isWatching ? 'DELETE' : 'POST';
-      const res = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL ?? ''}/game/${game.id}/watch`,
-        { method, headers: { Authorization: `Bearer ${token ?? ''}` } },
-      );
-      if (res.ok) setIsWatching(w => !w);
+      if (isWatching) await unwatchGame(game.id);
+      else await watchGame(game.id);
+      setIsWatching(w => !w);
     } catch {}
     finally { setWatching(false); }
   };

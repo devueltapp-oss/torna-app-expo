@@ -137,18 +137,6 @@ export interface InvitablePlayer {
   rating?: number;
 }
 
-/** Club cercano (User isClub=true) devuelto por GET /club/nearby. */
-export interface NearbyClub {
-  id: string;
-  name: string;
-  username: string;
-  region: string | null;
-  distanceKm: number;
-  profilePicture?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
-}
-
 /* ─────────── Perfil público de un player ─────────── */
 
 export interface PlayerLiveGame {
@@ -178,21 +166,6 @@ export interface PlayerPublic {
   followingCount: number;
   followersList: FollowItem[];
   followingList: FollowItem[];
-}
-
-/* ─────────── Search play (GPS) ─────────── */
-
-export interface NearbyCourt {
-  id: string; name: string; club: string; distanceKm: number;
-  surface: 'CLAY' | 'GRASS' | 'HARD' | 'CARPET';
-  freeSlots: string[];
-  hasCameras: boolean;
-}
-export interface NearbyPlayer {
-  id: string; name: string; username: string;
-  rating: number; distanceKm: number;
-  lookingFor: string;
-  availability: string;
 }
 
 /* ─────────── Búsqueda global (texto) ─────────── */
