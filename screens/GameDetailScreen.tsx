@@ -21,6 +21,8 @@ export interface GameDetailData {
   court: string;
   floor: 'CLAY' | 'GRASS' | 'HARD' | 'CARPET';
   club: string;
+  /** Id (Firebase UID) del club del partido, para seguir/dejar de seguir. '' si no hay. */
+  clubId: string;
   clubHandle: string;
   clubFollowers: number;
   time: string; date: string;

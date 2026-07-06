@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
     "start": "expo start --port 8081",
     "kill-metro": "npx kill-port 8081 8081",
     "android": "npx kill-port 8081 8081 && expo run:android --port 8081",
@@ -55,8 +57,13 @@
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
+    "@testing-library/react-native": "^12.5.2",
+    "@types/jest": "^29.5.12",
     "@types/node": "^25.9.2",
     "@types/react": "~18.2.79",
+    "jest": "^29.7.0",
+    "jest-expo": "~51.0.0",
+    "react-test-renderer": "18.2.0",
     "typescript": "~5.3.3"
   },
   "private": true,

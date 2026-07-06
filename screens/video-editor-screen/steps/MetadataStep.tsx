@@ -5,6 +5,7 @@ import { Button, Input, VisibilityCard } from '../../../components/ui';
 import { Player } from '../components/Player';
 
 const TITLE_MAX = 50;
+const DESC_MAX = 1000;
 
 function fmt(s: number) {
   s = Math.max(0, Math.round(s));
@@ -21,6 +22,8 @@ export interface MetadataStepProps {
   range: [number, number];
   title: string;
   onChangeTitle: (s: string) => void;
+  description: string;
+  onChangeDescription: (s: string) => void;
   visibility: Visibility;
   onChangeVisibility: (v: Visibility) => void;
   onBack: () => void;
@@ -37,10 +40,13 @@ export interface MetadataStepProps {
  *   public  → publica al feed + aparece en el perfil público
  */
 export function MetadataStep({
-  recordingUrl, durationSeconds, range, title, onChangeTitle, visibility, onChangeVisibility, onBack, onGenerate,
+  recordingUrl, durationSeconds, range, title, onChangeTitle,
+  description, onChangeDescription, visibility, onChangeVisibility, onBack, onGenerate,
 }: MetadataStepProps) {
   const { colors } = useTheme();
   const titleErr = title.length > TITLE_MAX ? `Máximo ${TITLE_MAX} caracteres.` : null;
+  const descErr = description.length > DESC_MAX ? `Máximo ${DESC_MAX} caracteres.` : null;
+  const hasError = !!titleErr || !!descErr;
 
   return (
     <View style={{ paddingHorizontal: 16, gap: 14 }}>
@@ -78,6 +84,17 @@ export function MetadataStep({
         hint={titleErr ? undefined : `${title.length}/${TITLE_MAX}`}
       />
 
+      <Input
+        label="Descripción (opcional)"
+        placeholder="Contá el contexto de la jugada…"
+        value={description}
+        onChangeText={onChangeDescription}
+        error={descErr}
+        hint={descErr ? undefined : `${description.length}/${DESC_MAX}`}
+        multiline
+        numberOfLines={3}
+      />
+
       <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text2 }}>¿Quién puede ver este highlight?</Text>
       <VisibilityCard
         colors={colors}
@@ -97,8 +114,8 @@ export function MetadataStep({
         <View style={{ flex: 1 }}>
           <Button
             fullWidth size="lg"
-            variant={titleErr ? 'disabled' : 'primary'}
-            onPress={titleErr ? undefined : onGenerate}>
+            variant={hasError ? 'disabled' : 'primary'}
+            onPress={hasError ? undefined : onGenerate}>
             Generar clip
           </Button>
         </View>

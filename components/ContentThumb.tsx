@@ -8,7 +8,7 @@
  * el backend exponga posters / thumbnails.
  */
 import React from 'react';
-import { View, Text, DimensionValue } from 'react-native';
+import { View, Text, Image, DimensionValue } from 'react-native';
 import { Svg, Rect, Line } from 'react-native-svg';
 import { useTheme } from '../theme';
 
@@ -20,13 +20,17 @@ export interface ContentThumbProps {
   /** Default 'square' (1:1 — IG grid) o 'wide' (16/9 — row). */
   aspect?: 'square' | 'wide' | 'tall';
   width?: DimensionValue;
+  /** Miniatura real (B2). Si viene, reemplaza el placeholder SVG; los overlays
+   *  (play + duración) se mantienen encima. */
+  imageUri?: string | null;
 }
 
-export function ContentThumb({ kind, durationLabel, aspect = 'square', width = '100%' }: ContentThumbProps) {
+export function ContentThumb({ kind, durationLabel, aspect = 'square', width = '100%', imageUri }: ContentThumbProps) {
   const { colors } = useTheme();
   const ratio = aspect === 'wide' ? 16 / 9 : aspect === 'tall' ? 9 / 16 : 1;
   const isPhoto = kind === 'upload-photo';
   const isVideo = kind === 'match' || kind === 'highlight' || kind === 'upload-video';
+  const hasImage = !!imageUri;
 
   return (
     <View style={{
@@ -34,7 +38,13 @@ export function ContentThumb({ kind, durationLabel, aspect = 'square', width = '
       backgroundColor: colors.ink, position: 'relative',
       alignItems: 'center', justifyContent: 'center',
     }}>
-      {isPhoto ? (
+      {hasImage ? (
+        <Image
+          source={{ uri: imageUri! }}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' }}
+          resizeMode="cover"
+        />
+      ) : isPhoto ? (
         // Stripes — RN no soporta repeating-linear-gradient nativo. SVG con
         // varios rect inclinados aproxima el efecto sin agregar deps.
         <Svg viewBox="0 0 100 100" width="100%" height="100%" preserveAspectRatio="none">

@@ -76,6 +76,8 @@ export interface LivePreview {
 }
 export interface ClipPreview {
   id: string; title: string; length: string; date: string;
+  /** URL del clip (B2) para reproducir en el visor; el `id` es el del highlight. */
+  videoUrl?: string;
 }
 export interface ClubCourtPublic {
   id: string; name: string;
@@ -147,6 +149,8 @@ export interface PlayerLiveGame {
 export interface PlayerClip {
   id: string; title: string; length: string; date: string;
   videoUrl?: string;
+  /** Miniatura (poster) del clip en B2, si el backend la generó. */
+  thumbnailUrl?: string | null;
 }
 export interface PlayerPublic {
   id: string;
@@ -268,6 +272,10 @@ export interface LibraryHighlight extends LibraryItemBase {
   durationSeconds: number;
   /** URL del clip en B2 (o CDN). Presente cuando el highlight fue procesado. */
   streamUrl?: string;
+  /** Descripción / caption editable por el dueño (PATCH /highlights/:id). */
+  description?: string | null;
+  /** Miniatura (poster) del clip en B2, si el backend la generó. */
+  thumbnailUrl?: string | null;
 }
 
 export type LibraryItem = LibraryMatch | LibraryHighlight;

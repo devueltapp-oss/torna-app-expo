@@ -320,11 +320,22 @@ GET /user/players       → directorio de jugadores (usePlayers → PlayersScree
 GET /highlights?userId= → highlights PÚBLICOS de un usuario (useUserProfile → carrusel del perfil, desc)
 GET /highlights/my      → TODOS mis highlights, públicos + privados (useMyHighlights → perfil propio + librería)
 POST /highlights        { …, isPublic } → crea highlight con visibilidad (editor)
-PATCH /highlights/:id/toggle → invierte público/privado (pill de MyLibraryScreen)
+PATCH /highlights/:id/toggle → invierte público/privado (pill de MyLibraryScreen). Sin body
+                               (el backend lee el estado actual de `isEnabled` y lo flippea);
+                               owner-only (no-dueño → 403)
 ```
 
 > **Visibilidad de highlights**: públicos aparecen en el perfil (más reciente→más antiguo);
 > privados solo en `MyLibraryScreen`. En el backend la visibilidad se guarda en `isEnabled`.
+>
+> **Cómo se cablea el toggle** (sección "Mis highlights" de `MyLibraryScreen`): tap en el
+> chip `VisibilityPill` → `onToggleVisibility(item)` → `App.tsx` `toggleVisibility`:
+> hace un **flip optimista** del `isPublic` local y persiste con `toggleHighlightVisibility`
+> (`api/highlights.ts` → `PATCH /highlights/:id/toggle`); si la request falla, **revierte**.
+> El estado inicial viene de `useMyHighlights`, que mapea `isEnabled`→`isPublic`.
+> ⚠️ El chip de **partidos** (matches) en la misma pantalla es **cosmético/local**: los
+> partidos no tienen visibilidad en el backend (no hay endpoint). Cubierto por tests:
+> `torna-api/src/highlights/highlights.service.spec.ts` (`HighlightsService.toggle`).
 
 ### Club admin (home)
 
@@ -344,16 +355,45 @@ POST   /follow/unfollow    { userId } → dejar de seguir
 
 ```
 GET   /user/profile/:id        → PlayerPublic (identidad + conteos + isFollowing + notifyOnMatch)
-GET   /highlights?userId=       → clips del jugador
+GET   /highlights?userId=       → clips del jugador (incluye thumbnailUrl + description)
 GET   /follow/followers/:id     → seguidores (FollowListSheet)
 GET   /follow/following/:id     → seguidos (FollowListSheet)
-POST  /follow | /follow/unfollow  { userId } → seguir / dejar de seguir
+POST  /follow | /follow/unfollow  { userId } → seguir / dejar de seguir (followUser/unfollowUser en api/users.ts)
 PATCH /follow/notify/:userId    { notify }   → toggle "Notificarme" (setFollowNotify, persiste Follower.notifyOnMatch)
 ```
 
 > El toggle de campana del perfil ajeno (`onToggleNotify`) persiste vía
 > `PATCH /follow/notify/:userId` y se rehidrata desde `notifyOnMatch` del perfil. Las
 > listas de seguidores/seguidos son clickeables → navegan a `PlayerProfile` (recursivo).
+>
+> **Seguir/dejar de seguir** (players y clubs, misma tabla `Follower` — un club es un
+> `User` con `isClub=true`): clientes únicos `followUser`/`unfollowUser` (`api/users.ts`)
+> usados por `PlayerProfilePublicView`, `ClubProfilePlayerView` y el botón del club en
+> `GameDetailScreen` (via `clubId` que trae `useGameDetail`). Update optimista + revert.
+> **Conteos de seguidores/seguidos siempre frescos**: `MainPlayer` re-fetchea el perfil
+> propio (`refreshOwnProfile`) al recuperar el foco y al abrir el tab Perfil, así el
+> contador se actualiza tras seguir/dejar de seguir desde otra pantalla.
+
+### Highlights — comentarios, threads, descripción y miniatura
+
+- **Comentar / responder en thread**: `VideoPreviewModal` (con `showComments` + `highlightId`)
+  trae `GET /highlights/:id` (comments + likesCount + isLikedByMe + description). Comentar:
+  `POST /highlights/:id/comments { content, parentId? }` — `parentId` seteado = respuesta
+  (thread). El modal agrupa por `parentId` (raíz + respuestas indentadas), con botón
+  "Responder" y chip "Respondiendo a…".
+- **Descripción**: se agrega al crear (editor `MetadataStep` → `createHighlightFromRecording`
+  con `description`) y se edita en `MyLibraryScreen` ("Editar/Agregar descripción" → modal →
+  `updateHighlightMeta` → `PATCH /highlights/:id { title?, description? }`, owner-only). Se
+  muestra en el modal bajo el video.
+- **Miniatura (poster)**: el backend genera `thumbnailUrl` (B2) al recortar. `ContentThumb`
+  la renderiza con `imageUri` (grid del perfil propio, `MyLibraryScreen`, carrusel del perfil
+  público); cae al placeholder SVG si falta. Tap → abre el video completo.
+- **Pantalla completa in-app**: el botón `Maximize2` de `VideoPreviewModal` expande el video
+  (estado `expanded`, NO el nativo del OS) para poder superponer un panel de comentarios
+  (`showCommentsPanel`) con botón flotante "Comentarios (N)".
+- ⚠️ **Todos los caminos que abren un highlight deben pasar `highlightId` + `showComments`**
+  al `VideoPreviewModal` (perfil propio/librería abren via `openPreview`→`previewVideo`; el
+  perfil ajeno via `clipModal`). Sin `highlightId` no hay descripción ni comentarios.
 
 ### Canchas y reservas — `api/clubs.ts`
 
@@ -440,7 +480,7 @@ PUT /user/update-notification-id  { notificationID }  → registra el push token
 | **Iconos** | `lucide-react-native` (size 22 default, stroke 2) |
 | **Tipografía** | Helvetica (manual de marca) — TODO migrar H1 a Coolvetica |
 | **SVG** | `react-native-svg` (`<Svg>`, `<Rect>`, `<Line>`, `<Path>`) |
-| **Video / HLS** | `expo-av` ~14.0.7 (reproductor HLS). **Fullscreen unificado**: todos los players expanden con el nativo `videoRef.current.presentFullscreenPlayer()` sobre la misma instancia (NO un `Modal` con un segundo `<Video>`). Aplica a `GameDetailScreen`, `ReelViewScreen`, `VideoPreviewModal` y el `Player` del editor; el botón es siempre `Maximize2` |
+| **Video / HLS** | `expo-av` ~14.0.7 (reproductor HLS). **Fullscreen**: `GameDetailScreen`, `ReelViewScreen` y el `Player` del editor usan el nativo `videoRef.current.presentFullscreenPlayer()` sobre la misma instancia (NO un `Modal` con un segundo `<Video>`); botón `Maximize2`. **Excepción — `VideoPreviewModal`**: usa pantalla completa **in-app** (estado `expanded`, misma instancia de `<Video>`) en vez del nativo, para poder superponer el panel de comentarios (botón flotante "Comentarios (N)" → `showCommentsPanel`) |
 | **Mapas** | Sin mapa embebido ni librería de mapas. La ubicación se referencia con un botón **"Buscar en Maps"** (`components/MapsButton.tsx`) que abre **Google Maps** (URL universal `maps/search/?api=1&query=lat,lng`) vía `Linking`. Antes había Leaflet en `react-native-webview` + MapTiler; se quitó para no requerir dev-client ni API key |
 | **Ubicación** | Sin GPS. Las ubicaciones se abren en **Google Maps** vía `MapsButton` (`Linking`), usando lat/lng del club (pin exacto) o el nombre como fallback. `expo-location` y el hook `useLocation` fueron **eliminados** (también el permiso `NSLocationWhenInUse` de `app.json`) |
 | **Subida de archivos** | `expo-file-system` ~17.0.1 (`uploadAsync` binario → B2 presigned) |

@@ -16,3 +16,6 @@ android/
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+*.log
+# Proyecto en yarn — el package-lock.json de npm es espurio
+package-lock.json

@@ -135,6 +135,8 @@ export function VideoEditorScreen({
             range={flow.range}
             title={flow.title}
             onChangeTitle={flow.setTitle}
+            description={flow.description}
+            onChangeDescription={flow.setDescription}
             visibility={flow.visibility}
             onChangeVisibility={flow.setVisibility}
             onBack={() => flow.setStep('trim')}

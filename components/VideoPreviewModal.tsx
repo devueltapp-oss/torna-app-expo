@@ -4,7 +4,7 @@ import {
   FlatList, TextInput, KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { X, Maximize2, MessageCircle, Send, Heart } from 'lucide-react-native';
+import { X, Maximize2, Minimize2, MessageCircle, Send, Heart } from 'lucide-react-native';
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
@@ -26,7 +26,13 @@ export interface VideoPreviewModalProps {
 }
 
 /** Fila de comentario ya mapeada para render. */
-interface CommentRow { id: string; user: string; text: string; time: string; }
+interface CommentRow {
+  id: string;
+  user: string;
+  text: string;
+  time: string;
+  parentId: string | null;
+}
 
 function mapComment(c: HighlightComment): CommentRow {
   return {
@@ -34,7 +40,38 @@ function mapComment(c: HighlightComment): CommentRow {
     user: c.name ?? c.username,
     text: c.content,
     time: relativeTime(c.createdAt),
+    parentId: c.parentId ?? null,
   };
+}
+
+/** Comentario raíz con sus respuestas anidadas (formato thread). */
+interface CommentThread extends CommentRow {
+  replies: CommentRow[];
+}
+
+/**
+ * Agrupa una lista plana de comentarios en threads: cada raíz (parentId=null)
+ * con sus respuestas ordenadas por antigüedad. Las respuestas huérfanas (padre
+ * borrado/ausente) se muestran como raíces para no perderlas.
+ */
+function buildThreads(rows: CommentRow[]): CommentThread[] {
+  const roots: CommentThread[] = [];
+  const byId = new Map<string, CommentThread>();
+  for (const r of rows) {
+    if (!r.parentId) {
+      const t = { ...r, replies: [] as CommentRow[] };
+      byId.set(r.id, t);
+      roots.push(t);
+    }
+  }
+  for (const r of rows) {
+    if (r.parentId) {
+      const parent = byId.get(r.parentId);
+      if (parent) parent.replies.push(r);
+      else roots.push({ ...r, replies: [] }); // huérfano → raíz
+    }
+  }
+  return roots;
 }
 
 /** ISO → etiqueta corta relativa ("Ahora", "5m", "3h", "2d", o fecha). */
@@ -66,6 +103,50 @@ function fmt(s: number) {
  * NOTA: presentFullscreenPlayer() puede no funcionar en el emulador
  * Android — usar dispositivo real para probar esta funcionalidad.
  */
+/** Burbuja de un comentario (raíz o respuesta) con acción "Responder". */
+function CommentBubble({
+  row, colors, onReply, size = 'md',
+}: {
+  row: CommentRow;
+  colors: ReturnType<typeof useTheme>['colors'];
+  onReply: () => void;
+  size?: 'sm' | 'md';
+}) {
+  const av = size === 'sm' ? 28 : 34;
+  return (
+    <View style={{ flexDirection: 'row', gap: 10 }}>
+      <View style={{
+        width: av, height: av, borderRadius: av / 2,
+        backgroundColor: colors.ink,
+        alignItems: 'center', justifyContent: 'center',
+        flexShrink: 0,
+      }}>
+        <Text style={{ color: colors.accent, fontFamily: fonts.bold, fontSize: size === 'sm' ? 11 : 13 }}>
+          {row.user.charAt(0).toUpperCase()}
+        </Text>
+      </View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: 13 }}>
+            {row.user}
+          </Text>
+          <Text style={{ color: colors.muted2, fontSize: 11, fontFamily: fonts.regular }}>
+            {row.time}
+          </Text>
+        </View>
+        <Text style={{ color: colors.text, fontFamily: fonts.regular, fontSize: 14, lineHeight: 20 }}>
+          {row.text}
+        </Text>
+        <Pressable onPress={onReply} hitSlop={6} style={{ alignSelf: 'flex-start', paddingTop: 2 }}>
+          <Text style={{ color: colors.muted2, fontSize: 12, fontFamily: fonts.bold }}>
+            Responder
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 export function VideoPreviewModal({
   visible, url, title, durationSeconds, onClose, autoFullscreen, showComments = false,
   highlightId,
@@ -82,6 +163,15 @@ export function VideoPreviewModal({
   const [sending, setSending] = React.useState(false);
   const [likesCount, setLikesCount] = React.useState(0);
   const [isLiked, setIsLiked] = React.useState(false);
+  const [description, setDescription] = React.useState<string | null>(null);
+  // Comentario al que se está respondiendo (thread). null = comentario raíz.
+  const [replyingTo, setReplyingTo] = React.useState<{ id: string; user: string } | null>(null);
+  // Pantalla completa in-app (no la nativa del OS): permite superponer el panel de
+  // comentarios sobre el video. `showCommentsPanel` abre ese panel en modo expandido.
+  const [expanded, setExpanded] = React.useState(false);
+  const [showCommentsPanel, setShowCommentsPanel] = React.useState(false);
+
+  const threads = React.useMemo(() => buildThreads(comments), [comments]);
 
   React.useEffect(() => {
     if (visible) {
@@ -91,7 +181,11 @@ export function VideoPreviewModal({
       setComments([]);
       setLikesCount(0);
       setIsLiked(false);
-      // Comentarios + likes reales del highlight (si el modal recibió highlightId).
+      setDescription(null);
+      setReplyingTo(null);
+      setExpanded(false);
+      setShowCommentsPanel(false);
+      // Comentarios + likes + descripción reales del highlight (si hay highlightId).
       if (highlightId && showComments) {
         let cancelled = false;
         fetchHighlightDetail(highlightId)
@@ -100,6 +194,7 @@ export function VideoPreviewModal({
             setComments(d.comments.map(mapComment));
             setLikesCount(d.likesCount);
             setIsLiked(d.isLikedByMe);
+            setDescription(d.description ?? null);
           })
           .catch(() => { /* sin datos → estado vacío, sin mock */ });
         return () => { cancelled = true; };
@@ -148,11 +243,15 @@ export function VideoPreviewModal({
   async function sendComment() {
     const text = commentText.trim();
     if (!text || sending || !highlightId) return;
+    const parentId = replyingTo?.id;
     setSending(true);
     setCommentText('');
     try {
-      const created = await addHighlightComment(highlightId, text);
-      setComments(prev => [mapComment(created), ...prev]);
+      const created = await addHighlightComment(highlightId, text, parentId);
+      // Append al final: las respuestas quedan bajo su raíz y los comentarios
+      // raíz nuevos abajo (orden cronológico, igual que el backend).
+      setComments(prev => [...prev, mapComment(created)]);
+      setReplyingTo(null);
     } catch {
       // Restaurar el texto si falló, para no perder el comentario.
       setCommentText(text);
@@ -163,6 +262,146 @@ export function VideoPreviewModal({
 
   const pct = totalSec > 0 ? Math.min(1, positionSec / totalSec) : 0;
 
+  /** Descripción del highlight (caption). `false` si no tiene. */
+  const renderDescription = () =>
+    !!description && (
+      <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
+        <Text style={{ color: colors.text, fontFamily: fonts.regular, fontSize: 14, lineHeight: 20 }}>
+          {description}
+        </Text>
+      </View>
+    );
+
+  /** Barra de like + contador, lista de comentarios (threaded) y composer. Reutilizable
+   *  tanto en la vista normal (bajo el video) como en el panel de pantalla completa. */
+  const renderCommentSection = () => (
+    <>
+      {/* Like + contador de comentarios */}
+      <View style={{
+        flexDirection: 'row', alignItems: 'center', gap: 16,
+        paddingHorizontal: 16, paddingVertical: 10,
+        borderTopWidth: 1, borderTopColor: colors.line,
+      }}>
+        <Pressable
+          onPress={toggleLike}
+          disabled={!highlightId}
+          hitSlop={8}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+        >
+          <Heart
+            size={16}
+            color={isLiked ? colors.live : colors.muted2}
+            fill={isLiked ? colors.live : 'none'}
+          />
+          <Text style={{ color: colors.muted2, fontSize: 12, fontFamily: fonts.bold }}>
+            {likesCount}
+          </Text>
+        </Pressable>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <MessageCircle size={14} color={colors.muted2}/>
+          <Text style={{ color: colors.muted2, fontSize: 12, fontFamily: fonts.bold }}>
+            {comments.length} comentario{comments.length !== 1 ? 's' : ''}
+          </Text>
+        </View>
+      </View>
+
+      {/* Lista (threaded: raíz + respuestas anidadas) */}
+      <FlatList
+        style={{ flex: 1 }}
+        data={threads}
+        keyExtractor={(c) => c.id}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8, gap: 18 }}
+        keyboardShouldPersistTaps="handled"
+        ListEmptyComponent={
+          <Text style={{ color: colors.muted2, fontSize: 13, paddingTop: 16, textAlign: 'center' }}>
+            Sé el primero en comentar.
+          </Text>
+        }
+        renderItem={({ item }) => (
+          <View style={{ gap: 12 }}>
+            <CommentBubble
+              row={item}
+              colors={colors}
+              onReply={() => setReplyingTo({ id: item.id, user: item.user })}
+            />
+            {/* Respuestas (thread), indentadas bajo la raíz */}
+            {item.replies.length > 0 && (
+              <View style={{ paddingLeft: 44, gap: 12 }}>
+                {item.replies.map((r) => (
+                  <CommentBubble
+                    key={r.id}
+                    row={r}
+                    colors={colors}
+                    size="sm"
+                    onReply={() => setReplyingTo({ id: item.id, user: r.user })}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+      />
+
+      {/* Input */}
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        {/* Chip "Respondiendo a X" cuando se responde en un thread */}
+        {replyingTo && (
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+            paddingHorizontal: 16, paddingTop: 8,
+          }}>
+            <Text style={{ color: colors.muted2, fontSize: 12, fontFamily: fonts.regular }}>
+              Respondiendo a <Text style={{ fontFamily: fonts.bold, color: colors.text }}>{replyingTo.user}</Text>
+            </Text>
+            <Pressable onPress={() => setReplyingTo(null)} hitSlop={8}>
+              <X size={16} color={colors.muted2}/>
+            </Pressable>
+          </View>
+        )}
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', gap: 10,
+          paddingHorizontal: 16, paddingVertical: 12,
+          borderTopWidth: 1, borderTopColor: colors.line,
+        }}>
+          <TextInput
+            value={commentText}
+            onChangeText={setCommentText}
+            placeholder={
+              !highlightId ? 'Comentarios no disponibles'
+                : replyingTo ? `Responder a ${replyingTo.user}...`
+                : 'Escribe un comentario...'
+            }
+            placeholderTextColor={colors.muted2}
+            editable={!!highlightId && !sending}
+            returnKeyType="send"
+            onSubmitEditing={sendComment}
+            style={{
+              flex: 1,
+              backgroundColor: colors.surface,
+              borderRadius: 12,
+              paddingHorizontal: 14, paddingVertical: 10,
+              color: colors.text,
+              fontFamily: fonts.regular,
+              fontSize: 14,
+              borderWidth: 1, borderColor: colors.line,
+            }}
+          />
+          <Pressable
+            onPress={sendComment}
+            disabled={!commentText.trim() || sending || !highlightId}
+            style={{
+              width: 42, height: 42, borderRadius: 12,
+              backgroundColor: commentText.trim() && !sending ? colors.accent : colors.line,
+              alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Send size={18} color={commentText.trim() && !sending ? colors.ink : colors.muted2}/>
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
+    </>
+  );
+
   return (
     <Modal
       visible={visible}
@@ -170,44 +409,53 @@ export function VideoPreviewModal({
       presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
       onRequestClose={onClose}
     >
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top', 'bottom']}>
+      <SafeAreaView
+        style={{ flex: 1, backgroundColor: expanded ? '#000000' : colors.bg }}
+        edges={expanded ? [] : ['top', 'bottom']}
+      >
 
-        {/* Header */}
-        <View style={{
-          flexDirection: 'row', alignItems: 'center',
-          paddingHorizontal: 16, paddingVertical: 12, gap: 12,
-        }}>
-          <Pressable
-            onPress={onClose}
-            style={{
-              width: 36, height: 36, borderRadius: 12,
-              backgroundColor: colors.bg2,
-              alignItems: 'center', justifyContent: 'center',
-            }}>
-            <X size={20} color={colors.text}/>
+        {/* Header (oculto en pantalla completa) */}
+        {!expanded && (
+          <View style={{
+            flexDirection: 'row', alignItems: 'center',
+            paddingHorizontal: 16, paddingVertical: 12, gap: 12,
+          }}>
+            <Pressable
+              onPress={onClose}
+              style={{
+                width: 36, height: 36, borderRadius: 12,
+                backgroundColor: colors.bg2,
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+              <X size={20} color={colors.text}/>
+            </Pressable>
+            <Text
+              style={{ flex: 1, fontSize: 14, fontWeight: '800', color: colors.text }}
+              numberOfLines={1}>
+              {title || 'Video'}
+            </Text>
+          </View>
+        )}
+
+        {/* Contenedor de video: 16:9 normal, pantalla completa cuando expanded */}
+        <View style={expanded
+          ? { flex: 1, backgroundColor: '#000000' }
+          : { backgroundColor: '#000000', aspectRatio: 16 / 9 }}>
+          <Pressable onPress={togglePlay} style={{ width: '100%', height: '100%' }}>
+            {visible && url ? (
+              <Video
+                ref={videoRef}
+                source={{ uri: url }}
+                style={{ width: '100%', height: '100%' }}
+                resizeMode={ResizeMode.CONTAIN}
+                shouldPlay={false}
+                isLooping={false}
+                isMuted={false}
+                useNativeControls={false}
+                onPlaybackStatusUpdate={handleStatus}
+              />
+            ) : null}
           </Pressable>
-          <Text
-            style={{ flex: 1, fontSize: 14, fontWeight: '800', color: colors.text }}
-            numberOfLines={1}>
-            {title || 'Video'}
-          </Text>
-        </View>
-
-        {/* Video */}
-        <View style={{ backgroundColor: '#000000', aspectRatio: 16 / 9 }}>
-          {visible && url ? (
-            <Video
-              ref={videoRef}
-              source={{ uri: url }}
-              style={{ width: '100%', height: '100%' }}
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay={false}
-              isLooping={false}
-              isMuted={false}
-              useNativeControls={false}
-              onPlaybackStatusUpdate={handleStatus}
-            />
-          ) : null}
           {isBuffering && (
             <ActivityIndicator
               size="large"
@@ -215,184 +463,147 @@ export function VideoPreviewModal({
               style={{ position: 'absolute', top: '50%', left: '50%', transform: [{ translateX: -20 }, { translateY: -20 }] }}
             />
           )}
-        </View>
 
-        {/* Controles */}
-        <View style={{
-          paddingHorizontal: 16, paddingTop: 14,
-          paddingBottom: showComments ? 10 : 24,
-          gap: 12,
-        }}>
-          {/* Barra de progreso */}
-          <View style={{ height: 4, backgroundColor: colors.line, borderRadius: 2 }}>
-            <View style={{
-              width: `${pct * 100}%`, height: '100%',
-              backgroundColor: colors.accent, borderRadius: 2,
-            }}/>
-          </View>
+          {/* Overlays de pantalla completa in-app */}
+          {expanded && (
+            <>
+              {/* Minimizar (arriba izquierda) */}
+              <Pressable
+                onPress={() => { setExpanded(false); setShowCommentsPanel(false); }}
+                style={{
+                  position: 'absolute', top: 14, left: 14,
+                  width: 40, height: 40, borderRadius: 20,
+                  backgroundColor: 'rgba(0,0,0,0.5)',
+                  alignItems: 'center', justifyContent: 'center',
+                }}>
+                <Minimize2 size={20} color="#FFFFFF"/>
+              </Pressable>
 
-          {/* Fila de controles */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <Pressable
-              onPress={togglePlay}
-              style={{
-                width: 48, height: 48, borderRadius: 24,
-                backgroundColor: colors.accent,
-                alignItems: 'center', justifyContent: 'center',
-              }}>
-              {isPlaying ? (
-                <View style={{ flexDirection: 'row', gap: 4 }}>
-                  <View style={{ width: 4, height: 16, backgroundColor: colors.ink, borderRadius: 2 }}/>
-                  <View style={{ width: 4, height: 16, backgroundColor: colors.ink, borderRadius: 2 }}/>
-                </View>
-              ) : (
-                <View style={{
-                  width: 0, height: 0, marginLeft: 3,
-                  borderLeftWidth: 14, borderLeftColor: colors.ink,
-                  borderTopWidth: 9, borderTopColor: 'transparent',
-                  borderBottomWidth: 9, borderBottomColor: 'transparent',
-                }}/>
+              {/* Botón flotante "Comentarios (N)" (abajo derecha) */}
+              {showComments && !showCommentsPanel && (
+                <Pressable
+                  onPress={() => setShowCommentsPanel(true)}
+                  style={{
+                    position: 'absolute', bottom: 20, right: 16,
+                    flexDirection: 'row', alignItems: 'center', gap: 7,
+                    backgroundColor: 'rgba(0,0,0,0.62)',
+                    paddingHorizontal: 15, paddingVertical: 11, borderRadius: 24,
+                  }}>
+                  <MessageCircle size={18} color="#FFFFFF"/>
+                  <Text style={{ color: '#FFFFFF', fontFamily: fonts.bold, fontSize: 13 }}>
+                    {comments.length}
+                  </Text>
+                </Pressable>
               )}
-            </Pressable>
 
-            <Text style={{
-              flex: 1, color: colors.muted2, fontSize: 13, fontFamily: fonts.mono,
-            }}>
-              {fmt(positionSec)} / {fmt(totalSec)}
-            </Text>
-
-            <Pressable
-              onPress={() => videoRef.current?.presentFullscreenPlayer()}
-              style={{
-                width: 44, height: 44, borderRadius: 12,
-                backgroundColor: colors.bg2,
-                alignItems: 'center', justifyContent: 'center',
-              }}>
-              <Maximize2 size={20} color={colors.text}/>
-            </Pressable>
-          </View>
-
-          {__DEV__ && !showComments && (
-            <Text style={{ fontSize: 10, color: colors.muted2, textAlign: 'center' }}>
-              Pantalla completa puede no funcionar en el emulador — usar dispositivo real.
-            </Text>
+              {/* Panel de comentarios superpuesto al video */}
+              {showComments && showCommentsPanel && (
+                <View style={{
+                  position: 'absolute', left: 0, right: 0, bottom: 0, height: '66%',
+                  backgroundColor: colors.bg,
+                  borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden',
+                }}>
+                  <View style={{
+                    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                    paddingHorizontal: 16, paddingVertical: 12,
+                  }}>
+                    <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: 15 }}>
+                      Comentarios
+                    </Text>
+                    <Pressable onPress={() => setShowCommentsPanel(false)} hitSlop={8}>
+                      <X size={20} color={colors.muted2}/>
+                    </Pressable>
+                  </View>
+                  {renderDescription()}
+                  {renderCommentSection()}
+                </View>
+              )}
+            </>
           )}
         </View>
 
-        {/* ── Sección de comentarios ── */}
-        {showComments && (
+        {/* Chrome normal (oculto en pantalla completa) */}
+        {!expanded && (
           <>
-            {/* Like + contador de comentarios */}
+            {/* Controles */}
             <View style={{
-              flexDirection: 'row', alignItems: 'center', gap: 16,
-              paddingHorizontal: 16, paddingVertical: 10,
-              borderTopWidth: 1, borderTopColor: colors.line,
+              paddingHorizontal: 16, paddingTop: 14,
+              paddingBottom: showComments ? 10 : 24,
+              gap: 12,
             }}>
-              <Pressable
-                onPress={toggleLike}
-                disabled={!highlightId}
-                hitSlop={8}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
-              >
-                <Heart
-                  size={16}
-                  color={isLiked ? colors.live : colors.muted2}
-                  fill={isLiked ? colors.live : 'none'}
-                />
-                <Text style={{ color: colors.muted2, fontSize: 12, fontFamily: fonts.bold }}>
-                  {likesCount}
+              {/* Barra de progreso */}
+              <View style={{ height: 4, backgroundColor: colors.line, borderRadius: 2 }}>
+                <View style={{
+                  width: `${pct * 100}%`, height: '100%',
+                  backgroundColor: colors.accent, borderRadius: 2,
+                }}/>
+              </View>
+
+              {/* Fila de controles */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <Pressable
+                  onPress={togglePlay}
+                  style={{
+                    width: 48, height: 48, borderRadius: 24,
+                    backgroundColor: colors.accent,
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>
+                  {isPlaying ? (
+                    <View style={{ flexDirection: 'row', gap: 4 }}>
+                      <View style={{ width: 4, height: 16, backgroundColor: colors.ink, borderRadius: 2 }}/>
+                      <View style={{ width: 4, height: 16, backgroundColor: colors.ink, borderRadius: 2 }}/>
+                    </View>
+                  ) : (
+                    <View style={{
+                      width: 0, height: 0, marginLeft: 3,
+                      borderLeftWidth: 14, borderLeftColor: colors.ink,
+                      borderTopWidth: 9, borderTopColor: 'transparent',
+                      borderBottomWidth: 9, borderBottomColor: 'transparent',
+                    }}/>
+                  )}
+                </Pressable>
+
+                <Text style={{
+                  flex: 1, color: colors.muted2, fontSize: 13, fontFamily: fonts.mono,
+                }}>
+                  {fmt(positionSec)} / {fmt(totalSec)}
                 </Text>
-              </Pressable>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <MessageCircle size={14} color={colors.muted2}/>
-                <Text style={{ color: colors.muted2, fontSize: 12, fontFamily: fonts.bold }}>
-                  {comments.length} comentario{comments.length !== 1 ? 's' : ''}
-                </Text>
+
+                {/* Botón Comentarios (solo cuando hay sección de comentarios) */}
+                {showComments && (
+                  <Pressable
+                    onPress={() => { setExpanded(true); setShowCommentsPanel(true); }}
+                    hitSlop={6}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', gap: 5,
+                      height: 44, paddingHorizontal: 12, borderRadius: 12,
+                      backgroundColor: colors.bg2,
+                    }}>
+                    <MessageCircle size={18} color={colors.text}/>
+                    <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: 13 }}>
+                      {comments.length}
+                    </Text>
+                  </Pressable>
+                )}
+
+                {/* Pantalla completa (in-app) */}
+                <Pressable
+                  onPress={() => setExpanded(true)}
+                  style={{
+                    width: 44, height: 44, borderRadius: 12,
+                    backgroundColor: colors.bg2,
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>
+                  <Maximize2 size={20} color={colors.text}/>
+                </Pressable>
               </View>
             </View>
 
-            {/* Lista */}
-            <FlatList
-              style={{ flex: 1 }}
-              data={comments}
-              keyExtractor={(c) => c.id}
-              contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8, gap: 18 }}
-              ListEmptyComponent={
-                <Text style={{ color: colors.muted2, fontSize: 13, paddingTop: 16, textAlign: 'center' }}>
-                  Sé el primero en comentar.
-                </Text>
-              }
-              renderItem={({ item }) => (
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <View style={{
-                    width: 34, height: 34, borderRadius: 17,
-                    backgroundColor: colors.ink,
-                    alignItems: 'center', justifyContent: 'center',
-                    flexShrink: 0,
-                  }}>
-                    <Text style={{ color: colors.accent, fontFamily: fonts.bold, fontSize: 13 }}>
-                      {item.user.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: 13 }}>
-                        {item.user}
-                      </Text>
-                      <Text style={{ color: colors.muted2, fontSize: 11, fontFamily: fonts.regular }}>
-                        {item.time}
-                      </Text>
-                    </View>
-                    <Text style={{
-                      color: colors.text, fontFamily: fonts.regular,
-                      fontSize: 14, lineHeight: 20,
-                    }}>
-                      {item.text}
-                    </Text>
-                  </View>
-                </View>
-              )}
-            />
+            {/* Descripción del highlight (si tiene) */}
+            {renderDescription()}
 
-            {/* Input */}
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-              <View style={{
-                flexDirection: 'row', alignItems: 'center', gap: 10,
-                paddingHorizontal: 16, paddingVertical: 12,
-                borderTopWidth: 1, borderTopColor: colors.line,
-              }}>
-                <TextInput
-                  value={commentText}
-                  onChangeText={setCommentText}
-                  placeholder={highlightId ? 'Escribe un comentario...' : 'Comentarios no disponibles'}
-                  placeholderTextColor={colors.muted2}
-                  editable={!!highlightId && !sending}
-                  returnKeyType="send"
-                  onSubmitEditing={sendComment}
-                  style={{
-                    flex: 1,
-                    backgroundColor: colors.surface,
-                    borderRadius: 12,
-                    paddingHorizontal: 14, paddingVertical: 10,
-                    color: colors.text,
-                    fontFamily: fonts.regular,
-                    fontSize: 14,
-                    borderWidth: 1, borderColor: colors.line,
-                  }}
-                />
-                <Pressable
-                  onPress={sendComment}
-                  disabled={!commentText.trim() || sending || !highlightId}
-                  style={{
-                    width: 42, height: 42, borderRadius: 12,
-                    backgroundColor: commentText.trim() && !sending ? colors.accent : colors.line,
-                    alignItems: 'center', justifyContent: 'center',
-                  }}
-                >
-                  <Send size={18} color={commentText.trim() && !sending ? colors.ink : colors.muted2}/>
-                </Pressable>
-              </View>
-            </KeyboardAvoidingView>
+            {/* ── Sección de comentarios ── */}
+            {showComments && renderCommentSection()}
           </>
         )}
 

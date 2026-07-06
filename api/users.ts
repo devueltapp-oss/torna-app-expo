@@ -34,6 +34,10 @@ export interface UserProfile {
   isFollowing: boolean;
   /** Si el usuario autenticado tiene activadas las notificaciones de partidos de :id. */
   notifyOnMatch: boolean;
+  /** True si el usuario participa ahora en un partido LIVE. */
+  isLiveNow: boolean;
+  /** Id del partido LIVE en el que juega (para abrir el visor), o null. */
+  liveGameId: string | null;
 }
 
 export interface UserSearchResult {
@@ -89,6 +93,33 @@ export function searchUsers(q: string): Promise<UserSearchResult[]> {
 /** Busca jugadores y clubs por nombre, username o email. */
 export function searchUsersAndClubs(q: string): Promise<UserSearchResult[]> {
   return authedGet<UserSearchResult[]>(`/user/search-all?q=${encodeURIComponent(q)}`);
+}
+
+/* ───────────── Seguir / dejar de seguir ───────────── */
+
+/** POST autenticado sin desenvolver respuesta (para acciones sin cuerpo útil). */
+async function authedPost(path: string, body: unknown): Promise<void> {
+  const token = await SecureStore.getItemAsync(TOKEN_KEY);
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token ?? ''}` },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = new Error(`HTTP ${res.status}`);
+    (err as any).status = res.status;
+    throw err;
+  }
+}
+
+/** Seguir a un usuario (player o club) por su id (Firebase UID). `POST /follow`. */
+export function followUser(userId: string): Promise<void> {
+  return authedPost('/follow', { userId });
+}
+
+/** Dejar de seguir a un usuario por su id. `POST /follow/unfollow`. */
+export function unfollowUser(userId: string): Promise<void> {
+  return authedPost('/follow/unfollow', { userId });
 }
 
 /* ───────────── Listas de seguidores / seguidos ───────────── */

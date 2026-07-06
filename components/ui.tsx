@@ -81,6 +81,9 @@ export interface InputProps {
   disabled?: boolean;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   keyboardType?: 'default' | 'email-address' | 'phone-pad' | 'numeric';
+  /** Campo multilínea (p. ej. descripción). Alinea el texto arriba y crece en alto. */
+  multiline?: boolean;
+  numberOfLines?: number;
 }
 
 export function Input(p: InputProps) {
@@ -95,7 +98,7 @@ export function Input(p: InputProps) {
         <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text2 }}>{p.label}</Text>
       )}
       <View style={{
-        flexDirection: 'row', alignItems: 'center', gap: 10,
+        flexDirection: 'row', alignItems: p.multiline ? 'flex-start' : 'center', gap: 10,
         backgroundColor: p.disabled ? colors.bg3 : colors.surface,
         borderWidth: 1.5, borderColor, borderRadius: radii.xl,
         paddingHorizontal: 14, paddingVertical: 12,
@@ -106,8 +109,12 @@ export function Input(p: InputProps) {
           placeholderTextColor={colors.muted}
           secureTextEntry={p.secureTextEntry} editable={!p.disabled}
           autoCapitalize={p.autoCapitalize} keyboardType={p.keyboardType}
+          multiline={p.multiline} numberOfLines={p.numberOfLines}
           onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-          style={{ flex: 1, color: p.disabled ? colors.muted : colors.text, fontSize: 15, padding: 0 }}
+          style={{
+            flex: 1, color: p.disabled ? colors.muted : colors.text, fontSize: 15, padding: 0,
+            ...(p.multiline ? { minHeight: 68, textAlignVertical: 'top' as const } : {}),
+          }}
         />
       </View>
       {(p.error || p.hint) ? (

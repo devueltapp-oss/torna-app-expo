@@ -9,7 +9,7 @@
  * El backend envuelve toda respuesta en { data, statusCode } (TransformInterceptor).
  */
 import * as SecureStore from 'expo-secure-store';
-import type { ClubCourtPublic, Slot } from '../data/types';
+import type { ClubCourtPublic, Slot, SearchableCourt } from '../data/types';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
 const TOKEN_KEY = 'torna_auth_token';
@@ -110,6 +110,30 @@ export function fetchCourtSlots(courtId: string, date: string): Promise<Slot[]> 
   return authedGet<Slot[]>(
     `/padel-court/${encodeURIComponent(courtId)}/slots?date=${encodeURIComponent(date)}`,
   );
+}
+
+interface BackendCourtSearch {
+  id: string;
+  name: string;
+  club: string;
+  clubId: string;
+  surface: string | null;
+  hasCameras: boolean;
+}
+
+/** Búsqueda de canchas por texto (nombre de cancha o club). GET /padel-court/search?q= */
+export async function searchCourts(q: string): Promise<SearchableCourt[]> {
+  const rows = await authedGet<BackendCourtSearch[]>(
+    `/padel-court/search?q=${encodeURIComponent(q)}`,
+  );
+  return rows.map((c) => ({
+    id: c.id,
+    name: c.name,
+    club: c.club,
+    clubId: c.clubId,
+    surface: normalizeSurface(c.surface),
+    hasCameras: c.hasCameras,
+  }));
 }
 
 export interface CreateReservationInput {

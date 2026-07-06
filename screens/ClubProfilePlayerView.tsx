@@ -12,7 +12,7 @@ import { fonts } from '../theme/tokens';
 import { SectionHeader, StatusBadge, Avatar, SurfaceChip } from '../components/ui';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import { MapsButton } from '../components/MapsButton';
-import type { ClubPublic } from '../data/types';
+import type { ClubPublic, ClipPreview } from '../data/types';
 
 const tornaLogo = require('../assets/torna-icon.png');
 
@@ -22,6 +22,8 @@ interface Props {
   onToggleFollow?: () => void;
   onReserveCourt?: (courtId: string) => void;
   onOpenLive?: (gameId: string) => void;
+  /** Abre un clip del club en el visor (con likes + comentarios). */
+  onOpenClip?: (clip: ClipPreview) => void;
   onChangeTab?: (id: TabId) => void;
   activeTab?: TabId;
 }
@@ -45,7 +47,7 @@ interface Props {
  *   POST/DELETE /clubs/:id/follow
  */
 export function ClubProfilePlayerView({
-  club, onBack, onToggleFollow, onReserveCourt, onOpenLive, onChangeTab, activeTab = 'home',
+  club, onBack, onToggleFollow, onReserveCourt, onOpenLive, onOpenClip, onChangeTab, activeTab = 'home',
 }: Props) {
   const { colors } = useTheme();
   const isFocused = useIsFocused();
@@ -154,7 +156,11 @@ export function ClubProfilePlayerView({
         <ScrollView horizontal showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 16, gap: 10, paddingBottom: 8 }}>
           {club.highlights.clips.map(c => (
-            <View key={c.id} style={{ width: 180, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line }}>
+            <Pressable
+              key={c.id}
+              onPress={() => onOpenClip?.(c)}
+              style={({ pressed }) => ({ width: 180, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, opacity: pressed ? 0.85 : 1 })}
+            >
               <View style={{ height: 100, backgroundColor: colors.bg3, alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                 <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}>
                   <Play size={16} color={colors.ink}/>
@@ -167,7 +173,7 @@ export function ClubProfilePlayerView({
                 <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }} numberOfLines={2}>{c.title}</Text>
                 <Text style={{ fontSize: 10, color: colors.muted2, marginTop: 2 }}>{c.date}</Text>
               </View>
-            </View>
+            </Pressable>
           ))}
         </ScrollView>
 

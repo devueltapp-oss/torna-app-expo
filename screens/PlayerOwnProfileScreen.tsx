@@ -143,6 +143,7 @@ export function PlayerOwnProfileScreen({
                   kind={item.kind}
                   durationLabel={item.durationLabel}
                   aspect="square"
+                  imageUri={item.kind === 'highlight' ? item.thumbnailUrl : undefined}
                 />
               </Pressable>
             ))}

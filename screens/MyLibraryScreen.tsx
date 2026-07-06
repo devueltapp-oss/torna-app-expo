@@ -6,15 +6,20 @@
  *     1. Mis partidos completos   — cada uno con chip Privado/Público + "Crear highlight →"
  *     2. Mis highlights           — clips recortados con chip
  *
- * Toggle de visibilidad por item: tap en el chip flippea isPublic.
- * En producción cada flip es un PATCH /me/library/:id { isPublic }.
+ * Toggle de visibilidad por item: tap en el chip (`VisibilityPill`) flippea isPublic
+ * y lo delega al padre vía `onToggleVisibility`.
+ *   - Highlights: persiste en el backend con `PATCH /highlights/:id/toggle` (sin body;
+ *     invierte `isEnabled` = visibilidad). Wiring en `App.tsx` (`toggleVisibility`):
+ *     flip optimista + revert si la request falla.
+ *   - Partidos (matches): no tienen visibilidad en el backend → el toggle es solo
+ *     cosmético/local (no hay endpoint).
  */
 import React from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
+import { View, Text, Pressable, ScrollView, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronDown, Lock, Scissors, Play, Trophy } from 'lucide-react-native';
+import { ChevronLeft, ChevronDown, Lock, Scissors, Play, Trophy, Globe, Pencil, X } from 'lucide-react-native';
 import { useTheme } from '../theme';
-import { Button, AppHeader, SurfaceChip } from '../components/ui';
+import { Button, Input, AppHeader, SurfaceChip } from '../components/ui';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import { ContentThumb } from '../components/ContentThumb';
 import { VisibilityPill } from '../components/VisibilityPill';
@@ -34,6 +39,8 @@ export interface MyLibraryScreenProps {
   onRegisterResult?: (match: LibraryMatch) => void;
   /** Flip privado/público de un item. */
   onToggleVisibility: (item: LibraryItem) => void;
+  /** Guardar la descripción editada de un highlight propio (PATCH /highlights/:id). */
+  onEditDescription?: (item: LibraryHighlight, description: string) => void;
   /** Tap reproducir cualquier item. */
   onOpenItem?: (item: LibraryItem) => void;
   activeTab?: TabId;
@@ -42,7 +49,7 @@ export interface MyLibraryScreenProps {
 
 export function MyLibraryScreen({
   matches, highlights,
-  onBack, onCreateHighlight, onRegisterResult, onToggleVisibility, onOpenItem,
+  onBack, onCreateHighlight, onRegisterResult, onToggleVisibility, onEditDescription, onOpenItem,
   activeTab, onChangeTab,
 }: MyLibraryScreenProps) {
   const { colors } = useTheme();
@@ -50,6 +57,15 @@ export function MyLibraryScreen({
     matches: true, highlights: true,
   });
   const toggle = (k: SectionKey) => setOpen(o => ({ ...o, [k]: !o[k] }));
+
+  // Edición de descripción de un highlight: abre un modal con el texto actual.
+  const [editing, setEditing] = React.useState<LibraryHighlight | null>(null);
+  const [editText, setEditText] = React.useState('');
+  const openEdit = (h: LibraryHighlight) => { setEditText(h.description ?? ''); setEditing(h); };
+  const saveEdit = () => {
+    if (editing) onEditDescription?.(editing, editText.trim());
+    setEditing(null);
+  };
 
   const totalPublic = [
     ...matches, ...highlights,
@@ -116,6 +132,7 @@ export function MyLibraryScreen({
               <ItemRow
                 key={h.id} item={h}
                 onToggleVisibility={() => onToggleVisibility(h)}
+                onEdit={onEditDescription ? () => openEdit(h) : undefined}
                 onOpen={() => onOpenItem?.(h)}
               />
             ))}
@@ -124,6 +141,52 @@ export function MyLibraryScreen({
       </ScrollView>
 
       {onChangeTab && <BottomTabBar role="player" active={activeTab ?? 'profile'} onChange={onChangeTab}/>}
+
+      {/* Modal de edición de descripción */}
+      <Modal visible={editing !== null} transparent animationType="fade" onRequestClose={() => setEditing(null)}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}
+        >
+          <Pressable style={{ flex: 1 }} onPress={() => setEditing(null)}/>
+          <View style={{
+            backgroundColor: colors.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+            padding: 20, paddingBottom: 32, gap: 14,
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 17, fontWeight: '800', color: colors.text }}>Descripción del highlight</Text>
+              <Pressable onPress={() => setEditing(null)} hitSlop={8}>
+                <X size={22} color={colors.muted2}/>
+              </Pressable>
+            </View>
+            {editing?.title ? (
+              <Text style={{ fontSize: 12, color: colors.muted2 }} numberOfLines={1}>{editing.title}</Text>
+            ) : null}
+            <Input
+              label=""
+              placeholder="Contá el contexto de la jugada…"
+              value={editText}
+              onChangeText={setEditText}
+              multiline
+              numberOfLines={4}
+              hint={`${editText.length}/1000`}
+              error={editText.length > 1000 ? 'Máximo 1000 caracteres.' : null}
+            />
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Button variant="soft" size="lg" onPress={() => setEditing(null)}>Cancelar</Button>
+              <View style={{ flex: 1 }}>
+                <Button
+                  fullWidth size="lg"
+                  variant={editText.length > 1000 ? 'disabled' : 'primary'}
+                  onPress={editText.length > 1000 ? undefined : saveEdit}
+                >
+                  Guardar
+                </Button>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -239,20 +302,27 @@ function MatchRow({ match, onCreateHighlight, onRegisterResult, onToggleVisibili
   );
 }
 
-function ItemRow({ item, onToggleVisibility, onOpen }: {
+function ItemRow({ item, onToggleVisibility, onEdit, onOpen }: {
   item: LibraryHighlight;
   onToggleVisibility: () => void;
+  onEdit?: () => void;
   onOpen: () => void;
 }) {
   const { colors } = useTheme();
   const isHighlight = item.kind === 'highlight';
+  const hasDescription = !!item.description && item.description.trim().length > 0;
   return (
     <View style={{
       flexDirection: 'row', gap: 12, padding: 10, borderRadius: 14,
       backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line,
     }}>
       <View style={{ width: 96 }}>
-        <ContentThumb kind={item.kind} durationLabel={item.durationLabel} aspect="wide"/>
+        <ContentThumb
+          kind={item.kind}
+          durationLabel={item.durationLabel}
+          aspect="wide"
+          imageUri={item.kind === 'highlight' ? item.thumbnailUrl : undefined}
+        />
       </View>
 
       <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
@@ -268,7 +338,32 @@ function ItemRow({ item, onToggleVisibility, onOpen }: {
           <Text style={{ fontSize: 11, color: colors.muted2 }}>{item.date}</Text>
         ) : null}
 
-        <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
+        {hasDescription && (
+          <Text style={{ fontSize: 12, color: colors.text2, lineHeight: 17, marginTop: 2 }} numberOfLines={2}>
+            {item.description}
+          </Text>
+        )}
+
+        <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+          {/* Acción explícita de publicar/despublicar. El chip de arriba es solo el
+              badge de estado; este botón etiquetado es la acción descubrible. */}
+          {item.isPublic ? (
+            <Pressable onPress={onToggleVisibility} style={{
+              flexDirection: 'row', alignItems: 'center', gap: 4,
+              borderWidth: 1, borderColor: colors.line, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+            }}>
+              <Lock size={11} color={colors.text2}/>
+              <Text style={{ color: colors.text2, fontWeight: '700', fontSize: 11 }}>Hacer privado</Text>
+            </Pressable>
+          ) : (
+            <Pressable onPress={onToggleVisibility} style={{
+              flexDirection: 'row', alignItems: 'center', gap: 4,
+              backgroundColor: colors.accent, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
+            }}>
+              <Globe size={12} color={colors.ink}/>
+              <Text style={{ color: colors.ink, fontWeight: '800', fontSize: 11 }}>Hacer público</Text>
+            </Pressable>
+          )}
           <Pressable onPress={onOpen} style={{
             flexDirection: 'row', alignItems: 'center', gap: 4,
             borderWidth: 1, borderColor: colors.line, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
@@ -276,6 +371,17 @@ function ItemRow({ item, onToggleVisibility, onOpen }: {
             <Play size={11} color={colors.text2}/>
             <Text style={{ color: colors.text2, fontWeight: '700', fontSize: 11 }}>Reproducir</Text>
           </Pressable>
+          {onEdit && (
+            <Pressable onPress={onEdit} style={{
+              flexDirection: 'row', alignItems: 'center', gap: 4,
+              borderWidth: 1, borderColor: colors.line, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+            }}>
+              <Pencil size={11} color={colors.text2}/>
+              <Text style={{ color: colors.text2, fontWeight: '700', fontSize: 11 }}>
+                {hasDescription ? 'Editar descripción' : 'Agregar descripción'}
+              </Text>
+            </Pressable>
+          )}
         </View>
       </View>
     </View>

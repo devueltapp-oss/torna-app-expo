@@ -64,6 +64,7 @@ export function useVideoEditorFlow(params: UseVideoEditorFlowParams) {
   }, [defaultRange]);
 
   const [title, setTitle] = React.useState('');
+  const [description, setDescription] = React.useState('');
   const [visibility, setVisibility] = React.useState<Visibility>('private');
 
   // Job state
@@ -93,6 +94,7 @@ export function useVideoEditorFlow(params: UseVideoEditorFlowParams) {
         start: startSec,
         end: endSec,
         title: title.trim() || 'Highlight',
+        description: description.trim() || undefined,
         isPublic: visibility === 'public',
       });
 
@@ -105,7 +107,7 @@ export function useVideoEditorFlow(params: UseVideoEditorFlowParams) {
       setJobError(err instanceof Error ? err.message : 'No pudimos crear el highlight.');
       setJobStatus('FAILED');
     }
-  }, [gameId, range, title, visibility, effectiveDuration]);
+  }, [gameId, range, title, description, visibility, effectiveDuration]);
 
   const cancelProcessing = React.useCallback(() => {
     setJobError(null);
@@ -117,6 +119,7 @@ export function useVideoEditorFlow(params: UseVideoEditorFlowParams) {
     range, setRange,
     effectiveDuration, onVideoLoaded,
     title, setTitle,
+    description, setDescription,
     visibility, setVisibility,
     jobStatus, jobProgress, jobError, resultUrl,
     generate, cancelProcessing,

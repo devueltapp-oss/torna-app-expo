@@ -67,6 +67,16 @@ interface AuthContextValue {
     dto: Omit<RegisterDto, 'authProvider'>,
   ) => Promise<void>;
   /**
+   * Alta de un club por email/contraseña. Crea la cuenta en Firebase + backend
+   * (queda `status:false`, pendiente de aprobación manual) PERO **no** inicia
+   * sesión: el club no entra a la app hasta ser aprobado (flujo → Pending).
+   */
+  registerClub: (
+    email: string,
+    password: string,
+    dto: Omit<RegisterDto, 'authProvider' | 'isClub'>,
+  ) => Promise<void>;
+  /**
    * Cambia la contraseña de la cuenta. Re-autentica con la contraseña actual
    * (la verifica de verdad) y actualiza la nueva directamente en Firebase.
    */
@@ -421,6 +431,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   // ------------------------------------------------------------------
+  // registerClub (solo Club, email/contraseña)
+  // Crea la cuenta en Firebase + backend (status:false). NO setea user ni
+  // guarda token: el club queda PENDIENTE de aprobación y la UI lo manda a
+  // Pending. Cerramos la sesión de Firebase para no dejar credenciales activas.
+  // ------------------------------------------------------------------
+  const registerClub = useCallback(
+    async (
+      email: string,
+      password: string,
+      dto: Omit<RegisterDto, 'authProvider' | 'isClub'>,
+    ): Promise<void> => {
+      const credential = await firebaseAuth().createUserWithEmailAndPassword(
+        email.trim(),
+        password,
+      );
+      const idToken = await credential.user.getIdToken();
+      await apiRegister(idToken, { ...dto, isClub: true, authProvider: 'email' });
+      await firebaseAuth().signOut().catch(() => undefined);
+    },
+    [],
+  );
+
+  // ------------------------------------------------------------------
   // changePassword
   // Re-autentica con la contraseña actual para (a) verificarla y (b) crear una
   // sesión en el cliente de Firebase — necesaria porque los usuarios que
@@ -482,6 +515,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isLoading,
     loginWithEmailPassword,
     registerWithEmailPassword,
+    registerClub,
     changePassword,
     loginWithGoogle,
     loginWithApple,

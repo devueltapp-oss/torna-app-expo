@@ -16,6 +16,7 @@ const TOKEN_KEY = 'torna_auth_token';
 export interface UserHighlight {
   id: string;
   title: string | null;
+  description: string | null;
   clipUrl: string;
   thumbnailUrl: string | null;
   duration: number; // segundos
@@ -29,7 +30,10 @@ export interface MyHighlight extends UserHighlight {
   isEnabled: boolean; // true = público, false = privado
 }
 
-/** Comentario de un highlight (GET /highlights/:id, POST /highlights/:id/comments). */
+/**
+ * Comentario de un highlight (GET /highlights/:id, POST /highlights/:id/comments).
+ * `parentId` = null → comentario raíz; seteado → es una respuesta (thread).
+ */
 export interface HighlightComment {
   id: string;
   userId: string;
@@ -37,12 +41,16 @@ export interface HighlightComment {
   name: string | null;
   profilePicture: string | null;
   content: string;
+  parentId: string | null;
   createdAt: string;
 }
 
 /** Detalle de un highlight con comentarios + estado de like del usuario actual. */
 export interface HighlightDetail {
   id: string;
+  title: string | null;
+  description: string | null;
+  userId: string;
   likesCount: number;
   isLikedByMe: boolean;
   comments: HighlightComment[];
@@ -121,14 +129,56 @@ export function toggleHighlightLike(id: string): Promise<{ liked: boolean; likes
   return authedSend('POST', `/highlights/${encodeURIComponent(id)}/like`);
 }
 
-/** Agrega un comentario a un highlight y devuelve el comentario creado. */
-export function addHighlightComment(id: string, content: string): Promise<HighlightComment> {
-  return authedSend('POST', `/highlights/${encodeURIComponent(id)}/comments`, { content });
+/**
+ * Agrega un comentario a un highlight y devuelve el comentario creado.
+ * Pasar `parentId` lo convierte en una respuesta a otro comentario (thread).
+ */
+export function addHighlightComment(
+  id: string,
+  content: string,
+  parentId?: string,
+): Promise<HighlightComment> {
+  return authedSend('POST', `/highlights/${encodeURIComponent(id)}/comments`, {
+    content,
+    ...(parentId ? { parentId } : {}),
+  });
+}
+
+/** Edita título/descripción de un highlight propio (PATCH /highlights/:id). */
+export function updateHighlightMeta(
+  id: string,
+  meta: { title?: string; description?: string },
+): Promise<void> {
+  return authedSend('PATCH', `/highlights/${encodeURIComponent(id)}`, meta);
 }
 
 /** TODOS los highlights del usuario autenticado (públicos + privados), fecha desc. */
 export function fetchMyHighlights(): Promise<MyHighlight[]> {
   return authedGet<MyHighlight[]>('/highlights/my');
+}
+
+/** Item del feed: highlight de un usuario seguido + autor + conteos. */
+export interface FeedHighlight {
+  id: string;
+  clipUrl: string;
+  thumbnailUrl: string | null;
+  duration: number;
+  title: string | null;
+  createdAt: string;
+  likesCount: number;
+  commentsCount: number;
+  author: {
+    id: string;
+    username: string;
+    name: string | null;
+    profilePicture: string | null;
+    isClub: boolean;
+  };
+}
+
+/** Feed: highlights públicos de los usuarios que sigo (GET /highlights/feed). */
+export function fetchFeed(): Promise<FeedHighlight[]> {
+  return authedGet<FeedHighlight[]>('/highlights/feed');
 }
 
 /** Highlight recién creado que devuelve POST /highlights/from-recording. */
@@ -151,6 +201,7 @@ export async function createHighlightFromRecording(params: {
   start: number;
   end: number;
   title?: string;
+  description?: string;
   isPublic: boolean;
 }): Promise<CreatedHighlight> {
   const res = await fetch(`${API_URL}/highlights/from-recording`, {

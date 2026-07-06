@@ -56,6 +56,7 @@ function mapDetail(data: BackendGameDetail): GameDetailData {
     court: data.padelCourt?.name ?? primary?.identifier ?? 'Cancha',
     floor: normalizeSurface(data.padelCourt?.surface),
     club: clubUser?.name ?? clubUser?.username ?? '',
+    clubId: clubUser?.id ?? '',
     clubHandle: clubUser?.username ? '@' + clubUser.username : '',
     clubFollowers: 0,
     time: '',

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, MoreHorizontal, MapPin, Eye, Play, Bell } from 'lucide-react-native';
 import { Svg, Rect, Line } from 'react-native-svg';
@@ -119,8 +119,11 @@ export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onTogg
             action={<Text style={{ fontSize: 11, fontWeight: '700', color: colors.accentText }}>Ver todos</Text>}/>
         </View>
         {player.clips.length === 0 && !(player.isLiveNow && player.liveGame) ? (
-          <View style={{ paddingHorizontal: 16, paddingVertical: 16 }}>
-            <Text style={{ fontSize: 13, color: colors.muted2 }}>Sin highlights disponibles</Text>
+          <View style={{ alignItems: 'center', paddingHorizontal: 32, paddingVertical: 28, gap: 6 }}>
+            <Text style={{ fontSize: 15, fontFamily: fonts.bold, color: colors.text }}>Sin publicaciones</Text>
+            <Text style={{ fontSize: 13, color: colors.muted2, textAlign: 'center', lineHeight: 18 }}>
+              Este jugador todavía no tiene highlights ni partidos en vivo.
+            </Text>
           </View>
         ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}
@@ -170,6 +173,13 @@ export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onTogg
               style={({ pressed }) => ({ width: 180, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, opacity: pressed ? 0.88 : 1 })}
             >
               <View style={{ height: 100, backgroundColor: colors.bg3, alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                {c.thumbnailUrl ? (
+                  <Image
+                    source={{ uri: c.thumbnailUrl }}
+                    style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' }}
+                    resizeMode="cover"
+                  />
+                ) : null}
                 <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}>
                   <Play size={16} color={colors.ink}/>
                 </View>

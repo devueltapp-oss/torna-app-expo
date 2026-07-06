@@ -64,7 +64,7 @@ export function HomeScreen({
 }: Props) {
   const { colors } = useTheme();
   const isFocused = useIsFocused();
-  const [highlightModal, setHighlightModal] = React.useState<{ url: string; title: string } | null>(null);
+  const [highlightModal, setHighlightModal] = React.useState<{ url: string; title: string; id: string } | null>(null);
   const [upcomingSheet, setUpcomingSheet] = React.useState<UpcomingGameData | null>(null);
 
   return (
@@ -169,7 +169,7 @@ export function HomeScreen({
                   key={p.id}
                   post={p}
                   onDoubleTap={p.type === 'highlight' && p.videoUrl
-                    ? () => setHighlightModal({ url: p.videoUrl!, title: p.caption ?? 'Highlight' })
+                    ? () => setHighlightModal({ url: p.videoUrl!, title: p.caption ?? 'Highlight', id: p.id })
                     : undefined}
                 />
               ))}
@@ -196,6 +196,7 @@ export function HomeScreen({
         title={highlightModal?.title ?? ''}
         durationSeconds={0}
         onClose={() => setHighlightModal(null)}
+        highlightId={highlightModal?.id}
         showComments
       />
     </SafeAreaView>

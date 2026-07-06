@@ -22,6 +22,11 @@ export interface GlobalSearchScreenProps {
    * provee, la pantalla la usa con debounce en vez de filtrar `players` localmente.
    */
   onSearchUsers?: (q: string) => Promise<SearchableUser[]>;
+  /**
+   * Búsqueda real de canchas (GET /padel-court/search). Si se provee, se usa con
+   * debounce en vez de filtrar `courts` localmente.
+   */
+  onSearchCourts?: (q: string) => Promise<SearchableCourt[]>;
 }
 
 function CourtIcon({ size = 20, color = 'black' }: { size?: number; color?: string }) {
@@ -40,12 +45,13 @@ function CourtIcon({ size = 20, color = 'black' }: { size?: number; color?: stri
 }
 
 export function GlobalSearchScreen({
-  players, courts, onBack, onOpenPlayerProfile, onOpenClubProfile, onReserveCourt, onSearchUsers,
+  players, courts, onBack, onOpenPlayerProfile, onOpenClubProfile, onReserveCourt, onSearchUsers, onSearchCourts,
 }: GlobalSearchScreenProps) {
   const { colors } = useTheme();
   const inputRef = React.useRef<TextInput>(null);
   const [query, setQuery] = React.useState('');
   const [apiUsers, setApiUsers] = React.useState<SearchableUser[]>([]);
+  const [apiCourts, setApiCourts] = React.useState<SearchableCourt[]>([]);
   const [searching, setSearching] = React.useState(false);
 
   React.useEffect(() => {
@@ -90,15 +96,30 @@ export function GlobalSearchScreen({
       : base;
   }, [players, apiUsers, onSearchUsers, q]);
 
-  const filteredCourts = React.useMemo(() =>
-    q
+  // Búsqueda real de canchas con debounce (~300 ms).
+  React.useEffect(() => {
+    if (!onSearchCourts) return;
+    const term = query.trim();
+    if (term.length < 2) { setApiCourts([]); return; }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      onSearchCourts(term)
+        .then((res) => { if (!cancelled) setApiCourts(res); })
+        .catch(() => { if (!cancelled) setApiCourts([]); });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [query, onSearchCourts]);
+
+  const filteredCourts = React.useMemo(() => {
+    // Si hay búsqueda real, los resultados ya vienen filtrados del backend.
+    if (onSearchCourts) return apiCourts;
+    return q
       ? courts.filter(c =>
           c.name.toLowerCase().includes(q) ||
           c.club.toLowerCase().includes(q),
         )
-      : courts,
-    [courts, q],
-  );
+      : courts;
+  }, [courts, apiCourts, onSearchCourts, q]);
 
   const hasResults = filteredUsers.length > 0 || filteredCourts.length > 0;
 

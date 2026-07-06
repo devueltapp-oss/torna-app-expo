@@ -37,6 +37,8 @@ function mapHighlight(h: MyHighlight): LibraryHighlight {
     date: formatDate(h.createdAt),
     fromMatch: h.gameId,
     streamUrl: h.clipUrl || undefined,
+    description: h.description ?? null,
+    thumbnailUrl: h.thumbnailUrl ?? null,
   };
 }
 

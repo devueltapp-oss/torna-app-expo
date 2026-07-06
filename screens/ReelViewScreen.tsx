@@ -10,6 +10,7 @@ import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import type { LiveGameData } from '../components/cards';
 import type { UpcomingGameData } from './HomeScreen';
 import type { FeedPost } from '../data/types';
+import { fetchGameComments, addGameComment, type GameComment } from '../api/games';
 
 export type ReelSection = 'live' | 'upcoming' | 'highlights';
 
@@ -44,9 +45,26 @@ const TONE_FG: Record<string, string> = {
 
 /* ─── Live reel item ─── */
 
-// Comentarios en vivo — vacío hasta que exista el endpoint de comentarios del
-// stream. Sin datos falsos.
-const LIVE_COMMENTS: { id: string; user: string; text: string; time: string }[] = [];
+/** Fila de comentario ya mapeada para render. */
+interface CommentRow { id: string; user: string; text: string; time: string; }
+
+/** ISO → etiqueta corta relativa ("Ahora", "5m", "3h", "2d", o fecha). */
+function relTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const min = Math.floor(Math.max(0, Date.now() - then) / 60000);
+  if (min < 1) return 'Ahora';
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d`;
+  return new Date(then).toLocaleDateString('es', { day: 'numeric', month: 'short' });
+}
+
+function mapGameComment(c: GameComment): CommentRow {
+  return { id: c.id, user: c.name ?? c.username, text: c.comment, time: relTime(c.createdAt) };
+}
 
 function LiveReelItem({
   game,
@@ -62,7 +80,19 @@ function LiveReelItem({
   const [isBuffering, setIsBuffering] = React.useState(true);
   const [showComments, setShowComments] = React.useState(false);
   const [commentText, setCommentText] = React.useState('');
+  const [comments, setComments] = React.useState<CommentRow[]>([]);
+  const [sending, setSending] = React.useState(false);
   const lastTapRef = React.useRef<number>(0);
+
+  // Comentarios reales del partido: se cargan al abrir el modal (GET /game/:id/comments).
+  React.useEffect(() => {
+    if (!showComments) return;
+    let cancelled = false;
+    fetchGameComments(game.id)
+      .then((rows) => { if (!cancelled) setComments(rows.map(mapGameComment)); })
+      .catch(() => { /* sin datos → lista vacía, sin mock */ });
+    return () => { cancelled = true; };
+  }, [showComments, game.id]);
 
   React.useEffect(() => {
     if (!isActive) {
@@ -86,9 +116,19 @@ function LiveReelItem({
     lastTapRef.current = now;
   }
 
-  function sendComment() {
-    if (!commentText.trim()) return;
+  async function sendComment() {
+    const text = commentText.trim();
+    if (!text || sending) return;
+    setSending(true);
     setCommentText('');
+    try {
+      const created = await addGameComment(game.id, text);
+      setComments((prev) => [...prev, mapGameComment(created)]);
+    } catch {
+      setCommentText(text); // restaurar si falló, para no perderlo
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
@@ -200,9 +240,14 @@ function LiveReelItem({
 
         {/* Comment list */}
         <FlatList
-          data={LIVE_COMMENTS}
+          data={comments}
           keyExtractor={(c) => c.id}
           contentContainerStyle={{ padding: 16, gap: 20 }}
+          ListEmptyComponent={
+            <Text style={{ color: colors.muted2, fontSize: 13, paddingTop: 16, textAlign: 'center' }}>
+              Sé el primero en comentar.
+            </Text>
+          }
           renderItem={({ item }) => (
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <View style={{
@@ -245,6 +290,7 @@ function LiveReelItem({
               placeholder="Escribe un comentario..."
               placeholderTextColor={colors.muted2}
               returnKeyType="send"
+              editable={!sending}
               onSubmitEditing={sendComment}
               style={{
                 flex: 1,
@@ -259,14 +305,14 @@ function LiveReelItem({
             />
             <Pressable
               onPress={sendComment}
-              disabled={!commentText.trim()}
+              disabled={!commentText.trim() || sending}
               style={{
                 width: 42, height: 42, borderRadius: 12,
-                backgroundColor: commentText.trim() ? colors.accent : colors.line,
+                backgroundColor: commentText.trim() && !sending ? colors.accent : colors.line,
                 alignItems: 'center', justifyContent: 'center',
               }}
             >
-              <Send size={18} color={commentText.trim() ? colors.ink : colors.muted2} />
+              <Send size={18} color={commentText.trim() && !sending ? colors.ink : colors.muted2} />
             </Pressable>
           </View>
         </KeyboardAvoidingView>
