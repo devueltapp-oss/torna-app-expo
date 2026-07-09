@@ -1,6 +1,6 @@
 import React from 'react';
 import { Modal, View, Text, Pressable, Image, ScrollView, Alert } from 'react-native';
-import { Bell, Check, ChevronRight, X } from 'lucide-react-native';
+import { Bell, Check, ChevronRight, MessageCircle, X } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { Avatar, Button, StatusBadge } from './ui';
@@ -12,6 +12,12 @@ export interface UpcomingMatchSheetProps {
   visible: boolean;
   game: UpcomingGameData | null;
   invitablePlayers?: InvitablePlayer[];
+  /** Sugerencias por defecto al buscar compañero: gente que seguís / te sigue. */
+  suggestedPartners?: InvitablePlayer[];
+  /** Búsqueda real de compañero (GET /user/search) rankeada con conexiones primero. */
+  onSearchPartner?: (q: string) => Promise<InvitablePlayer[]>;
+  /** Abre el chat de la partida (solo participantes). `readOnly` si ya finalizó. */
+  onOpenChat?: (gameId: string, title?: string, readOnly?: boolean) => void;
   onClose: () => void;
   onOpenPlayerProfile?: (playerId: string) => void;
   onAcceptApplication?: (gameId: string, appId: string) => void;
@@ -28,6 +34,9 @@ export function UpcomingMatchSheet({
   visible,
   game,
   invitablePlayers = [],
+  suggestedPartners,
+  onSearchPartner,
+  onOpenChat,
   onClose,
   onOpenPlayerProfile,
   onAcceptApplication,
@@ -149,6 +158,7 @@ export function UpcomingMatchSheet({
               pendingApplications={localApplications}
               onOpenApply={() => setShowApplySheet(true)}
               onWatch={handleWatch}
+              onOpenChat={onOpenChat}
               onOpenPlayerProfile={onOpenPlayerProfile}
               onAcceptApplication={handleAccept}
               onRejectApplication={handleReject}
@@ -165,6 +175,8 @@ export function UpcomingMatchSheet({
           visible={showApplySheet}
           game={game}
           invitablePlayers={invitablePlayers}
+          suggestedPartners={suggestedPartners}
+          onSearchPartner={onSearchPartner}
           onClose={() => setShowApplySheet(false)}
           onApplied={() => setHasApplied(true)}
         />
@@ -182,6 +194,7 @@ interface SheetContentProps {
   pendingApplications: GameApplication[];
   onOpenApply: () => void;
   onWatch: () => void;
+  onOpenChat?: (gameId: string, title?: string, readOnly?: boolean) => void;
   onOpenPlayerProfile?: (playerId: string) => void;
   onAcceptApplication?: (appId: string) => void;
   onRejectApplication?: (appId: string) => void;
@@ -192,7 +205,7 @@ interface SheetContentProps {
 
 function SheetContent({
   game, colors, hasApplied, isWatching, watching, pendingApplications,
-  onOpenApply, onWatch, onOpenPlayerProfile,
+  onOpenApply, onWatch, onOpenChat, onOpenPlayerProfile,
   onAcceptApplication, onRejectApplication,
   onCancelGame, onLeaveGame, onCancelPair,
 }: SheetContentProps) {
@@ -327,6 +340,27 @@ function SheetContent({
           <Button variant="primary" fullWidth onPress={onOpenApply}>
             Postularme
           </Button>
+        )}
+
+        {/* Chat de la partida: solo participantes. Solo-lectura si ya finalizó/canceló. */}
+        {isParticipant && onOpenChat && (
+          <Pressable
+            onPress={() => onOpenChat(
+              game.id,
+              `${game.time} · ${game.court}`,
+              game.status === 'FINISHED' || game.status === 'CANCELLED',
+            )}
+            style={({ pressed }) => ({
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+              paddingVertical: 12, borderRadius: 12,
+              backgroundColor: colors.accent, opacity: pressed ? 0.85 : 1,
+            })}
+          >
+            <MessageCircle size={18} color={colors.primaryFg} />
+            <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: colors.primaryFg }}>
+              Chat de la partida
+            </Text>
+          </Pressable>
         )}
 
         {/* Gestión: solo para participantes */}

@@ -220,6 +220,34 @@ export function addGameComment(gameId: string, comment: string): Promise<GameCom
   return authedSend('POST', `/game/${encodeURIComponent(gameId)}/comments`, { comment });
 }
 
+/* ─────────── Chat privado de la partida (participantes) ─────────── */
+
+export interface GameChatMessage {
+  id: string;
+  gameId: string;
+  senderId: string;
+  username: string;
+  name: string | null;
+  profilePicture: string | null;
+  content: string;
+  createdAt: string;
+}
+
+/**
+ * Historial del chat de una partida (GET /game/:id/chat), más antiguos primero.
+ * `since` (ISO) opcional → solo mensajes posteriores (poll incremental). Solo
+ * participantes: la API devuelve 403 a quien no juega la partida.
+ */
+export function fetchGameChat(gameId: string, since?: string): Promise<GameChatMessage[]> {
+  const qs = since ? `?since=${encodeURIComponent(since)}` : '';
+  return authedGet<GameChatMessage[]>(`/game/${encodeURIComponent(gameId)}/chat${qs}`);
+}
+
+/** Envía un mensaje al chat de la partida (POST /game/:id/chat). */
+export function sendGameChatMessage(gameId: string, content: string): Promise<GameChatMessage> {
+  return authedSend('POST', `/game/${encodeURIComponent(gameId)}/chat`, { content });
+}
+
 /** Suscribirse a notificaciones de un partido (POST /game/:id/watch). */
 export function watchGame(gameId: string): Promise<unknown> {
   return authedSend('POST', `/game/${gameId}/watch`);

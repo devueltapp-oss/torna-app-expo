@@ -29,7 +29,7 @@ import {
   PendingApprovalScreen,
   CompleteProfileScreen,
   HomeScreen, ClubHomeScreen,
-  GamesScreen, GameDetailScreen, CourtsScreen, PlayersScreen, ProfileScreen,
+  GamesScreen, GameChatScreen, GameDetailScreen, CourtsScreen, PlayersScreen, ProfileScreen,
   ClubProfilePlayerView, PlayerProfilePublicView, SearchPlayScreen, GlobalSearchScreen,
   ReserveStep1Screen, ReserveStep2Screen, ReserveStep3Screen, ReserveSuccessScreen, MonoValue,
   VideoEditorScreen,
@@ -54,6 +54,7 @@ import * as gamesApi from './api/games';
 import { useGameDetail } from './hooks/useGameDetail';
 import { usePlayers } from './hooks/usePlayers';
 import { useUserProfile } from './hooks/useUserProfile';
+import { usePartnerSearch } from './hooks/usePartnerSearch';
 import { useMyHighlights } from './hooks/useMyHighlights';
 import { useHighlightVisibility } from './hooks/useHighlightVisibility';
 import { searchUsers, searchUsersAndClubs, fetchUserProfile, setFollowNotify, fetchFollowers, followUser, unfollowUser } from './api/users';
@@ -164,6 +165,7 @@ type AppStackParamList = {
   MainPlayer: undefined;
   MainClub: undefined;
   GameDetail: { gameId: string; clipData?: GameDetailData; liveStreamUrl?: string };
+  GameChat: { gameId: string; title?: string; readOnly?: boolean };
   ClubProfile: { clubId: string };
   PlayerProfile: { playerId: string };
   SearchPlay: undefined;
@@ -478,6 +480,10 @@ function MainPlayer({ navigation }: any) {
     [playerList],
   );
 
+  // Búsqueda de compañero al sumarse a una partida abierta: prioriza gente que
+  // seguís / te sigue (sugerencias + ranking) y busca contra GET /user/search.
+  const { connections: partnerSuggestions, searchPartners } = usePartnerSearch(user?.id);
+
   // Perfil propio: identidad del usuario autenticado + conteos REALES de
   // seguidores/seguidos (count en BD vía GET /user/profile/:id).
   const { player: ownProfile, refresh: refreshOwnProfile } = useUserProfile(user?.id);
@@ -661,6 +667,9 @@ function MainPlayer({ navigation }: any) {
             onRefresh={handleRefresh}
             onOpenPlayerProfile={(playerId) => navigation.navigate('PlayerProfile', { playerId })}
             invitablePlayers={invitablePlayers}
+            suggestedPartners={partnerSuggestions}
+            onSearchPartner={searchPartners}
+            onOpenChat={(gameId, title, readOnly) => navigation.navigate('GameChat', { gameId, title, readOnly })}
           />
         );
       case 'games':
@@ -766,6 +775,9 @@ function MainPlayer({ navigation }: any) {
       <UpcomingMatchSheet
         visible={myGameSheet !== null}
         game={myGameSheet}
+        suggestedPartners={partnerSuggestions}
+        onSearchPartner={searchPartners}
+        onOpenChat={(gameId, title, readOnly) => { setMyGameSheet(null); navigation.navigate('GameChat', { gameId, title, readOnly }); }}
         onClose={() => setMyGameSheet(null)}
         onOpenPlayerProfile={(playerId) => {
           setMyGameSheet(null);
@@ -912,6 +924,17 @@ function AppNavigator() {
         }}
       </AppStack.Screen>
 
+      <AppStack.Screen name="GameChat">
+        {({ navigation, route }) => (
+          <GameChatScreen
+            gameId={route.params?.gameId ?? ''}
+            title={route.params?.title}
+            readOnly={route.params?.readOnly}
+            onBack={() => navigation.goBack()}
+          />
+        )}
+      </AppStack.Screen>
+
       {/* Player POV flows */}
       <AppStack.Screen name="ClubProfile">
         {({ navigation, route }) => {
@@ -1024,14 +1047,20 @@ function AppNavigator() {
         {({ navigation }) => {
           // Directorio real para elegir compañero al postularse (ApplyMatchSheet).
           const { players } = usePlayers();
+          const { user } = useAuth();
           const invitablePlayers: InvitablePlayer[] = players.map((p) => ({
             id: p.id, name: p.name, username: p.username,
           }));
+          // Compañero: sugerencias (gente que seguís/te sigue) + búsqueda rankeada.
+          const { connections: partnerSuggestions, searchPartners } = usePartnerSearch(user?.id);
           return (
             <SearchPlayScreen
               onBack={() => navigation.goBack()}
               onOpenPlayerProfile={(playerId) => navigation.navigate('PlayerProfile', { playerId })}
               invitablePlayers={invitablePlayers}
+              suggestedPartners={partnerSuggestions}
+              onSearchPartner={searchPartners}
+              onOpenChat={(gameId, title, readOnly) => navigation.navigate('GameChat', { gameId, title, readOnly })}
             />
           );
         }}
@@ -1267,6 +1296,8 @@ export default function App() {
         const data = event.notification.additionalData as { type?: string; gameId?: string };
         if (data?.type === 'STREAMING_STARTED' && data?.gameId) {
           navigationRef.current?.navigate('GameDetail', { gameId: data.gameId });
+        } else if (data?.type === 'NEW_CHAT_MESSAGE' && data?.gameId) {
+          navigationRef.current?.navigate('GameChat', { gameId: data.gameId });
         }
       });
     } catch (err) {

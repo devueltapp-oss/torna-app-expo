@@ -19,6 +19,12 @@ interface Props {
   onOpenPlayerProfile?: (playerId: string) => void;
   /** Compañeros invitables para el flujo "voy con compañero" al postularse. */
   invitablePlayers?: InvitablePlayer[];
+  /** Sugerencias por defecto al buscar compañero: gente que seguís / te sigue. */
+  suggestedPartners?: InvitablePlayer[];
+  /** Búsqueda real de compañero (GET /user/search) rankeada con conexiones primero. */
+  onSearchPartner?: (q: string) => Promise<InvitablePlayer[]>;
+  /** Abre el chat de la partida (solo participantes). */
+  onOpenChat?: (gameId: string, title?: string, readOnly?: boolean) => void;
 }
 
 /**
@@ -29,6 +35,7 @@ interface Props {
  */
 export function SearchPlayScreen({
   onBack, onChangeTab, activeTab = 'search', onOpenPlayerProfile, invitablePlayers = [],
+  suggestedPartners, onSearchPartner, onOpenChat,
 }: Props) {
   const { colors } = useTheme();
   const { openGames, loading, refresh } = useOpenGames();
@@ -81,6 +88,9 @@ export function SearchPlayScreen({
         visible={selected !== null}
         game={selected}
         invitablePlayers={invitablePlayers}
+        suggestedPartners={suggestedPartners}
+        onSearchPartner={onSearchPartner}
+        onOpenChat={onOpenChat}
         onClose={() => setSelected(null)}
         onOpenPlayerProfile={onOpenPlayerProfile}
       />

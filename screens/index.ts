@@ -12,6 +12,7 @@ export { ReelViewScreen, type ReelViewScreenProps, type ReelSection } from './Re
 
 // Game
 export { GamesScreen } from './GamesScreen';
+export { GameChatScreen } from './GameChatScreen';
 export { GameDetailScreen, type GameDetailData } from './GameDetailScreen';
 
 // Club admin views

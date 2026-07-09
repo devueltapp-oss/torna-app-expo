@@ -32,6 +32,12 @@ interface Props {
   onRefresh: () => void;
   onOpenPlayerProfile?: (playerId: string) => void;
   invitablePlayers?: InvitablePlayer[];
+  /** Sugerencias por defecto al buscar compañero: gente que seguís / te sigue. */
+  suggestedPartners?: InvitablePlayer[];
+  /** Búsqueda real de compañero (GET /user/search) rankeada con conexiones primero. */
+  onSearchPartner?: (q: string) => Promise<InvitablePlayer[]>;
+  /** Abre el chat de la partida (solo participantes). */
+  onOpenChat?: (gameId: string, title?: string, readOnly?: boolean) => void;
   onAcceptApplication?: (gameId: string, appId: string) => void;
   onRejectApplication?: (gameId: string, appId: string) => void;
 }
@@ -59,6 +65,9 @@ export function HomeScreen({
   onRefresh,
   onOpenPlayerProfile,
   invitablePlayers = [],
+  suggestedPartners,
+  onSearchPartner,
+  onOpenChat,
   onAcceptApplication,
   onRejectApplication,
 }: Props) {
@@ -184,6 +193,9 @@ export function HomeScreen({
         visible={upcomingSheet !== null}
         game={upcomingSheet}
         invitablePlayers={invitablePlayers}
+        suggestedPartners={suggestedPartners}
+        onSearchPartner={onSearchPartner}
+        onOpenChat={onOpenChat}
         onClose={() => setUpcomingSheet(null)}
         onOpenPlayerProfile={onOpenPlayerProfile}
         onAcceptApplication={onAcceptApplication}

@@ -12,11 +12,16 @@ export interface ApplyMatchSheetProps {
   visible: boolean;
   game: UpcomingGameData;
   invitablePlayers: InvitablePlayer[];
+  /** Sugerencias por defecto en el buscador: gente que seguís / te sigue. */
+  suggestedPartners?: InvitablePlayer[];
+  /** Búsqueda real de compañero (GET /user/search) rankeada con conexiones primero.
+   *  Si se provee, el overlay busca contra la API en vez de filtrar la lista local. */
+  onSearchPartner?: (q: string) => Promise<InvitablePlayer[]>;
   onClose: () => void;
   onApplied: () => void;
 }
 
-export function ApplyMatchSheet({ visible, game, invitablePlayers, onClose, onApplied }: ApplyMatchSheetProps) {
+export function ApplyMatchSheet({ visible, game, invitablePlayers, suggestedPartners, onSearchPartner, onClose, onApplied }: ApplyMatchSheetProps) {
   const { colors } = useTheme();
   const [withPartner, setWithPartner] = React.useState(false);
   const [partner, setPartner] = React.useState<InvitablePlayer | null>(null);
@@ -149,7 +154,8 @@ export function ApplyMatchSheet({ visible, game, invitablePlayers, onClose, onAp
       {searchOpen && (
         <PlayerSearchOverlay
           slotLabel="Buscar compañero"
-          players={invitablePlayers}
+          players={onSearchPartner ? (suggestedPartners ?? []) : invitablePlayers}
+          onSearch={onSearchPartner}
           onSelect={(p) => { setPartner(p); setSearchOpen(false); }}
           onClose={() => setSearchOpen(false)}
         />

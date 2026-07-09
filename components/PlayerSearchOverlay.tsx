@@ -54,7 +54,13 @@ export function PlayerSearchOverlay({ slotLabel, players = [], onSearch, onSelec
   }, [value, onSearch]);
 
   const filtered = React.useMemo(() => {
-    if (onSearch) return apiResults;
+    if (onSearch) {
+      // Con búsqueda por API: mientras no haya término (o sea muy corto) mostramos
+      // las sugerencias locales (p. ej. gente que seguís / te sigue). Al tipear ≥2
+      // caracteres, los resultados rankeados que devuelve `onSearch`.
+      if (value.trim().length < 2) return players;
+      return apiResults;
+    }
     const q = value.trim().toLowerCase();
     if (!q) return players;
     return players.filter(p =>
@@ -95,7 +101,9 @@ export function PlayerSearchOverlay({ slotLabel, players = [], onSearch, onSelec
         <Text style={{ fontSize: 10, color: colors.muted2, fontWeight: '700', letterSpacing: 0.8, marginTop: 10, paddingHorizontal: 4 }}>
           {value
             ? `${filtered.length} RESULTADO${filtered.length === 1 ? '' : 'S'}`
-            : onSearch ? 'BUSCÁ POR NOMBRE O @USUARIO' : 'JUGADORES DEL CLUB'}
+            : onSearch
+              ? (players.length ? 'PERSONAS QUE SEGUÍS O TE SIGUEN' : 'BUSCÁ POR NOMBRE O @USUARIO')
+              : 'JUGADORES DEL CLUB'}
         </Text>
       </View>
 
@@ -103,8 +111,9 @@ export function PlayerSearchOverlay({ slotLabel, players = [], onSearch, onSelec
         {filtered.length === 0 ? (
           <View style={{ paddingHorizontal: 12, paddingVertical: 40, alignItems: 'center' }}>
             <Text style={{ color: colors.muted2, fontSize: 13, textAlign: 'center', lineHeight: 18 }}>
-              No encontramos jugadores que coincidan.{'\n'}
-              Pedile a esa persona que cree su cuenta en Torna.
+              {value.trim().length < 2 && onSearch
+                ? 'Escribí el nombre o @usuario de tu compañero para buscarlo.'
+                : 'No encontramos jugadores que coincidan.\nPedile a esa persona que cree su cuenta en Torna.'}
             </Text>
           </View>
         ) : filtered.map(p => (
