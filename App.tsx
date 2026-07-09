@@ -31,7 +31,7 @@ import {
   HomeScreen, ClubHomeScreen,
   GamesScreen, GameChatScreen, GameDetailScreen, CourtsScreen, PlayersScreen, ProfileScreen,
   ClubProfilePlayerView, PlayerProfilePublicView, SearchPlayScreen, GlobalSearchScreen,
-  ReserveStep1Screen, ReserveStep2Screen, ReserveStep3Screen, ReserveSuccessScreen, MonoValue,
+  ReserveClubPickerScreen, ReserveStep1Screen, ReserveStep2Screen, ReserveStep3Screen, ReserveSuccessScreen, MonoValue,
   VideoEditorScreen,
   PlayerOwnProfileScreen, MyLibraryScreen, PlayerSettingsScreen,
   ReelViewScreen,
@@ -57,7 +57,7 @@ import { useUserProfile } from './hooks/useUserProfile';
 import { usePartnerSearch } from './hooks/usePartnerSearch';
 import { useMyHighlights } from './hooks/useMyHighlights';
 import { useHighlightVisibility } from './hooks/useHighlightVisibility';
-import { searchUsers, searchUsersAndClubs, fetchUserProfile, setFollowNotify, fetchFollowers, followUser, unfollowUser } from './api/users';
+import { searchUsers, searchUsersAndClubs, fetchUserProfile, setFollowNotify, fetchFollowers, fetchFollowing, followUser, unfollowUser } from './api/users';
 import type { CourtData, PlayerData } from './components/cards';
 import { fetchUserHighlights, updateHighlightMeta } from './api/highlights';
 import { fetchClubCourts, fetchCourt, fetchCourtSlots, createReservation, searchCourts } from './api/clubs';
@@ -65,7 +65,7 @@ import type { DayOption } from './screens/ReserveStep2Screen';
 import type {
   LibraryItem, LibraryMatch, LibraryHighlight,
   ProfileOwner, ClubProfile, ClubPublic, ClubCourtPublic,
-  SearchableUser, PlayerPublic, Slot, UpcomingGameData, InvitablePlayer,
+  SearchableUser, PlayerPublic, Slot, UpcomingGameData, InvitablePlayer, FollowItem,
 } from './data/types';
 
 /** Antepone '@' al username si no lo trae. */
@@ -170,6 +170,7 @@ type AppStackParamList = {
   PlayerProfile: { playerId: string };
   SearchPlay: undefined;
   GlobalSearch: undefined;
+  ReservePickClub: undefined;
   ReserveCourt: { clubId: string; courtId?: string };
   ReserveTime: { courtId: string };
   ReserveInvite: {
@@ -1061,6 +1062,31 @@ function AppNavigator() {
               suggestedPartners={partnerSuggestions}
               onSearchPartner={searchPartners}
               onOpenChat={(gameId, title, readOnly) => navigation.navigate('GameChat', { gameId, title, readOnly })}
+              onReserve={() => navigation.navigate('ReservePickClub')}
+            />
+          );
+        }}
+      </AppStack.Screen>
+
+      <AppStack.Screen name="ReservePickClub">
+        {({ navigation }) => {
+          const { user } = useAuth();
+          const [followedClubs, setFollowedClubs] = React.useState<FollowItem[]>([]);
+          const [loadingFollowed, setLoadingFollowed] = React.useState(true);
+          React.useEffect(() => {
+            if (!user?.id) { setLoadingFollowed(false); return; }
+            fetchFollowing(user.id)
+              .then((items) => setFollowedClubs(items.filter((f) => f.isClub)))
+              .catch(() => setFollowedClubs([]))
+              .finally(() => setLoadingFollowed(false));
+          }, [user?.id]);
+          return (
+            <ReserveClubPickerScreen
+              onBack={() => navigation.goBack()}
+              suggestedClubs={followedClubs}
+              loadingSuggested={loadingFollowed}
+              onSearchClubs={searchCourts}
+              onPickClub={(clubId, courtId) => navigation.navigate('ReserveCourt', { clubId, courtId })}
             />
           );
         }}

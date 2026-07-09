@@ -35,6 +35,7 @@ export { PlayerSettingsScreen, type PlayerSettingsScreenProps } from './PlayerSe
 export { VideoEditorScreen, type VideoEditorScreenProps } from './video-editor-screen';
 
 // Reservation flow
+export { ReserveClubPickerScreen } from './ReserveClubPickerScreen';
 export { ReserveStep1Screen } from './ReserveStep1Screen';
 export { ReserveStep2Screen } from './ReserveStep2Screen';
 export { ReserveStep3Screen } from './ReserveStep3Screen';

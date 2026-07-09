@@ -25,6 +25,8 @@ interface Props {
   onSearchPartner?: (q: string) => Promise<InvitablePlayer[]>;
   /** Abre el chat de la partida (solo participantes). */
   onOpenChat?: (gameId: string, title?: string, readOnly?: boolean) => void;
+  /** Abre el selector de club para iniciar una reserva. */
+  onReserve?: () => void;
 }
 
 /**
@@ -35,7 +37,7 @@ interface Props {
  */
 export function SearchPlayScreen({
   onBack, onChangeTab, activeTab = 'search', onOpenPlayerProfile, invitablePlayers = [],
-  suggestedPartners, onSearchPartner, onOpenChat,
+  suggestedPartners, onSearchPartner, onOpenChat, onReserve,
 }: Props) {
   const { colors } = useTheme();
   const { openGames, loading, refresh } = useOpenGames();
@@ -45,6 +47,20 @@ export function SearchPlayScreen({
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <AppHeader title="Buscar partido"
         left={<Pressable onPress={onBack}><ChevronLeft size={22} color={colors.text}/></Pressable>}
+        right={
+          <Pressable
+            onPress={onReserve}
+            style={{
+              backgroundColor: colors.primary,
+              paddingHorizontal: 14,
+              paddingVertical: 7,
+              borderRadius: 999,
+            }}>
+            <Text style={{ color: colors.primaryFg, fontSize: 13, fontWeight: '800' }}>
+              Reservar
+            </Text>
+          </Pressable>
+        }
       />
 
       <ScrollView

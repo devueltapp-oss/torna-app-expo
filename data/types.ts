@@ -98,6 +98,8 @@ export interface FollowItem {
   name: string;
   username: string;
   profilePicture?: string;
+  /** true si el seguido es un club (para sugerir clubs al reservar). */
+  isClub?: boolean;
 }
 export interface ClubPublic {
   id: string;

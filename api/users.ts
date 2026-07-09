@@ -130,6 +130,7 @@ interface FollowUser {
   username: string;
   name: string | null;
   profilePicture: string | null;
+  isClub?: boolean;
 }
 
 /**
@@ -152,6 +153,7 @@ function toFollowItem(u: FollowUser): FollowItem {
     name: u.name ?? u.username,
     username: withAt(u.username),
     profilePicture: u.profilePicture ?? undefined,
+    isClub: u.isClub ?? false,
   };
 }
 
