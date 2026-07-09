@@ -78,6 +78,7 @@ interface BackendCourt {
   name: string;
   surface: string | null;
   description: string | null;
+  isActive?: boolean;
 }
 
 function mapCourt(c: BackendCourt): ClubCourtPublic {
@@ -88,6 +89,7 @@ function mapCourt(c: BackendCourt): ClubCourtPublic {
     cams: 0,
     indoor: false,
     nextSlot: '',
+    active: c.isActive ?? true,
   };
 }
 

@@ -143,7 +143,7 @@ ClubPublic {
 ClubCourtPublic { id, name, surface, cams, indoor, nextSlot }
 
 // Reservation
-Slot { start, end, duration: 60|90, price, status: 'free'|'reserved'|'own', cams }
+Slot { start, end, duration: number, price, status: 'free'|'reserved'|'own', cams }
 InvitablePlayer { id, name, username, rating }
 Reservation {
   id, courtId, date, slotStart,
@@ -213,13 +213,18 @@ ClubTodayReservation {
 1. Partner es **siempre obligatorio** en reservas — debe existir en la app.
 2. La reserva se crea con `POST /game/reserve` (una `Game` SCHEDULED sin cámaras).
    `mode='search-opponents'` marca `isOpenForPlayers=true` para que otros 2 se sumen.
-3. El precio se muestra pero NO se cobra (hoy el slot devuelve price 0); el pago es
-   en el club.
+3. El precio (`slot.price`) sale del `pricePerBlock` de la cancha; se muestra pero NO se
+   cobra (pago en el club). Total = precio × bloques.
 4. Slots `reserved` están bloqueados (solapan una Game existente de esa cancha).
-5. **Sin GPS.** `SearchPlayScreen` ya no pide permiso de ubicación: lista partidos
+   Los slots ya no son fijos: el backend los genera del horario configurable de la cancha
+   (semanal + excepciones por fecha); cancha inactiva o día cerrado → sin slots.
+5. **Multibloque**: `ReserveStep2` permite 1–4 bloques consecutivos libres →
+   `durationMinutes = block × N` (el móvil arma un "slot combinado"; el back valida
+   múltiplo/tope). Badge "Cancha inactiva" cuando `court.active===false`.
+6. **Sin GPS.** `SearchPlayScreen` ya no pide permiso de ubicación: lista partidos
    abiertos (GET /game/open) y la ubicación de cada uno se abre en Google Maps fuera
    de la app (`MapsButton`).
-6. **Ubicación estática solo en clubs**: el mapa usa `latitude/longitude` del club
+7. **Ubicación estática solo en clubs**: el mapa usa `latitude/longitude` del club
    (`isClub=true`); el player no tiene ubicación persistida (su GPS es runtime).
 
 ---
@@ -398,11 +403,14 @@ PATCH /follow/notify/:userId    { notify }   → toggle "Notificarme" (setFollow
 ### Canchas y reservas — `api/clubs.ts`
 
 ```
-GET  /padel-court?clubId=            → canchas del club (ReserveStep1)
+GET  /padel-court?clubId=            → canchas del club (ReserveStep1; trae isActive)
 GET  /padel-court/:id                → una cancha
-GET  /padel-court/:id/slots?date=    → Slot[] del día (ReserveStep2)
+GET  /padel-court/:id/slots?date=    → Slot[] del día (ReserveStep2). La grilla sale del
+                                       horario configurable de la cancha (semanal +
+                                       excepción de la fecha); [] si inactiva/día cerrado
 POST /game/reserve  { courtId, date, slotStart, durationMinutes, mode,
-                      partnerUserId?, opponentUserIds? } → crea la partida (ReserveStep3)
+                      partnerUserId?, opponentUserIds? } → crea la partida (ReserveStep3).
+                      durationMinutes = block × N (1–4 bloques, multibloque)
 ```
 
 ### Partidas: postular / mis partidas / bajas — `api/games.ts`
@@ -881,9 +889,10 @@ npm start                   # arranca sin warnings en Metro
     marcados `[UPLOAD DEBUG]` (solo `__DEV__`) para diagnosticar la subida de foto de
     perfil. **Borrarlos antes de producción.**
 
-15. **Reserva: precio y canchas de clubs fake**. El slot devuelve `price: 0` (no hay
-    fuente de precio en el modelo). Los clubs fake de los seeds no tienen canchas con
-    `clubId`, así que al reservar en ellos la lista de canchas sale vacía.
+15. **Reserva: precio y canchas de clubs fake**. El `slot.price` sale del `pricePerBlock`
+    de la cancha (0 si el club no lo configuró desde el desktop). Los clubs fake de los
+    seeds no tienen canchas con `clubId` ni horario cargado, así que al reservar en ellos
+    la lista de canchas sale vacía o sin slots (hay que cargar horario/`isActive`).
 
 ---
 

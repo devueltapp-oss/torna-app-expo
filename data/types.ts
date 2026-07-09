@@ -84,6 +84,8 @@ export interface ClubCourtPublic {
   surface: 'CLAY' | 'GRASS' | 'HARD' | 'CARPET';
   cams: number; indoor: boolean;
   nextSlot: string;
+  /** Cancha activa. false = desactivada por el club (sin reservas). */
+  active?: boolean;
 }
 export interface UpcomingPublicGame {
   id: string; court: string; time: string; date: string; players: number;
@@ -124,8 +126,8 @@ export type SlotStatus = 'free' | 'reserved' | 'own';
 export interface Slot {
   start: string;     // 'HH:mm'
   end: string;       // 'HH:mm'
-  duration: 60 | 90;
-  price: number;     // ARS
+  duration: number;  // minutos del bloque (o suma al reservar varios bloques)
+  price: number;     // precio del bloque
   status: SlotStatus;
   /** True si el partido reservado se transmite desde este slot. */
   cams: boolean;

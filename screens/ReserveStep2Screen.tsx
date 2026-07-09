@@ -41,14 +41,45 @@ export function ReserveStep2Screen({
   court, slots, days = DEFAULT_DAYS, onBack, onChangeCourt, onDayChange, onContinue,
 }: Props) {
   const { colors } = useTheme();
+  const MAX_BLOCKS = 4;
   const [dayIdx, setDayIdx] = React.useState(0);
   const [pickedIdx, setPickedIdx] = React.useState(0);
+  const [blocks, setBlocks] = React.useState(1);
   // Al cambiar los slots (nuevo día), seleccionar el primer slot libre.
   React.useEffect(() => {
     const i = slots.findIndex((s) => s.status === 'free');
     setPickedIdx(i >= 0 ? i : 0);
+    setBlocks(1);
   }, [slots]);
   const picked = slots[pickedIdx];
+
+  // Cantidad de bloques libres consecutivos desde el slot elegido (tope 4).
+  const maxBlocks = React.useMemo(() => {
+    let n = 0;
+    for (let i = pickedIdx; i < slots.length && n < MAX_BLOCKS; i++) {
+      if (slots[i]?.status !== 'free') break;
+      n++;
+    }
+    return Math.max(1, n);
+  }, [slots, pickedIdx]);
+
+  // Si cambia el máximo (nuevo slot), acotar la selección.
+  React.useEffect(() => {
+    setBlocks((b) => Math.min(b, maxBlocks));
+  }, [maxBlocks]);
+
+  // Slot combinado (varios bloques): mismo inicio, fin del último bloque,
+  // duración y precio × N. Es lo que se envía a la reserva.
+  const combined: Slot | undefined = React.useMemo(() => {
+    if (!picked) return undefined;
+    const last = slots[pickedIdx + blocks - 1] ?? picked;
+    return {
+      ...picked,
+      end: last.end,
+      duration: picked.duration * blocks,
+      price: picked.price * blocks,
+    };
+  }, [picked, slots, pickedIdx, blocks]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
@@ -69,6 +100,11 @@ export function ReserveStep2Screen({
           <View>
             <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted2, letterSpacing: 0.8 }}>CANCHA</Text>
             <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text }}>{court.name} · {court.surface}</Text>
+            {court.active === false && (
+              <Text style={{ fontSize: 11, fontWeight: '800', color: colors.muted2, marginTop: 2 }}>
+                Cancha inactiva · sin horarios disponibles
+              </Text>
+            )}
           </View>
           <Pressable onPress={onChangeCourt}>
             <Text style={{ fontSize: 11, color: colors.accentText, fontWeight: '700', textDecorationLine: 'underline' }}>Cambiar</Text>
@@ -114,10 +150,41 @@ export function ReserveStep2Screen({
             </Text>
           ) : (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {slots.map((s, i) => <SlotChip key={i} slot={s} selected={i === pickedIdx} onPress={() => setPickedIdx(i)}/>)}
+              {slots.map((s, i) => <SlotChip key={i} slot={s} selected={i === pickedIdx} onPress={() => { setPickedIdx(i); setBlocks(1); }}/>)}
             </View>
           )}
         </View>
+
+        {/* Duración: cantidad de bloques consecutivos (1–4) */}
+        {slots.length > 0 && picked?.status === 'free' && (
+          <View>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text, marginBottom: 8 }}>Duración</Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {Array.from({ length: MAX_BLOCKS }, (_, i) => i + 1).map((n) => {
+                const disabled = n > maxBlocks;
+                const on = n === blocks;
+                return (
+                  <Pressable key={n} disabled={disabled} onPress={() => setBlocks(n)}
+                    style={{
+                      flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 12,
+                      backgroundColor: on ? colors.primary : colors.surface,
+                      borderWidth: on ? 0 : 1, borderColor: colors.line,
+                      opacity: disabled ? 0.4 : 1,
+                    }}>
+                    <Text style={{ fontSize: 14, fontWeight: '800', color: on ? colors.primaryFg : colors.text }}>
+                      {n === 1 ? '1 bloque' : `${n} bloques`}
+                    </Text>
+                    {picked && (
+                      <Text style={{ fontSize: 10, fontWeight: '700', color: on ? colors.primaryFg : colors.muted2, marginTop: 2 }}>
+                        {picked.duration * n} min
+                      </Text>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        )}
       </ScrollView>
 
       {/* Sticky footer */}
@@ -126,14 +193,16 @@ export function ReserveStep2Screen({
         borderTopWidth: 1, borderTopColor: colors.line, backgroundColor: colors.surface, gap: 8,
       }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={{ fontSize: 12, color: colors.muted2, fontWeight: '700' }}>Total estimado</Text>
+          <Text style={{ fontSize: 12, color: colors.muted2, fontWeight: '700' }}>
+            Total estimado{blocks > 1 ? ` · ${blocks} bloques` : ''}
+          </Text>
           <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text }}>
-            {picked ? `$${picked.price.toLocaleString('es-AR')}` : '—'}
+            {combined ? `$${combined.price.toLocaleString('es-AR')}` : '—'}
           </Text>
         </View>
         <Button fullWidth size="lg"
-          variant={!picked || picked.status === 'reserved' ? 'disabled' : 'primary'}
-          onPress={() => picked && onContinue?.(picked, days[dayIdx])}>Continuar →</Button>
+          variant={!combined || combined.status === 'reserved' ? 'disabled' : 'primary'}
+          onPress={() => combined && onContinue?.(combined, days[dayIdx])}>Continuar →</Button>
       </View>
     </SafeAreaView>
   );
