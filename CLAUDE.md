@@ -320,7 +320,8 @@ ya no hay fallback a mocks.
 ```
 GET /user/profile/:id   → perfil público + followersCount/followingCount/isFollowing + lat/lng
                           (useUserProfile → PlayerProfilePublicView; también arma ClubPublic)
-GET /user/search?q=     → jugadores (GlobalSearchScreen + overlay de invitar)
+GET /user/search-all?q= → jugadores + clubs (GlobalSearchScreen; solo usuarios, NO canchas)
+GET /user/search?q=     → jugadores (overlay de invitar en la reserva)
 GET /user/players       → directorio de jugadores (usePlayers → PlayersScreen)
 GET /highlights?userId= → highlights PÚBLICOS de un usuario (useUserProfile → carrusel del perfil, desc)
 GET /highlights/my      → TODOS mis highlights, públicos + privados (useMyHighlights → perfil propio + librería)
@@ -378,6 +379,18 @@ PATCH /follow/notify/:userId    { notify }   → toggle "Notificarme" (setFollow
 > **Conteos de seguidores/seguidos siempre frescos**: `MainPlayer` re-fetchea el perfil
 > propio (`refreshOwnProfile`) al recuperar el foco y al abrir el tab Perfil, así el
 > contador se actualiza tras seguir/dejar de seguir desde otra pantalla.
+>
+> ⚠️ **Seguir a un club usa EXACTAMENTE el mismo mecanismo que seguir a un player.** Como
+> un club es un `User`, la ruta `ClubProfile` (`App.tsx`) es un `ClubProfileScreen` que
+> **refleja `PlayerProfileScreen`**: `useUserProfile(clubId)` + estado local `overrides` +
+> `view = { ...fetched, ...overrides }`, montado con **`key={clubId}`** (montaje fresco por
+> club). `onToggleFollow` hace el flip optimista sobre `overrides` + `followUser/unfollowUser`
+> + revert en `.catch` — idéntico al player. **Una sola fuente de verdad**: no metas un
+> segundo estado de follow (un intento previo con un hook aparte + un `sync` que corría en el
+> `.then` del fetch pisaba el cambio optimista → el botón revertía aunque el `POST /follow`
+> devolviera 201). Lo único propio del club: la presentación (`ClubProfilePlayerView`: anillo
+> verde + etiqueta "CLUB") y las **canchas** (se cargan aparte con `fetchClubCourts`, porque
+> `useUserProfile` no las trae) para la sección "Canchas y horarios" → Reservar.
 
 ### Highlights — comentarios, threads, descripción y miniatura
 
@@ -663,7 +676,7 @@ expo/
 │   ├── ClubProfilePlayerView.tsx    # POV player
 │   ├── PlayerProfilePublicView.tsx
 │   ├── SearchPlayScreen.tsx
-│   ├── GlobalSearchScreen.tsx      # búsqueda global de players/courts por texto
+│   ├── GlobalSearchScreen.tsx      # búsqueda global de players + clubs por texto (sin canchas)
 │   ├── JoinMatchScreen.tsx
 │   ├── ReserveStep1Screen.tsx       # elegir cancha
 │   ├── ReserveStep2Screen.tsx       # día + slot

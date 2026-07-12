@@ -3,30 +3,23 @@ import {
   View, Text, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight, Search, Video } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, Search } from 'lucide-react-native';
 import Svg, { G, Ellipse, Path } from 'react-native-svg';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
-import { Avatar, SurfaceChip } from '../components/ui';
-import type { SearchableCourt, SearchablePlayer, SearchableUser } from '../data/types';
+import { Avatar } from '../components/ui';
+import type { SearchablePlayer, SearchableUser } from '../data/types';
 
 export interface GlobalSearchScreenProps {
   players: SearchablePlayer[];
-  courts: SearchableCourt[];
   onBack: () => void;
   onOpenPlayerProfile: (id: string) => void;
   onOpenClubProfile: (id: string) => void;
-  onReserveCourt: (clubId: string, courtId: string) => void;
   /**
    * Búsqueda real de jugadores y clubs contra la API (GET /user/search-all). Si se
    * provee, la pantalla la usa con debounce en vez de filtrar `players` localmente.
    */
   onSearchUsers?: (q: string) => Promise<SearchableUser[]>;
-  /**
-   * Búsqueda real de canchas (GET /padel-court/search). Si se provee, se usa con
-   * debounce en vez de filtrar `courts` localmente.
-   */
-  onSearchCourts?: (q: string) => Promise<SearchableCourt[]>;
 }
 
 function CourtIcon({ size = 20, color = 'black' }: { size?: number; color?: string }) {
@@ -45,13 +38,12 @@ function CourtIcon({ size = 20, color = 'black' }: { size?: number; color?: stri
 }
 
 export function GlobalSearchScreen({
-  players, courts, onBack, onOpenPlayerProfile, onOpenClubProfile, onReserveCourt, onSearchUsers, onSearchCourts,
+  players, onBack, onOpenPlayerProfile, onOpenClubProfile, onSearchUsers,
 }: GlobalSearchScreenProps) {
   const { colors } = useTheme();
   const inputRef = React.useRef<TextInput>(null);
   const [query, setQuery] = React.useState('');
   const [apiUsers, setApiUsers] = React.useState<SearchableUser[]>([]);
-  const [apiCourts, setApiCourts] = React.useState<SearchableCourt[]>([]);
   const [searching, setSearching] = React.useState(false);
 
   React.useEffect(() => {
@@ -96,32 +88,7 @@ export function GlobalSearchScreen({
       : base;
   }, [players, apiUsers, onSearchUsers, q]);
 
-  // Búsqueda real de canchas con debounce (~300 ms).
-  React.useEffect(() => {
-    if (!onSearchCourts) return;
-    const term = query.trim();
-    if (term.length < 2) { setApiCourts([]); return; }
-    let cancelled = false;
-    const t = setTimeout(() => {
-      onSearchCourts(term)
-        .then((res) => { if (!cancelled) setApiCourts(res); })
-        .catch(() => { if (!cancelled) setApiCourts([]); });
-    }, 300);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [query, onSearchCourts]);
-
-  const filteredCourts = React.useMemo(() => {
-    // Si hay búsqueda real, los resultados ya vienen filtrados del backend.
-    if (onSearchCourts) return apiCourts;
-    return q
-      ? courts.filter(c =>
-          c.name.toLowerCase().includes(q) ||
-          c.club.toLowerCase().includes(q),
-        )
-      : courts;
-  }, [courts, apiCourts, onSearchCourts, q]);
-
-  const hasResults = filteredUsers.length > 0 || filteredCourts.length > 0;
+  const hasResults = filteredUsers.length > 0;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
@@ -151,7 +118,7 @@ export function GlobalSearchScreen({
             ref={inputRef}
             value={query}
             onChangeText={setQuery}
-            placeholder="Jugadores, clubes, canchas…"
+            placeholder="Jugadores o clubes…"
             placeholderTextColor={colors.muted}
             style={{ flex: 1, color: colors.text, fontSize: 14, padding: 0, fontFamily: fonts.regular }}
             autoCapitalize="none"
@@ -186,7 +153,7 @@ export function GlobalSearchScreen({
                 Sin resultados para "{query}"
               </Text>
               <Text style={{ color: colors.muted, fontSize: 12, textAlign: 'center', lineHeight: 17 }}>
-                Probá con el nombre del jugador o club{'\n'}o el nombre de la cancha.
+                Probá con el nombre o username{'\n'}del jugador o club.
               </Text>
             </View>
           )}
@@ -195,10 +162,10 @@ export function GlobalSearchScreen({
             <View style={{ alignItems: 'center', paddingTop: 48, gap: 10 }}>
               <CourtIcon size={40} color={colors.line} />
               <Text style={{ color: colors.muted2, fontSize: 14, fontFamily: fonts.bold, textAlign: 'center' }}>
-                Buscá jugadores, clubes o canchas
+                Buscá jugadores o clubes
               </Text>
               <Text style={{ color: colors.muted, fontSize: 12, textAlign: 'center', lineHeight: 17 }}>
-                Por nombre, username o nombre del club.
+                Por nombre o username. Las canchas y horarios{'\n'}los ves al abrir el club y reservar.
               </Text>
             </View>
           )}
@@ -218,26 +185,6 @@ export function GlobalSearchScreen({
                   user={u}
                   colors={colors}
                   onPress={() => (u.isClub ? onOpenClubProfile(u.id) : onOpenPlayerProfile(u.id))}
-                />
-              ))}
-            </View>
-          )}
-
-          {/* Sección canchas */}
-          {filteredCourts.length > 0 && q.length > 0 && (
-            <View style={{ gap: 8 }}>
-              <Text style={{
-                fontSize: 10, fontFamily: fonts.bold, letterSpacing: 0.8,
-                textTransform: 'uppercase', color: colors.muted2,
-              }}>
-                Canchas · {filteredCourts.length}
-              </Text>
-              {filteredCourts.map(c => (
-                <CourtRow
-                  key={c.id}
-                  court={c}
-                  colors={colors}
-                  onPress={() => onReserveCourt(c.clubId, c.id)}
                 />
               ))}
             </View>
@@ -297,48 +244,5 @@ function TypeChip({ isClub, colors }: { isClub: boolean; colors: ReturnType<type
         {isClub ? 'Club' : 'Jugador'}
       </Text>
     </View>
-  );
-}
-
-/* ─── Fila de cancha ─── */
-
-interface CourtRowProps {
-  court: SearchableCourt;
-  colors: ReturnType<typeof useTheme>['colors'];
-  onPress: () => void;
-}
-
-function CourtRow({ court, colors, onPress }: CourtRowProps) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => ({
-        flexDirection: 'row', alignItems: 'center', gap: 12,
-        backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line,
-        borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11,
-        opacity: pressed ? 0.85 : 1,
-      })}
-    >
-      <View style={{
-        width: 40, height: 40, borderRadius: 12,
-        backgroundColor: colors.bg2, alignItems: 'center', justifyContent: 'center',
-      }}>
-        <CourtIcon size={22} color={colors.muted2} />
-      </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={{ fontSize: 14, fontFamily: fonts.bold, color: colors.text }} numberOfLines={1}>
-          {court.name}
-        </Text>
-        <Text style={{ fontSize: 12, color: colors.muted2, marginTop: 1 }} numberOfLines={1}>
-          {court.club}
-        </Text>
-      </View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        {court.hasCameras && (
-          <Video size={13} color={colors.muted2} />
-        )}
-        <SurfaceChip surface={court.surface} />
-      </View>
-    </Pressable>
   );
 }

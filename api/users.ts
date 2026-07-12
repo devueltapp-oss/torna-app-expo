@@ -100,13 +100,27 @@ export function searchUsersAndClubs(q: string): Promise<UserSearchResult[]> {
 /** POST autenticado sin desenvolver respuesta (para acciones sin cuerpo útil). */
 async function authedPost(path: string, body: unknown): Promise<void> {
   const token = await SecureStore.getItemAsync(TOKEN_KEY);
-  const res = await fetch(`${API_URL}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token ?? ''}` },
-    body: JSON.stringify(body),
-  });
+  if (!API_URL) {
+    throw new Error('EXPO_PUBLIC_API_URL vacío: la app no tiene backend configurado.');
+  }
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token ?? ''}` },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    // Error de red (sin conexión / DNS / TLS) — fetch nunca resolvió.
+    const detail = e instanceof Error ? e.message : String(e);
+    throw new Error(`Sin conexión con el servidor (${path}): ${detail}`);
+  }
   if (!res.ok) {
-    const err = new Error(`HTTP ${res.status}`);
+    // Cuerpo del backend: trae el mensaje real ({ message, statusCode }).
+    const text = await res.text().catch(() => '');
+    const err = new Error(`HTTP ${res.status} en ${path}${text ? ` — ${text}` : ''}${
+      token ? '' : ' (sin token de sesión)'
+    }`);
     (err as any).status = res.status;
     throw err;
   }

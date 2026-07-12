@@ -59,7 +59,7 @@ import { useMyHighlights } from './hooks/useMyHighlights';
 import { useHighlightVisibility } from './hooks/useHighlightVisibility';
 import { searchUsers, searchUsersAndClubs, fetchUserProfile, setFollowNotify, fetchFollowers, fetchFollowing, followUser, unfollowUser } from './api/users';
 import type { CourtData, PlayerData } from './components/cards';
-import { fetchUserHighlights, updateHighlightMeta } from './api/highlights';
+import { updateHighlightMeta } from './api/highlights';
 import { fetchClubCourts, fetchCourt, fetchCourtSlots, createReservation, searchCourts } from './api/clubs';
 import type { DayOption } from './screens/ReserveStep2Screen';
 import type {
@@ -101,16 +101,6 @@ function emptyGameDetail(id: string): GameDetailData {
   return {
     id, court: '', floor: 'HARD', club: '', clubId: '', clubHandle: '', clubFollowers: 0,
     time: '', date: '', viewers: 0, isLive: false, players: [], cameras: [],
-  };
-}
-
-/** Club público vacío (sin endpoint): solo identidad real, resto en estado vacío. */
-function emptyClubPublic(id: string): ClubPublic {
-  return {
-    id, name: '', handle: '', city: '', followers: 0, isFollowing: false,
-    hours: '', phone: '', address: '', latitude: null, longitude: null,
-    highlights: { live: [], clips: [] },
-    courts: [], upcoming: [], members: [], photos: [],
   };
 }
 
@@ -318,6 +308,116 @@ function PlayerProfileScreen({ navigation, playerId }: { navigation: any; player
             setOverrides(o => ({ ...o, notifyOnMatch: wasNotifying }));
           });
         }}
+        onOpenLive={(gameId) => navigation.navigate('GameDetail', { gameId })}
+        onOpenClip={(clip) => setClipModal({ url: clip.videoUrl ?? '', title: clip.title, id: clip.id })}
+        onOpenFollowers={() => setSheet('followers')}
+        onOpenFollowing={() => setSheet('following')}
+      />
+      <FollowListSheet
+        visible={sheet !== null}
+        title={sheet === 'followers' ? 'Seguidores' : 'Siguiendo'}
+        users={sheet === 'followers' ? view.followersList : view.followingList}
+        onClose={() => setSheet(null)}
+        onOpenProfile={(id) => {
+          setSheet(null);
+          navigation.navigate('PlayerProfile', { playerId: id });
+        }}
+      />
+      <VideoPreviewModal
+        visible={clipModal !== null}
+        url={clipModal?.url ?? ''}
+        title={clipModal?.title ?? ''}
+        durationSeconds={0}
+        onClose={() => setClipModal(null)}
+        highlightId={clipModal?.id}
+        showComments
+      />
+    </>
+  );
+}
+
+/* ─────────── Perfil público de un CLUB (POV player) ─────────── */
+
+/**
+ * Perfil de un club visto por un jugador. Un club es un `User` (isClub=true), así que
+ * seguir a un club es EXACTAMENTE seguir a un usuario: usa el mismo mecanismo que
+ * `PlayerProfileScreen` — `useUserProfile` + `overrides` + `view = {...fetched, ...overrides}`,
+ * montado con `key={clubId}`. Lo único propio del club es la presentación (anillo verde +
+ * etiqueta "CLUB", en `ClubProfilePlayerView`) y la sección de canchas para reservar (que el
+ * hook de perfil no trae, se cargan aparte).
+ */
+function ClubProfileScreen({ navigation, clubId }: { navigation: any; clubId: string }) {
+  const { player: fetched, loading, error, refresh } = useUserProfile(clubId);
+  const [overrides, setOverrides] = React.useState<
+    Partial<Pick<PlayerPublic, 'isFollowing' | 'followers'>>
+  >({});
+  const [sheet, setSheet] = React.useState<'followers' | 'following' | null>(null);
+  const [clipModal, setClipModal] = React.useState<{ url: string; title: string; id: string } | null>(null);
+  const [courts, setCourts] = React.useState<ClubCourtPublic[]>([]);
+  // Partidas del club: en vivo (carrusel) + próximas (lista).
+  const { live: clubLive, upcoming: clubUpcoming } = useClubGames(clubId);
+
+  // Canchas del club: el perfil de usuario no las trae; se cargan aparte para la
+  // sección "Canchas y horarios" (reservas).
+  React.useEffect(() => {
+    if (!clubId) return;
+    fetchClubCourts(clubId)
+      .then(setCourts)
+      .catch(() => { /* sin canchas → sección vacía */ });
+  }, [clubId]);
+
+  const view: PlayerPublic | null = fetched ? { ...fetched, ...overrides } : null;
+
+  if (!view) {
+    if (loading) return <SplashScreen />;
+    return (
+      <ProfileErrorScreen
+        error={error ?? 'No se pudo cargar el club.'}
+        onBack={() => navigation.goBack()}
+        onRetry={refresh}
+      />
+    );
+  }
+
+  // Mapeo PlayerPublic (+ canchas + partidas del club) → ClubPublic para la vista.
+  // `handle` ya viene con '@' desde useUserProfile (NO re-aplicar atHandle).
+  const clubView: ClubPublic = {
+    id: view.id,
+    name: view.name,
+    handle: view.username,
+    city: view.location,
+    followers: view.followers,
+    followingCount: view.followingCount,
+    isFollowing: view.isFollowing,
+    hours: '', phone: '', address: '',
+    latitude: null, longitude: null,
+    highlights: {
+      live: clubLive,
+      clips: view.clips.map((c) => ({
+        id: c.id, title: c.title, length: c.length, date: c.date, videoUrl: c.videoUrl,
+      })),
+    },
+    courts,
+    upcoming: clubUpcoming,
+    members: view.followersList.map((f) => ({ id: f.id, name: f.name, username: f.username })),
+    photos: [],
+  };
+
+  return (
+    <>
+      <ClubProfilePlayerView
+        club={clubView}
+        onBack={() => navigation.goBack()}
+        onToggleFollow={() => {
+          const wasFollowing = view.isFollowing;
+          const baseFollowers = view.followers;
+          setOverrides(o => ({ ...o, isFollowing: !wasFollowing, followers: baseFollowers + (wasFollowing ? -1 : 1) }));
+          (wasFollowing ? unfollowUser(view.id) : followUser(view.id)).catch(() => {
+            // revertir al estado previo al toggle
+            setOverrides(o => ({ ...o, isFollowing: wasFollowing, followers: baseFollowers }));
+          });
+        }}
+        onReserveCourt={(courtId) => navigation.navigate('ReserveCourt', { clubId: view.id, courtId })}
         onOpenLive={(gameId) => navigation.navigate('GameDetail', { gameId })}
         onOpenClip={(clip) => setClipModal({ url: clip.videoUrl ?? '', title: clip.title, id: clip.id })}
         onOpenFollowers={() => setSheet('followers')}
@@ -938,110 +1038,15 @@ function AppNavigator() {
 
       {/* Player POV flows */}
       <AppStack.Screen name="ClubProfile">
-        {({ navigation, route }) => {
-          const clubId = route.params?.clubId ?? '';
-          const [club, setClub] = React.useState<ClubPublic>(() => emptyClubPublic(clubId));
-          const [clipModal, setClipModal] = React.useState<{ url: string; title: string; id: string } | null>(null);
-          // Partidas del club: en vivo (carrusel) + próximas (lista). Camera-céntrico.
-          const { live: clubLive, upcoming: clubUpcoming } = useClubGames(clubId);
-          // Los clubes son usuarios (isClub=true): traemos su identidad real + canchas
-          // + miembros (seguidores). Las partidas vienen de useClubGames (arriba).
-          React.useEffect(() => {
-            if (!clubId) return;
-            fetchClubCourts(clubId)
-              .then((cs) => setClub((c) => ({ ...c, courts: cs })))
-              .catch(() => { /* sin canchas → sección vacía */ });
-            fetchFollowers(clubId)
-              .then((fs) => setClub((c) => ({
-                ...c,
-                members: fs.map((f) => ({ id: f.id, name: f.name, username: f.username })),
-                followers: fs.length,
-              })))
-              .catch(() => { /* sin miembros → sección vacía */ });
-            fetchFollowing(clubId)
-              .then((fs) => setClub((c) => ({ ...c, followingCount: fs.length })))
-              .catch(() => { /* sin dato → 0 */ });
-            fetchUserProfile(clubId)
-              .then((p) => setClub((c) => ({
-                ...c,
-                id: p.id,
-                name: p.name ?? p.username,
-                handle: atHandle(p.username),
-                city: p.region ?? '',
-                followers: p.followersCount ?? 0,
-                isFollowing: p.isFollowing ?? false,
-                phone: p.phone ?? '',
-                address: p.address ?? '',
-                latitude: p.latitude,
-                longitude: p.longitude,
-              })))
-              .catch((e) => {
-                // TODO(dev): QUITAR. Log temporal para diagnosticar club que no carga.
-                if (__DEV__) console.warn('[PROFILE DEBUG] fallo cargando club', clubId, e?.message ?? e);
-              });
-            // Videos del club = highlights del usuario club (GET /highlights?userId=).
-            // El `id` del clip ES el id del highlight → habilita likes + comentarios.
-            fetchUserHighlights(clubId)
-              .then((hs) => setClub((c) => ({
-                ...c,
-                highlights: {
-                  ...c.highlights,
-                  clips: hs.map((h) => ({
-                    id: h.id,
-                    title: h.title ?? 'Highlight',
-                    length: `${Math.floor(h.duration / 60)}:${String(Math.round(h.duration % 60)).padStart(2, '0')}`,
-                    date: new Date(h.createdAt).toLocaleDateString('es', { day: 'numeric', month: 'short' }),
-                    videoUrl: h.clipUrl,
-                  })),
-                },
-              })))
-              .catch(() => { /* sin videos → sección vacía, sin mock */ });
-          }, [clubId]);
-          // Fusiona las partidas (live/upcoming de useClubGames) sobre la identidad
-          // + canchas/miembros/clips ya cargados en el estado `club`.
-          const clubView: ClubPublic = {
-            ...club,
-            highlights: { ...club.highlights, live: clubLive },
-            upcoming: clubUpcoming,
-          };
-          return (
-            <>
-            <ClubProfilePlayerView
-              club={clubView}
-              onBack={() => navigation.goBack()}
-              onToggleFollow={() => {
-                const targetId = club.id || clubId;
-                if (!targetId) {
-                  Alert.alert('No se pudo seguir', 'Club sin identificador válido.');
-                  return;
-                }
-                const wasFollowing = club.isFollowing;
-                setClub(c => ({ ...c, isFollowing: !wasFollowing, followers: c.followers + (wasFollowing ? -1 : 1) }));
-                (wasFollowing ? unfollowUser(targetId) : followUser(targetId)).catch((e) => {
-                  // revertir + avisar (antes fallaba en silencio → parecía "no hacer nada")
-                  setClub(c => ({ ...c, isFollowing: wasFollowing, followers: c.followers + (wasFollowing ? 1 : -1) }));
-                  Alert.alert(
-                    wasFollowing ? 'No se pudo dejar de seguir' : 'No se pudo seguir',
-                    e instanceof Error ? e.message : 'Intentá de nuevo.',
-                  );
-                });
-              }}
-              onReserveCourt={(courtId) => navigation.navigate('ReserveCourt', { clubId: club.id, courtId })}
-              onOpenLive={(gameId) => navigation.navigate('GameDetail', { gameId })}
-              onOpenClip={(clip) => setClipModal({ url: clip.videoUrl ?? '', title: clip.title, id: clip.id })}
-            />
-            <VideoPreviewModal
-              visible={clipModal !== null}
-              url={clipModal?.url ?? ''}
-              title={clipModal?.title ?? ''}
-              durationSeconds={0}
-              onClose={() => setClipModal(null)}
-              highlightId={clipModal?.id}
-              showComments
-            />
-            </>
-          );
-        }}
+        {({ navigation, route }) => (
+          // key={clubId}: montaje fresco por club (igual que PlayerProfile), para que el
+          // estado de follow (overrides) no se arrastre entre navegaciones.
+          <ClubProfileScreen
+            key={route.params?.clubId ?? ''}
+            navigation={navigation}
+            clubId={route.params?.clubId ?? ''}
+          />
+        )}
       </AppStack.Screen>
 
       <AppStack.Screen name="PlayerProfile">
@@ -1109,7 +1114,6 @@ function AppNavigator() {
         {({ navigation }) => (
           <GlobalSearchScreen
             players={[]}
-            courts={[]}
             onSearchUsers={async (q): Promise<SearchableUser[]> => {
               const res = await searchUsersAndClubs(q);
               return res.map((u) => ({
@@ -1123,8 +1127,6 @@ function AppNavigator() {
             onBack={() => navigation.goBack()}
             onOpenPlayerProfile={(id) => navigation.navigate('PlayerProfile', { playerId: id })}
             onOpenClubProfile={(id) => navigation.navigate('ClubProfile', { clubId: id })}
-            onReserveCourt={(clubId, courtId) => navigation.navigate('ReserveCourt', { clubId, courtId })}
-            onSearchCourts={(q) => searchCourts(q)}
           />
         )}
       </AppStack.Screen>
