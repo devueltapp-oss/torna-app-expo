@@ -955,8 +955,12 @@ function AppNavigator() {
               .then((fs) => setClub((c) => ({
                 ...c,
                 members: fs.map((f) => ({ id: f.id, name: f.name, username: f.username })),
+                followers: fs.length,
               })))
               .catch(() => { /* sin miembros → sección vacía */ });
+            fetchFollowing(clubId)
+              .then((fs) => setClub((c) => ({ ...c, followingCount: fs.length })))
+              .catch(() => { /* sin dato → 0 */ });
             fetchUserProfile(clubId)
               .then((p) => setClub((c) => ({
                 ...c,

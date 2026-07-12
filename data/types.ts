@@ -107,6 +107,7 @@ export interface ClubPublic {
   handle: string;
   city: string;
   followers: number;
+  followingCount?: number;
   isFollowing: boolean;
   hours: string;
   phone: string;
