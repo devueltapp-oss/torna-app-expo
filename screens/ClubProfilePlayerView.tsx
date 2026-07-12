@@ -101,10 +101,11 @@ export function ClubProfilePlayerView({
           </View>
         </View>
 
-        {/* Highlights — live now */}
+        {/* Highlights — live now (solo si hay) */}
+        {club.highlights.live.length > 0 && (
+        <>
         <View style={{ paddingHorizontal: 16, marginTop: 14 }}>
-          <SectionHeader title="Highlights · en vivo ahora"
-            action={<Text style={{ fontSize: 11, fontWeight: '700', color: colors.accentText }}>Ver todos</Text>}/>
+          <SectionHeader title="Highlights · en vivo ahora"/>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 16, gap: 10, paddingBottom: 8 }}>
@@ -148,10 +149,17 @@ export function ClubProfilePlayerView({
             </Pressable>
           ))}
         </ScrollView>
+        </>
+        )}
 
         {/* Highlights — clips */}
-        <View style={{ paddingHorizontal: 16 }}>
+        <View style={{ paddingHorizontal: 16, marginTop: 14 }}>
           <SectionHeader title="Mejores momentos"/>
+          {club.highlights.clips.length === 0 && (
+            <Text style={{ fontSize: 13, color: colors.muted2, paddingVertical: 10 }}>
+              Este club todavía no publicó highlights.
+            </Text>
+          )}
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 16, gap: 10, paddingBottom: 8 }}>
@@ -177,10 +185,14 @@ export function ClubProfilePlayerView({
           ))}
         </ScrollView>
 
-        {/* Courts — 2×2 grid */}
+        {/* Courts — 2×2 grid + CTA reservar */}
         <View style={{ paddingHorizontal: 16, marginTop: 4 }}>
-          <SectionHeader title={`Canchas · ${club.courts.length}`}
-            action={<Text style={{ fontSize: 11, fontWeight: '700', color: colors.accentText }}>Ver todas</Text>}/>
+          <SectionHeader title={`Canchas y horarios · ${club.courts.length}`}/>
+          {club.courts.length === 0 && (
+            <Text style={{ fontSize: 13, color: colors.muted2, paddingVertical: 10 }}>
+              Este club todavía no tiene canchas cargadas.
+            </Text>
+          )}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
             {club.courts.map(c => (
               <View key={c.id} style={{
@@ -203,13 +215,14 @@ export function ClubProfilePlayerView({
                 <View>
                   <Text style={{ fontWeight: '800', fontSize: 14, color: colors.text }}>{c.name}</Text>
                   <Text style={{ fontSize: 11, color: colors.muted2, marginTop: 2 }}>
-                    {c.indoor ? 'Cubierta' : 'Exterior'} · próx. {c.nextSlot}
+                    {c.indoor ? 'Cubierta' : 'Exterior'}
+                    {c.nextSlot ? ` · próx. ${c.nextSlot}` : ''}
                   </Text>
                 </View>
                 <Pressable onPress={() => onReserveCourt?.(c.id)} style={{
                   backgroundColor: colors.accent, paddingVertical: 9, borderRadius: 10, alignItems: 'center',
                 }}>
-                  <Text style={{ color: colors.ink, fontWeight: '800', fontSize: 12 }}>Reservar</Text>
+                  <Text style={{ color: colors.ink, fontWeight: '800', fontSize: 12 }}>Ver horarios y reservar</Text>
                 </Pressable>
               </View>
             ))}
@@ -219,6 +232,11 @@ export function ClubProfilePlayerView({
         {/* Upcoming public matches */}
         <View style={{ paddingHorizontal: 16, marginTop: 12 }}>
           <SectionHeader title="Próximos partidos públicos"/>
+          {club.upcoming.length === 0 && (
+            <Text style={{ fontSize: 13, color: colors.muted2, paddingVertical: 6 }}>
+              No hay partidos públicos próximos en este club.
+            </Text>
+          )}
           <View style={{ gap: 8 }}>
             {club.upcoming.map(g => (
               <View key={g.id} style={{
@@ -245,8 +263,12 @@ export function ClubProfilePlayerView({
 
         {/* Members */}
         <View style={{ paddingHorizontal: 16, marginTop: 12 }}>
-          <SectionHeader title={`Jugadores del club · ${club.members.length}`}
-            action={<Text style={{ fontSize: 11, fontWeight: '700', color: colors.accentText }}>Ver todos</Text>}/>
+          <SectionHeader title={`Jugadores del club · ${club.members.length}`}/>
+          {club.members.length === 0 && (
+            <Text style={{ fontSize: 13, color: colors.muted2, paddingVertical: 6 }}>
+              Todavía no hay jugadores siguiendo a este club.
+            </Text>
+          )}
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 16, gap: 14, paddingBottom: 8 }}>
@@ -259,28 +281,6 @@ export function ClubProfilePlayerView({
             </View>
           ))}
         </ScrollView>
-
-        {/* Photo gallery */}
-        <View style={{ paddingHorizontal: 16, marginTop: 8 }}>
-          <SectionHeader title="Fotos del club"/>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-            {club.photos.map((i, idx) => {
-              const isLime = idx % 2 === 0;
-              return (
-                <View key={i} style={{
-                  width: '23.5%', aspectRatio: 1, borderRadius: 10, overflow: 'hidden',
-                  backgroundColor: isLime ? colors.accent : colors.ink,
-                  alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <Text style={{
-                    fontFamily: fonts.mono, fontSize: 10, fontWeight: '700',
-                    color: isLime ? 'rgba(45,76,117,0.7)' : 'rgba(255,255,255,0.6)',
-                  }}>foto {i}</Text>
-                </View>
-              );
-            })}
-          </View>
-        </View>
 
         {/* Info + mini map */}
         <View style={{ paddingHorizontal: 16, marginTop: 12 }}>
