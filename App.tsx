@@ -1006,11 +1006,20 @@ function AppNavigator() {
               club={clubView}
               onBack={() => navigation.goBack()}
               onToggleFollow={() => {
+                const targetId = club.id || clubId;
+                if (!targetId) {
+                  Alert.alert('No se pudo seguir', 'Club sin identificador válido.');
+                  return;
+                }
                 const wasFollowing = club.isFollowing;
                 setClub(c => ({ ...c, isFollowing: !wasFollowing, followers: c.followers + (wasFollowing ? -1 : 1) }));
-                (wasFollowing ? unfollowUser(club.id) : followUser(club.id)).catch(() => {
-                  // revert on error
+                (wasFollowing ? unfollowUser(targetId) : followUser(targetId)).catch((e) => {
+                  // revertir + avisar (antes fallaba en silencio → parecía "no hacer nada")
                   setClub(c => ({ ...c, isFollowing: wasFollowing, followers: c.followers + (wasFollowing ? 1 : -1) }));
+                  Alert.alert(
+                    wasFollowing ? 'No se pudo dejar de seguir' : 'No se pudo seguir',
+                    e instanceof Error ? e.message : 'Intentá de nuevo.',
+                  );
                 });
               }}
               onReserveCourt={(courtId) => navigation.navigate('ReserveCourt', { clubId: club.id, courtId })}

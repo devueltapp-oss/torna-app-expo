@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, ScrollView, Pressable, ActivityIndicator, RefreshControl, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, MapPin, ChevronRight, Users } from 'lucide-react-native';
+import { ChevronLeft, MapPin, ChevronRight, Users, CalendarPlus } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { AppHeader, Avatar } from '../components/ui';
@@ -48,17 +48,8 @@ export function SearchPlayScreen({
       <AppHeader title="Buscar partido"
         left={<Pressable onPress={onBack}><ChevronLeft size={22} color={colors.text}/></Pressable>}
         right={
-          <Pressable
-            onPress={onReserve}
-            style={{
-              backgroundColor: colors.primary,
-              paddingHorizontal: 14,
-              paddingVertical: 7,
-              borderRadius: 999,
-            }}>
-            <Text style={{ color: colors.primaryFg, fontSize: 13, fontWeight: '800' }}>
-              Reservar
-            </Text>
+          <Pressable onPress={onReserve} hitSlop={10} accessibilityLabel="Reservar cancha">
+            <CalendarPlus size={24} color={colors.text} />
           </Pressable>
         }
       />
