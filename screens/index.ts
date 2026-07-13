@@ -1,4 +1,3 @@
-export { LoginScreen } from './LoginScreen';
 export { LoginWithRoleScreen, type LoginRole } from './LoginWithRoleScreen';
 export { RegisterClubScreen } from './RegisterClubScreen';
 export { RegisterPlayerScreen, type RegisterPlayerScreenProps } from './RegisterPlayerScreen';
@@ -23,8 +22,9 @@ export { ProfileScreen, type ClubProfile } from './ProfileScreen';
 // Player views
 export { ClubProfilePlayerView } from './ClubProfilePlayerView';
 export { PlayerProfilePublicView } from './PlayerProfilePublicView';
-export { SearchPlayScreen } from './SearchPlayScreen';
 export { GlobalSearchScreen, type GlobalSearchScreenProps } from './GlobalSearchScreen';
+export { ChatsInboxScreen, type ChatsInboxScreenProps } from './ChatsInboxScreen';
+export { DirectChatScreen, type DirectChatScreenProps } from './DirectChatScreen';
 
 // Player main profile + library + settings
 export { PlayerOwnProfileScreen, type PlayerOwnProfileScreenProps } from './PlayerOwnProfileScreen';

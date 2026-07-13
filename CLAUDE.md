@@ -71,13 +71,19 @@ con flujo `Register → Pending → MainClub`.
 - `PlayerProfilePublicView` — perfil público de otro player: avatar grande,
   badge "JUGANDO AHORA" si está en partido en vivo, momentos destacados
   (card LIVE como primera tile cuando aplica + clips), fotos.
-- `SearchPlayScreen` — **partidos abiertos para sumarse** (GET /game/open vía
-  `useOpenGames`). **Sin GPS ni permiso de ubicación.** Lista cada partido con
-  hora/cancha/club, cupo (X/4) y jugadores; cada card tiene **"Ver detalle"**
-  (abre `UpcomingMatchSheet` → postularse/aceptar vía `POST /game/:id/apply`) y
-  **"Buscar en Maps"** (`MapsButton`, abre Google Maps fuera de la app — pin
-  exacto con lat/lng del club si está, o búsqueda por nombre; siempre sin
-  permiso). Pull-to-refresh; estado vacío si no hay partidos.
+- **Pestaña Juegos** (`GamesScreen` role=player) — **hub de partidos**, con dos
+  secciones + acción **Reservar** (`CalendarPlus`) en el header:
+  1. **Mis partidas** (`useMyGames`) → tap abre `UpcomingMatchSheet` (gestionar:
+     cancelar/darme de baja/cancelar pareja).
+  2. **Abiertos para sumarme** (GET /game/open vía `useOpenGames`) → cada card con
+     hora/cancha/club, cupo (X/4), avatares, **"Ver detalle"** (abre
+     `UpcomingMatchSheet` → **Postularme** vía `POST /game/:id/apply`) y **"Buscar en
+     Maps"** (`MapsButton`). **Sin GPS.** Estado vacío por sección.
+
+  > Antes esto vivía en `SearchPlayScreen` + una pestaña "Buscar" aparte (eliminadas).
+  > El `UpcomingMatchSheet` se renderiza una sola vez en `MainPlayer` (estado
+  > `myGameSheet`) y sirve ambos casos: gestión si `viewerIsParticipant`, postularse
+  > si es un abierto. `JoinMatchScreen` es legacy y ya no existe.
 - Flujo de reserva en 3 pasos (`ReserveStep1` → `Step2` → `Step3` →
   `ReserveSuccess`):
   1. Elegir cancha (radio buttons sobre las canchas del club).
@@ -87,9 +93,9 @@ con flujo `Register → Pending → MainClub`.
      - ON: el player + 1 compañero. El partido se publica para que 2 más
        se sumen.
      - **Cambiar** abre `PlayerSearchOverlay` (autofocus + filter local).
-- Sumarse a un partido abierto: desde `SearchPlayScreen` → "Ver detalle" →
-  `UpcomingMatchSheet` → **Postularme** (`POST /game/:id/apply`, con switch "voy con
-  compañero"). (`JoinMatchScreen` es legacy y ya no tiene ruta en `App.tsx`.)
+- Sumarse a un partido abierto: pestaña **Juegos** → sección "Abiertos" → "Ver detalle"
+  → `UpcomingMatchSheet` → **Postularme** (`POST /game/:id/apply`, con switch "voy con
+  compañero").
 - **Reservar ahora, pagar en el club.** NO hay pago en la app.
 - `PlayerOwnProfileScreen` — perfil propio del player: avatar, stats (seguidores / siguiendo / partidos / highlights), 3 tabs (Highlights / Partidos / Fotos), grid 3×N de contenido. Accesos a `MyLibraryScreen` y `PlayerSettingsScreen`.
 - `MyLibraryScreen` — librería privada (solo el dueño la ve): 3 secciones colapsables (Mis partidos completos → acción "Crear highlight", Mis highlights con toggle Privado/Público, Mis subidas con foto/video ≤3 min). FAB "+" abre `UploadSheet`.
@@ -221,9 +227,9 @@ ClubTodayReservation {
 5. **Multibloque**: `ReserveStep2` permite 1–4 bloques consecutivos libres →
    `durationMinutes = block × N` (el móvil arma un "slot combinado"; el back valida
    múltiplo/tope). Badge "Cancha inactiva" cuando `court.active===false`.
-6. **Sin GPS.** `SearchPlayScreen` ya no pide permiso de ubicación: lista partidos
-   abiertos (GET /game/open) y la ubicación de cada uno se abre en Google Maps fuera
-   de la app (`MapsButton`).
+6. **Sin GPS.** La sección "Abiertos" de la pestaña Juegos no pide permiso de ubicación:
+   lista partidos abiertos (GET /game/open) y la ubicación de cada uno se abre en Google
+   Maps fuera de la app (`MapsButton`).
 7. **Ubicación estática solo en clubs**: el mapa usa `latitude/longitude` del club
    (`isClub=true`); el player no tiene ubicación persistida (su GPS es runtime).
 
@@ -465,6 +471,36 @@ GET  /game/:id   → detalle con cameras[] (stream HLS en camera.streamingUrl)
 > endpoints son de **lectura solamente** desde la app. El admin externo es
 > el único escritor.
 
+### Chats — inbox unificado + DMs 1-a-1 — `api/chat.ts`
+
+La pestaña **Chats** (ambos roles, reemplazó a "Jugadores") es un inbox que unifica dos
+tipos de conversación: **DMs 1-a-1** entre usuarios (feature nueva) y **chats grupales de
+partidas** (los de `GameChatMessage`, cualquier estado — finalizada/cancelada = solo lectura).
+
+```
+GET  /chat/inbox            → InboxItem[] (DMs + grupos de partidas), desc por actividad
+GET  /chat/dm/:userId?since= → hilo 1-a-1 (find-or-create), más antiguos primero
+POST /chat/dm/:userId        → enviar DM { content }
+POST /chat/dm/:userId/read   → marcar el hilo como leído (limpia el badge del inbox)
+```
+
+- **`useInbox`** (`hooks/useInbox.ts`) → `ChatsInboxScreen` (tab Chats). `InboxItem`:
+  `{ kind:'dm'|'game', id, otherUserId?, title, avatar, lastMessage, lastMessageAt, unreadCount, readOnly }`.
+  Tap dm → `DirectChat`; tap game → `GameChat`. Botón **"Nuevo chat"** → `GlobalSearch { mode:'chat' }`
+  (reusa el buscador; elegir un usuario abre/crea el DM).
+- **`useDirectChat`** (`hooks/useDirectChat.ts`) → `DirectChatScreen`. **Copia de `useGameChat`**
+  keyed por el UID del otro usuario: REST + polling 3s focus-gated, `since` incremental, envío
+  optimista. Al montar hace `markDmRead`. Sin modo read-only (los DMs siempre se escriben).
+- **Iniciar un DM**: botón **"Mensaje"** (`MessageCircle`) en `PlayerProfilePublicView` y
+  `ClubProfilePlayerView` (prop `onMessage`, oculto en el perfil propio) → `DirectChat`; o el
+  "Nuevo chat" del inbox. Un club es un `User` → el DM con clubs funciona igual.
+- **Backend**: modelos `Conversation`/`ConversationParticipant`/`DirectMessage` (1-a-1 vía
+  `pairKey` determinística; genéricos para grupos ad-hoc a futuro). El inbox agrega los chats de
+  partidas vía `GameService.getMyGameThreads` (todos los estados). Unread: **DM sí**
+  (`lastReadAt`), **grupos de partida = 0 en v1** (el game chat no tiene cursor de lectura).
+- **Push**: OneSignal `type:'NEW_DM_MESSAGE' { conversationId, fromUserId }` → el handler navega a
+  `DirectChat`. (El grupal usa `NEW_CHAT_MESSAGE { gameId }` → `GameChat`.)
+
 ### Notificaciones push (OneSignal)
 
 La app usa **`react-native-onesignal`** (NO `expo-notifications`). Init en `App.tsx`
@@ -621,8 +657,7 @@ expo/
 ├── babel.config.js
 ├── assets/
 │   ├── torna-icon.png      # icono app + splash + logo in-app (1024×1024)
-│   ├── racket.png          # EmptyState ilustración
-│   └── torna-logo.svg      # decorativo (no usado en runtime — borrable)
+│   └── racket.png          # EmptyState ilustración
 ├── theme/
 │   ├── tokens.ts           # lightColors · darkColors · spacing · radii · typography · shadows · accentText
 │   ├── ThemeProvider.tsx   # contexto · useTheme() · persistencia AsyncStorage
@@ -644,7 +679,6 @@ expo/
 │   ├── ApplyMatchSheet.tsx      # solicitar unirse a partido abierto
 │   └── MapsButton.tsx           # botón "Buscar en Maps" → abre Google Maps (Linking)
 ├── screens/
-│   ├── LoginScreen.tsx
 │   ├── LoginWithRoleScreen.tsx
 │   ├── RegisterClubScreen.tsx       # ⚠️ mock: onSubmit no crea la cuenta (ver Auth)
 │   ├── RegisterPlayerScreen.tsx     # alta Player por email/contraseña (instantánea)
@@ -675,9 +709,7 @@ expo/
 │   │       └── ResultStep.tsx
 │   ├── ClubProfilePlayerView.tsx    # POV player
 │   ├── PlayerProfilePublicView.tsx
-│   ├── SearchPlayScreen.tsx
 │   ├── GlobalSearchScreen.tsx      # búsqueda global de players + clubs por texto (sin canchas)
-│   ├── JoinMatchScreen.tsx
 │   ├── ReserveStep1Screen.tsx       # elegir cancha
 │   ├── ReserveStep2Screen.tsx       # día + slot
 │   ├── ReserveStep3Screen.tsx       # players + confirmar
@@ -713,16 +745,16 @@ Stack único en `App.tsx`. `initialRouteName="LoginWithRole"`.
 | Ruta | Pantalla | Disponible para | Params |
 |---|---|---|---|
 | `LoginWithRole` | Login con role-picker | ambos | — |
-| `Login` | Login legacy (solo club) | club | — |
 | `Register` | Alta de club | club | — |
 | `Pending` | Aprobación pendiente | club | — |
 | `CompleteProfile` | Completar perfil (social) | ambos | `{ idToken: string }` |
 | `MainPlayer` | Tabs internos player | player | — |
 | `MainClub` | Tabs internos club | club | — |
 | `GameDetail` | Visor HLS | ambos | `{ gameId }` |
+| `GameChat` | Chat grupal de una partida | ambos | `{ gameId, title?, readOnly? }` |
+| `DirectChat` | Chat directo 1-a-1 con un usuario | ambos | `{ userId, title? }` |
 | `ClubProfile` | Perfil público del club | player | `{ clubId }` |
 | `PlayerProfile` | Perfil público de un player | player | `{ playerId }` |
-| `SearchPlay` | Partidos abiertos para sumarse (sin GPS) | player | — |
 | `ReserveCourt` | Paso 1 — elegir cancha | player | `{ clubId, courtId? }` |
 | `ReserveTime` | Paso 2 — fecha + slot | player | `{ courtId }` |
 | `ReserveInvite` | Paso 3 — switch + players | player | `{ courtId, date, slot }` |
@@ -731,16 +763,18 @@ Stack único en `App.tsx`. `initialRouteName="LoginWithRole"`.
 
 ### Bottom tab bar (role-aware)
 
-`BottomTabBar` recibe `role: 'club' | 'player'`. **Inicio está centrado en
-ambos**.
+`BottomTabBar` recibe `role: 'club' | 'player'`.
 
 | Rol | Tabs |
 |---|---|
-| **club** (5) | Canchas · Juegos · **Inicio** · Jugadores · Perfil |
-| **player** (5) | Juegos · 🔍 Buscar · **Inicio** · Jugadores · Perfil |
+| **club** (5) | Canchas · Juegos · **Inicio** · Chats · Perfil |
+| **player** (4) | **Inicio** · Juegos · Chats · Perfil |
 
-El tab `search` (player-only) **navega** a `SearchPlay` en lugar de cambiar
-el contenido (ver `MainPlayer.handleTab` en `App.tsx`).
+**No hay pestaña "Buscar" ni "Jugadores".** El player tiene **4 tabs**; todas cambian
+contenido. La búsqueda de gente/clubs vive en el ícono de búsqueda del header de
+**Inicio** (`onOpenSearch` → `GlobalSearch`). La pestaña **Juegos** es el hub de partidos:
+**Mis partidas** + **Abiertos para sumarme** + acción **Reservar** en el header. La pestaña
+**Chats** (ambos roles) es el inbox de conversaciones (ver "Chats" abajo).
 
 El componente NO es `@react-navigation/bottom-tabs` — es estado local en
 `MainPlayer` / `MainClub`. Esto permite layouts custom por tab.
@@ -888,15 +922,13 @@ npm start                   # arranca sin warnings en Metro
     "Buscar en Maps" que abre **Google Maps** (URL universal `maps/search/?api=1&query=...`)
     vía `Linking`, usando la lat/lng del club (o la dirección/nombre como fallback de
     búsqueda por texto; "Ubicación no disponible" si no hay ninguno). Se usa en
-    `ClubProfilePlayerView`, `ReserveStep1Screen` y por card en `SearchPlayScreen`. Se
+    `ClubProfilePlayerView`, `ReserveStep1Screen` y por card de partido abierto en la
+    pestaña Juegos (`GamesScreen`). Se
     eliminaron `ClubMap.tsx`, `NearbyClubsMap.tsx`, `mapTiles.ts`, la dependencia
     `react-native-webview` y la key `EXPO_PUBLIC_MAPTILER_KEY` (ya no se requiere
     dev-client para ver la ubicación).
 
-12. **`torna-logo.svg`** en assets no se usa en runtime — borrarlo o
-    convertirlo a componente RN-SVG.
-
-13. ~~**Typo en `.env`**: `api.tora.io` en lugar de `api.torna.io`~~ **RESUELTO**: corregido — todas las llamadas API ahora apuntan al dominio correcto.
+12. ~~**Typo en `.env`**: `api.tora.io` en lugar de `api.torna.io`~~ **RESUELTO**: corregido — todas las llamadas API ahora apuntan al dominio correcto.
 
 14. **Logs de debug de subida a B2** — `api/profile.ts` tiene logs temporales
     marcados `[UPLOAD DEBUG]` (solo `__DEV__`) para diagnosticar la subida de foto de

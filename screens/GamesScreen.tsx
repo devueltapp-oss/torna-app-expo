@@ -1,11 +1,13 @@
 import React from 'react';
-import { View, Text, ScrollView, TextInput, Pressable, FlatList } from 'react-native';
+import { View, Text, ScrollView, TextInput, Pressable, FlatList, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, ChevronRight, Users } from 'lucide-react-native';
+import { Search, ChevronRight, Users, CalendarPlus, MapPin } from 'lucide-react-native';
 import { useTheme } from '../theme';
+import { fonts } from '../theme/tokens';
 import { GameListItem, GameListData } from '../components/cards';
-import { EmptyState, StatusBadge } from '../components/ui';
+import { EmptyState, StatusBadge, Avatar, SectionHeader } from '../components/ui';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
+import { MapsButton } from '../components/MapsButton';
 import type { UpcomingGameData } from '../data/types';
 
 type Filter = 'TODAS' | 'LIVE' | 'SCHEDULED' | 'FINISHED';
@@ -19,7 +21,12 @@ interface Props {
   role?: 'player' | 'club';
   /** (Player) Mis partidas activas — abre el sheet de gestión al tocar. */
   myGames?: UpcomingGameData[];
+  /** (Player) Partidas abiertas (isOpenForPlayers) para sumarme. */
+  openGames?: UpcomingGameData[];
+  /** (Player) Abre el sheet de una partida (gestión si participo, postularme si es abierta). */
   onOpenMyGame?: (game: UpcomingGameData) => void;
+  /** (Player) Inicia el flujo de reserva (crear un juego). */
+  onReserve?: () => void;
 }
 
 const FILTER_LABEL: Record<Filter, string> = {
@@ -28,38 +35,72 @@ const FILTER_LABEL: Record<Filter, string> = {
 
 export function GamesScreen({
   games, onOpenGame, onChangeTab, activeTab = 'games', emptyImage, role = 'club',
-  myGames = [], onOpenMyGame,
+  myGames = [], openGames = [], onOpenMyGame, onReserve,
 }: Props) {
   const { colors } = useTheme();
   const [filter, setFilter] = React.useState<Filter>('TODAS');
   const [q, setQ] = React.useState('');
 
-  // Vista del player: "Mis partidas" (partidas propias activas con gestión).
+  // Vista del player: hub de partidos = Mis partidas + Abiertos para sumarme + Reservar.
   if (role === 'player') {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
-        <View style={{ backgroundColor: colors.surface, paddingHorizontal: 20, paddingVertical: 14 }}>
-          <Text style={{ color: colors.text, fontSize: 24, fontWeight: '800', letterSpacing: -0.5 }}>Mis partidas</Text>
-          <Text style={{ color: colors.muted2, fontSize: 13, marginTop: 2 }}>
-            Tus partidas programadas y en juego
-          </Text>
+        {/* Header: título + acción Reservar (crear un juego). */}
+        <View style={{
+          backgroundColor: colors.surface, paddingHorizontal: 20, paddingVertical: 14,
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={{ color: colors.text, fontSize: 24, fontWeight: '800', letterSpacing: -0.5 }}>Juegos</Text>
+            <Text style={{ color: colors.muted2, fontSize: 13, marginTop: 2 }}>
+              Tus partidas y partidos abiertos para sumarte
+            </Text>
+          </View>
+          <Pressable
+            onPress={onReserve}
+            accessibilityLabel="Reservar cancha"
+            style={({ pressed }) => ({
+              flexDirection: 'row', alignItems: 'center', gap: 6,
+              backgroundColor: colors.accent, paddingHorizontal: 12, paddingVertical: 9,
+              borderRadius: 10, opacity: pressed ? 0.85 : 1,
+            })}
+          >
+            <CalendarPlus size={16} color={colors.ink} />
+            <Text style={{ color: colors.ink, fontWeight: '800', fontSize: 13 }}>Reservar</Text>
+          </Pressable>
         </View>
 
-        <FlatList
-          data={myGames}
-          keyExtractor={g => g.id}
-          renderItem={({ item }) => (
-            <MyGameCard game={item} colors={colors} onPress={() => onOpenMyGame?.(item)} />
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24, gap: 8 }}>
+          {/* Mis partidas */}
+          <SectionHeader title="Mis partidas" />
+          {myGames.length === 0 ? (
+            <Text style={{ color: colors.muted2, fontSize: 13, lineHeight: 19, paddingBottom: 8 }}>
+              No tenés partidas activas. Reservá una cancha o sumate a un partido abierto.
+            </Text>
+          ) : (
+            <View style={{ gap: 10, paddingBottom: 8 }}>
+              {myGames.map(g => (
+                <MyGameCard key={g.id} game={g} colors={colors} onPress={() => onOpenMyGame?.(g)} />
+              ))}
+            </View>
           )}
-          contentContainerStyle={{ padding: 16, gap: 10 }}
-          ListEmptyComponent={
-            <EmptyState
-              title="No tenés partidas activas"
-              message="Reservá una cancha o postulate a un partido abierto para empezar a jugar."
-              imageSource={emptyImage}
-            />
-          }
-        />
+
+          {/* Abiertos para sumarme */}
+          <View style={{ marginTop: 8 }}>
+            <SectionHeader title="Abiertos para sumarme" />
+          </View>
+          {openGames.length === 0 ? (
+            <Text style={{ color: colors.muted2, fontSize: 13, lineHeight: 19 }}>
+              Cuando haya partidos buscando jugadores, aparecerán acá para que te sumes.
+            </Text>
+          ) : (
+            <View style={{ gap: 12 }}>
+              {openGames.map(g => (
+                <OpenGameCard key={g.id} game={g} colors={colors} onOpenDetail={() => onOpenMyGame?.(g)} />
+              ))}
+            </View>
+          )}
+        </ScrollView>
 
         {onChangeTab && <BottomTabBar role="player" active={activeTab} onChange={onChangeTab}/>}
       </SafeAreaView>
@@ -160,5 +201,73 @@ function MyGameCard({
       <StatusBadge status={game.status === 'LIVE' ? 'LIVE' : 'SCHEDULED'} />
       <ChevronRight size={18} color={colors.muted2} />
     </Pressable>
+  );
+}
+
+/** Card de un partido ABIERTO para sumarse (migrado de SearchPlayScreen). */
+function OpenGameCard({
+  game, colors, onOpenDetail,
+}: { game: UpcomingGameData; colors: ReturnType<typeof useTheme>['colors']; onOpenDetail: () => void }) {
+  const filled = game.players.length;
+  const total = game.maxPlayers ?? 4;
+  // Ubicación en Maps: coords del club si están, si no el nombre (club + cancha).
+  const mapsQuery = [game.club, game.court].filter(Boolean).join(' ');
+
+  return (
+    <View style={{
+      backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line,
+      borderRadius: 16, padding: 14, gap: 12,
+    }}>
+      <Pressable onPress={onOpenDetail} style={({ pressed }) => ({ gap: 10, opacity: pressed ? 0.85 : 1 })}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: 16, letterSpacing: -0.3 }} numberOfLines={1}>
+            {game.time} · {game.court}
+          </Text>
+          <View style={{ backgroundColor: colors.accentSoft, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
+            <Text style={{ color: colors.accentText, fontSize: 11, fontFamily: fonts.bold }}>{filled}/{total}</Text>
+          </View>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <MapPin size={12} color={colors.muted2}/>
+          <Text style={{ color: colors.muted2, fontSize: 13 }} numberOfLines={1}>
+            {[game.date, game.club].filter(Boolean).join(' · ')}
+          </Text>
+        </View>
+
+        {game.players.length > 0 && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+            <View style={{ flexDirection: 'row' }}>
+              {game.players.slice(0, 3).map((p, i) => (
+                <View key={p.id ?? p.username} style={{ marginLeft: i === 0 ? 0 : -8 }}>
+                  {p.profilePicture ? (
+                    <Image source={{ uri: p.profilePicture }} style={{ width: 26, height: 26, borderRadius: 13, borderWidth: 1.5, borderColor: colors.surface }} />
+                  ) : (
+                    <Avatar name={p.name ?? p.username} size={26} />
+                  )}
+                </View>
+              ))}
+            </View>
+            <Text style={{ color: colors.muted2, fontSize: 12 }} numberOfLines={1}>
+              {game.players.map((p) => p.name ?? p.username).slice(0, 2).join(', ')}
+              {game.players.length > 2 ? ` +${game.players.length - 2}` : ''}
+            </Text>
+          </View>
+        )}
+      </Pressable>
+
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Pressable
+          onPress={onOpenDetail}
+          style={({ pressed }) => ({
+            flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+            backgroundColor: colors.bg2, borderRadius: 12, paddingVertical: 11, opacity: pressed ? 0.85 : 1,
+          })}
+        >
+          <Text style={{ color: colors.text, fontSize: 13, fontFamily: fonts.bold }}>Ver detalle</Text>
+          <ChevronRight size={16} color={colors.muted2}/>
+        </Pressable>
+        <MapsButton compact latitude={game.clubLat} longitude={game.clubLng} query={mapsQuery} />
+      </View>
+    </View>
   );
 }

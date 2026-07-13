@@ -1,36 +1,9 @@
 import React from 'react';
 import { View, Text, Pressable } from 'react-native';
-import { Home, Crosshair, LayoutGrid, Users, User } from 'lucide-react-native';
-import Svg, { G, Ellipse, Path } from 'react-native-svg';
+import { Home, Crosshair, LayoutGrid, MessageCircle, User } from 'lucide-react-native';
 import { useTheme } from '../theme';
 
-function PadelRacketsIcon({ size = 22, strokeWidth = 2, color = 'black' }: { size?: number; strokeWidth?: number; color?: string }) {
-  const sw = strokeWidth;
-  return (
-    <Svg width={size} height={size} viewBox="0 0 22 22">
-      {/* Racket izquierda: cabeza arriba-izquierda, mango abajo-derecha */}
-      <G transform="rotate(-42, 11, 11)">
-        <Ellipse cx="11" cy="6" rx="4" ry="4.5" stroke={color} strokeWidth={sw} fill="none" />
-        <Path
-          d="M10 10.5 L10 18 Q11 20 12 18 L12 10.5"
-          stroke={color} strokeWidth={sw} fill="none"
-          strokeLinejoin="round" strokeLinecap="round"
-        />
-      </G>
-      {/* Racket derecha: cabeza arriba-derecha, mango abajo-izquierda */}
-      <G transform="rotate(42, 11, 11)">
-        <Ellipse cx="11" cy="6" rx="4" ry="4.5" stroke={color} strokeWidth={sw} fill="none" />
-        <Path
-          d="M10 10.5 L10 18 Q11 20 12 18 L12 10.5"
-          stroke={color} strokeWidth={sw} fill="none"
-          strokeLinejoin="round" strokeLinecap="round"
-        />
-      </G>
-    </Svg>
-  );
-}
-
-export type TabId = 'home' | 'games' | 'courts' | 'players' | 'profile' | 'search';
+export type TabId = 'home' | 'games' | 'courts' | 'chats' | 'profile';
 export type Role = 'club' | 'player';
 
 interface Props {
@@ -43,23 +16,23 @@ interface Props {
 
 interface TabDef { id: TabId; label: string; Icon: any }
 
-/** Order is intentional: 'home' sits at the visual center for both roles.
- *  - club  (5 tabs): Canchas · Juegos · Inicio · Jugadores · Perfil
- *  - player(5 tabs): Juegos · Buscar · Inicio · Jugadores · Perfil
- *  The 'search' tab is player-only — opens SearchPlay (GPS discovery). */
+/** Order is intentional:
+ *  - club  (5 tabs): Canchas · Juegos · Inicio · Chats · Perfil ('home' centered)
+ *  - player(4 tabs): Inicio · Juegos · Chats · Perfil
+ *  'Juegos' (player) es el hub de partidos. 'Chats' es el inbox (DMs 1-a-1 + grupos
+ *  de partidas). La búsqueda de gente/clubs vive en el header de Inicio (GlobalSearch). */
 const TABS_BY_ROLE: Record<Role, TabDef[]> = {
   club: [
     { id: 'courts',  label: 'Canchas',   Icon: LayoutGrid },
     { id: 'games',   label: 'Juegos',    Icon: Crosshair },
     { id: 'home',    label: 'Inicio',    Icon: Home },
-    { id: 'players', label: 'Jugadores', Icon: Users },
+    { id: 'chats',   label: 'Chats',     Icon: MessageCircle },
     { id: 'profile', label: 'Perfil',    Icon: User },
   ],
   player: [
-    { id: 'games',   label: 'Juegos',    Icon: Crosshair },
-    { id: 'search',  label: 'Buscar',    Icon: PadelRacketsIcon },
     { id: 'home',    label: 'Inicio',    Icon: Home },
-    { id: 'players', label: 'Jugadores', Icon: Users },
+    { id: 'games',   label: 'Juegos',    Icon: Crosshair },
+    { id: 'chats',   label: 'Chats',     Icon: MessageCircle },
     { id: 'profile', label: 'Perfil',    Icon: User },
   ],
 };

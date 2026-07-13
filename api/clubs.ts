@@ -9,7 +9,7 @@
  * El backend envuelve toda respuesta en { data, statusCode } (TransformInterceptor).
  */
 import * as SecureStore from 'expo-secure-store';
-import type { ClubCourtPublic, Slot, SearchableCourt } from '../data/types';
+import type { ClubCourtPublic, Slot, SearchableCourt, FollowItem } from '../data/types';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
 const TOKEN_KEY = 'torna_auth_token';
@@ -91,6 +91,29 @@ function mapCourt(c: BackendCourt): ClubCourtPublic {
     nextSlot: '',
     active: c.isActive ?? true,
   };
+}
+
+interface BackendClub {
+  id: string;
+  username: string;
+  name: string | null;
+  profilePicture: string | null;
+}
+
+/**
+ * Todos los clubs (GET /club). Se usa como fallback en la reserva cuando el
+ * usuario no sigue a ningún club: mostramos algunos al azar para que igual pueda
+ * elegir uno sin tener que buscarlo a mano.
+ */
+export async function fetchClubs(): Promise<FollowItem[]> {
+  const clubs = await authedGet<BackendClub[]>('/club');
+  return clubs.map((c) => ({
+    id: c.id,
+    name: c.name ?? c.username,
+    username: c.username.startsWith('@') ? c.username : `@${c.username}`,
+    profilePicture: c.profilePicture ?? undefined,
+    isClub: true,
+  }));
 }
 
 /** Canchas de un club. */

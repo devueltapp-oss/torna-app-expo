@@ -25,12 +25,13 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from './theme';
 import { AuthProvider, useAuth, type LoginResult } from './contexts/AuthContext';
 import {
-  LoginScreen, LoginWithRoleScreen, RegisterClubScreen, RegisterPlayerScreen,
+  LoginWithRoleScreen, RegisterClubScreen, RegisterPlayerScreen,
   PendingApprovalScreen,
   CompleteProfileScreen,
   HomeScreen, ClubHomeScreen,
-  GamesScreen, GameChatScreen, GameDetailScreen, CourtsScreen, PlayersScreen, ProfileScreen,
-  ClubProfilePlayerView, PlayerProfilePublicView, SearchPlayScreen, GlobalSearchScreen,
+  GamesScreen, GameChatScreen, GameDetailScreen, CourtsScreen, ProfileScreen,
+  ClubProfilePlayerView, PlayerProfilePublicView, GlobalSearchScreen,
+  ChatsInboxScreen, DirectChatScreen,
   ReserveClubPickerScreen, ReserveStep1Screen, ReserveStep2Screen, ReserveStep3Screen, ReserveSuccessScreen, MonoValue,
   VideoEditorScreen,
   PlayerOwnProfileScreen, MyLibraryScreen, PlayerSettingsScreen,
@@ -57,10 +58,11 @@ import { useUserProfile } from './hooks/useUserProfile';
 import { usePartnerSearch } from './hooks/usePartnerSearch';
 import { useMyHighlights } from './hooks/useMyHighlights';
 import { useHighlightVisibility } from './hooks/useHighlightVisibility';
-import { searchUsers, searchUsersAndClubs, fetchUserProfile, setFollowNotify, fetchFollowers, fetchFollowing, followUser, unfollowUser } from './api/users';
+import { useInbox } from './hooks/useInbox';
+import { searchUsers, searchUsersAndClubs, fetchUserProfile, setFollowNotify, fetchFollowing, followUser, unfollowUser } from './api/users';
 import type { CourtData, PlayerData } from './components/cards';
 import { updateHighlightMeta } from './api/highlights';
-import { fetchClubCourts, fetchCourt, fetchCourtSlots, createReservation, searchCourts } from './api/clubs';
+import { fetchClubCourts, fetchCourt, fetchCourtSlots, createReservation, searchCourts, fetchClubs } from './api/clubs';
 import type { DayOption } from './screens/ReserveStep2Screen';
 import type {
   LibraryItem, LibraryMatch, LibraryHighlight,
@@ -136,7 +138,6 @@ class ErrorBoundary extends React.Component<
  */
 type AuthStackParamList = {
   LoginWithRole: undefined;
-  Login: undefined;
   Register: undefined;
   RegisterPlayer: undefined;
   Pending: undefined;
@@ -156,10 +157,10 @@ type AppStackParamList = {
   MainClub: undefined;
   GameDetail: { gameId: string; clipData?: GameDetailData; liveStreamUrl?: string };
   GameChat: { gameId: string; title?: string; readOnly?: boolean };
+  DirectChat: { userId: string; title?: string };
   ClubProfile: { clubId: string };
   PlayerProfile: { playerId: string };
-  SearchPlay: undefined;
-  GlobalSearch: undefined;
+  GlobalSearch: { mode?: 'chat' } | undefined;
   ReservePickClub: undefined;
   ReserveCourt: { clubId: string; courtId?: string };
   ReserveTime: { courtId: string };
@@ -308,6 +309,7 @@ function PlayerProfileScreen({ navigation, playerId }: { navigation: any; player
             setOverrides(o => ({ ...o, notifyOnMatch: wasNotifying }));
           });
         }}
+        onMessage={() => navigation.navigate('DirectChat', { userId: view.id, title: view.name ?? view.username })}
         onOpenLive={(gameId) => navigation.navigate('GameDetail', { gameId })}
         onOpenClip={(clip) => setClipModal({ url: clip.videoUrl ?? '', title: clip.title, id: clip.id })}
         onOpenFollowers={() => setSheet('followers')}
@@ -417,6 +419,7 @@ function ClubProfileScreen({ navigation, clubId }: { navigation: any; clubId: st
             setOverrides(o => ({ ...o, isFollowing: wasFollowing, followers: baseFollowers }));
           });
         }}
+        onMessage={() => navigation.navigate('DirectChat', { userId: view.id, title: view.name ?? view.username })}
         onReserveCourt={(courtId) => navigation.navigate('ReserveCourt', { clubId: view.id, courtId })}
         onOpenLive={(gameId) => navigation.navigate('GameDetail', { gameId })}
         onOpenClip={(clip) => setClipModal({ url: clip.videoUrl ?? '', title: clip.title, id: clip.id })}
@@ -469,17 +472,6 @@ function AuthNavigator() {
                 authProvider: provider,
               });
             }}
-          />
-        )}
-      </AuthStack.Screen>
-
-      <AuthStack.Screen name="Login">
-        {({ navigation }) => (
-          <LoginScreen
-            onLogin={() => {
-              // Legacy screen — same pattern: AuthProvider handles state
-            }}
-            onRegister={() => navigation.navigate('Register')}
           />
         )}
       </AuthStack.Screen>
@@ -563,6 +555,9 @@ function MainPlayer({ navigation }: any) {
 
   // "Mis partidas" activas (GET /game/mine): para gestionar baja/cancelación.
   const { myGames, refresh: refreshMyGames } = useMyGames(user?.id);
+
+  // Inbox de Chats (GET /chat/inbox): DMs 1-a-1 + chats grupales de partidas.
+  const { items: inbox, loading: inboxLoading, refresh: refreshInbox } = useInbox();
   const [myGameSheet, setMyGameSheet] = React.useState<UpcomingGameData | null>(null);
   const { matches: apiMatches, refresh: refreshMatches } = usePlayerMatches(user?.id);
 
@@ -627,10 +622,11 @@ function MainPlayer({ navigation }: any) {
       refreshPlayers(),
       refreshOwnProfile(),
       refreshHighlights(),
+      refreshInbox(),
       new Promise<void>((r) => setTimeout(r, 800)),
     ]);
     setRefreshing(false);
-  }, [refreshLive, refreshOpen, refreshMyGames, refreshUpcoming, refreshFeed, refreshMatches, refreshPlayers, refreshOwnProfile, refreshHighlights]);
+  }, [refreshLive, refreshOpen, refreshMyGames, refreshUpcoming, refreshFeed, refreshMatches, refreshPlayers, refreshOwnProfile, refreshHighlights, refreshInbox]);
 
   // Acciones de gestión de "Mis partidas" (cierran el sheet y refrescan la lista).
   // Si el backend rechaza (p. ej. estado inválido), avisamos en vez de fallar en silencio.
@@ -722,10 +718,6 @@ function MainPlayer({ navigation }: any) {
 
   const handleTab = (id: TabId) => {
     setReelSection(null);
-    if (id === 'search') {
-      navigation.navigate('SearchPlay');
-      return;
-    }
     setTab(id);
     if (id === 'profile') {
       setProfileView('profile');
@@ -758,7 +750,6 @@ function MainPlayer({ navigation }: any) {
             greeting={user?.name ?? user?.username ?? ''}
             liveGames={liveGames}
             upcomingGames={upcomingGames}
-            openGames={openGames}
             feedPosts={feedPosts}
             activeTab="home" onChangeTab={handleTab}
             onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id, liveStreamUrl: liveGames.find(g => g.id === id)?.streamUrl })}
@@ -779,11 +770,22 @@ function MainPlayer({ navigation }: any) {
             emptyImage={require('./assets/racket.png')}
             onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id, liveStreamUrl: liveGames.find(g => g.id === id)?.streamUrl })}
             myGames={myGames}
+            openGames={openGames}
             onOpenMyGame={(g) => setMyGameSheet(g)}
+            onReserve={() => navigation.navigate('ReservePickClub')}
           />
         );
-      case 'players':
-        return <PlayersScreen players={playerList} activeTab="players" onChangeTab={handleTab} role="player" onOpenPlayerProfile={(id) => navigation.navigate('PlayerProfile', { playerId: id })} />;
+      case 'chats':
+        return (
+          <ChatsInboxScreen
+            items={inbox} loading={inboxLoading}
+            activeTab="chats" onChangeTab={handleTab} role="player"
+            refreshing={refreshing} onRefresh={handleRefresh}
+            onOpenDm={(userId, title) => navigation.navigate('DirectChat', { userId, title })}
+            onOpenGame={(gameId, title, readOnly) => navigation.navigate('GameChat', { gameId, title, readOnly })}
+            onNewChat={() => navigation.navigate('GlobalSearch', { mode: 'chat' })}
+          />
+        );
       case 'profile': {
         if (profileView === 'settings') {
           return (
@@ -876,6 +878,7 @@ function MainPlayer({ navigation }: any) {
       <UpcomingMatchSheet
         visible={myGameSheet !== null}
         game={myGameSheet}
+        invitablePlayers={invitablePlayers}
         suggestedPartners={partnerSuggestions}
         onSearchPartner={searchPartners}
         onOpenChat={(gameId, title, readOnly) => { setMyGameSheet(null); navigation.navigate('GameChat', { gameId, title, readOnly }); }}
@@ -901,10 +904,11 @@ function MainClub({ navigation }: any) {
   const { user } = useAuth();
   const clubId = user?.id;
 
-  // Datos reales del club autenticado (canchas, seguidores, partidas).
+  // Datos reales del club autenticado (canchas, partidas).
   const { games: clubGames } = useClubGames(clubId);
   const [courts, setCourts] = React.useState<CourtData[]>([]);
-  const [members, setMembers] = React.useState<PlayerData[]>([]);
+  // Inbox de Chats del club (DMs 1-a-1 + chats grupales de partidas).
+  const { items: clubInbox, loading: clubInboxLoading, refresh: refreshClubInbox } = useInbox();
   React.useEffect(() => {
     if (!clubId) return;
     fetchClubCourts(clubId)
@@ -912,9 +916,6 @@ function MainClub({ navigation }: any) {
         id: c.id, name: c.name, surface: c.surface, cams: c.cams, next: c.nextSlot || null,
       }))))
       .catch(() => setCourts([]));
-    fetchFollowers(clubId)
-      .then((fs) => setMembers(fs.map((f) => ({ id: f.id, name: f.name, username: f.username }))))
-      .catch(() => setMembers([]));
   }, [clubId]);
 
   // Perfil del club derivado del usuario autenticado (no hay mock).
@@ -948,9 +949,17 @@ function MainClub({ navigation }: any) {
     case 'courts':
       return <CourtsScreen courts={courts} activeTab="courts" onChangeTab={setTab} role="club"
         onOpenCourt={(c) => c.live && navigation.navigate('GameDetail', { gameId: c.live.gameId })} />;
-    case 'players':
-      return <PlayersScreen players={members} activeTab="players" onChangeTab={setTab} role="club"
-        onOpenPlayerProfile={(id) => navigation.navigate('PlayerProfile', { playerId: id })} />;
+    case 'chats':
+      return (
+        <ChatsInboxScreen
+          items={clubInbox} loading={clubInboxLoading}
+          activeTab="chats" onChangeTab={setTab} role="club"
+          refreshing={clubInboxLoading} onRefresh={refreshClubInbox}
+          onOpenDm={(userId, title) => navigation.navigate('DirectChat', { userId, title })}
+          onOpenGame={(gameId, title, readOnly) => navigation.navigate('GameChat', { gameId, title, readOnly })}
+          onNewChat={() => navigation.navigate('GlobalSearch', { mode: 'chat' })}
+        />
+      );
     case 'profile':
       return (
         <ProfileScreen
@@ -1036,6 +1045,18 @@ function AppNavigator() {
         )}
       </AppStack.Screen>
 
+      <AppStack.Screen name="DirectChat">
+        {({ navigation, route }) => (
+          // key={userId}: montaje fresco por conversación (evita arrastrar mensajes).
+          <DirectChatScreen
+            key={route.params?.userId ?? ''}
+            userId={route.params?.userId ?? ''}
+            title={route.params?.title}
+            onBack={() => navigation.goBack()}
+          />
+        )}
+      </AppStack.Screen>
+
       {/* Player POV flows */}
       <AppStack.Screen name="ClubProfile">
         {({ navigation, route }) => (
@@ -1062,47 +1083,54 @@ function AppNavigator() {
         )}
       </AppStack.Screen>
 
-      <AppStack.Screen name="SearchPlay">
-        {({ navigation }) => {
-          // Directorio real para elegir compañero al postularse (ApplyMatchSheet).
-          const { players } = usePlayers();
-          const { user } = useAuth();
-          const invitablePlayers: InvitablePlayer[] = players.map((p) => ({
-            id: p.id, name: p.name, username: p.username,
-          }));
-          // Compañero: sugerencias (gente que seguís/te sigue) + búsqueda rankeada.
-          const { connections: partnerSuggestions, searchPartners } = usePartnerSearch(user?.id);
-          return (
-            <SearchPlayScreen
-              onBack={() => navigation.goBack()}
-              onOpenPlayerProfile={(playerId) => navigation.navigate('PlayerProfile', { playerId })}
-              invitablePlayers={invitablePlayers}
-              suggestedPartners={partnerSuggestions}
-              onSearchPartner={searchPartners}
-              onOpenChat={(gameId, title, readOnly) => navigation.navigate('GameChat', { gameId, title, readOnly })}
-              onReserve={() => navigation.navigate('ReservePickClub')}
-            />
-          );
-        }}
-      </AppStack.Screen>
-
       <AppStack.Screen name="ReservePickClub">
         {({ navigation }) => {
           const { user } = useAuth();
-          const [followedClubs, setFollowedClubs] = React.useState<FollowItem[]>([]);
+          const [suggestedClubs, setSuggestedClubs] = React.useState<FollowItem[]>([]);
           const [loadingFollowed, setLoadingFollowed] = React.useState(true);
+          // fallback=true → los clubs mostrados NO son seguidos sino sugeridos al
+          // azar (el usuario no sigue ninguno), para que igual pueda elegir uno.
+          const [fallback, setFallback] = React.useState(false);
           React.useEffect(() => {
             if (!user?.id) { setLoadingFollowed(false); return; }
-            fetchFollowing(user.id)
-              .then((items) => setFollowedClubs(items.filter((f) => f.isClub)))
-              .catch(() => setFollowedClubs([]))
-              .finally(() => setLoadingFollowed(false));
+            let active = true;
+            // En RN el AbortController del fetch no siempre cancela: si una request
+            // cuelga, el spinner quedaría para siempre. `withTimeout` garantiza que
+            // la carga SIEMPRE resuelva (cae a [] si tarda demasiado).
+            const withTimeout = <T,>(p: Promise<T>, ms: number, fb: T): Promise<T> =>
+              Promise.race([p, new Promise<T>((r) => setTimeout(() => r(fb), ms))]);
+            (async () => {
+              try {
+                const following = await withTimeout(
+                  fetchFollowing(user.id).catch(() => [] as FollowItem[]), 8000, [],
+                );
+                const clubs = following.filter((f) => f.isClub);
+                if (!active) return;
+                if (clubs.length > 0) {
+                  setSuggestedClubs(clubs);
+                  setFallback(false);
+                } else {
+                  // Sin clubs seguidos → algunos al azar (barajados, tope 8).
+                  const all = await withTimeout(
+                    fetchClubs().catch(() => [] as FollowItem[]), 8000, [],
+                  );
+                  if (!active) return;
+                  const shuffled = [...all].sort(() => Math.random() - 0.5).slice(0, 8);
+                  setSuggestedClubs(shuffled);
+                  setFallback(true);
+                }
+              } finally {
+                if (active) setLoadingFollowed(false);
+              }
+            })();
+            return () => { active = false; };
           }, [user?.id]);
           return (
             <ReserveClubPickerScreen
               onBack={() => navigation.goBack()}
-              suggestedClubs={followedClubs}
+              suggestedClubs={suggestedClubs}
               loadingSuggested={loadingFollowed}
+              suggestionsAreFallback={fallback}
               onSearchClubs={searchCourts}
               onPickClub={(clubId, courtId) => navigation.navigate('ReserveCourt', { clubId, courtId })}
             />
@@ -1111,24 +1139,31 @@ function AppNavigator() {
       </AppStack.Screen>
 
       <AppStack.Screen name="GlobalSearch">
-        {({ navigation }) => (
-          <GlobalSearchScreen
-            players={[]}
-            onSearchUsers={async (q): Promise<SearchableUser[]> => {
-              const res = await searchUsersAndClubs(q);
-              return res.map((u) => ({
-                id: u.id,
-                name: u.name ?? u.username,
-                username: atHandle(u.username),
-                profilePicture: u.profilePicture ?? undefined,
-                isClub: u.isClub,
-              }));
-            }}
-            onBack={() => navigation.goBack()}
-            onOpenPlayerProfile={(id) => navigation.navigate('PlayerProfile', { playerId: id })}
-            onOpenClubProfile={(id) => navigation.navigate('ClubProfile', { clubId: id })}
-          />
-        )}
+        {({ navigation, route }) => {
+          // mode 'chat': elegir un usuario abre/crea un DM en vez del perfil.
+          const chatMode = route.params?.mode === 'chat';
+          const onPick = chatMode
+            ? (id: string) => navigation.replace('DirectChat', { userId: id })
+            : undefined;
+          return (
+            <GlobalSearchScreen
+              players={[]}
+              onSearchUsers={async (q): Promise<SearchableUser[]> => {
+                const res = await searchUsersAndClubs(q);
+                return res.map((u) => ({
+                  id: u.id,
+                  name: u.name ?? u.username,
+                  username: atHandle(u.username),
+                  profilePicture: u.profilePicture ?? undefined,
+                  isClub: u.isClub,
+                }));
+              }}
+              onBack={() => navigation.goBack()}
+              onOpenPlayerProfile={onPick ?? ((id) => navigation.navigate('PlayerProfile', { playerId: id }))}
+              onOpenClubProfile={onPick ?? ((id) => navigation.navigate('ClubProfile', { clubId: id }))}
+            />
+          );
+        }}
       </AppStack.Screen>
 
       {/* Reservation flow */}
@@ -1136,11 +1171,16 @@ function AppNavigator() {
         {({ route, navigation }) => {
           const { clubId, courtId } = route.params || {};
           const [courts, setCourts] = React.useState<ClubCourtPublic[]>([]);
+          const [loadingCourts, setLoadingCourts] = React.useState(true);
           const [clubName, setClubName] = React.useState('');
           const [clubLoc, setClubLoc] = React.useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null });
           React.useEffect(() => {
-            if (!clubId) return;
-            fetchClubCourts(clubId).then(setCourts).catch(() => setCourts([]));
+            if (!clubId) { setLoadingCourts(false); return; }
+            setLoadingCourts(true);
+            fetchClubCourts(clubId)
+              .then(setCourts)
+              .catch(() => setCourts([]))
+              .finally(() => setLoadingCourts(false));
             fetchUserProfile(clubId)
               .then((p) => {
                 setClubName(p.name ?? p.username);
@@ -1152,6 +1192,7 @@ function AppNavigator() {
             <ReserveStep1Screen
               clubName={clubName}
               courts={courts}
+              loading={loadingCourts}
               latitude={clubLoc.lat}
               longitude={clubLoc.lng}
               initialCourtId={courtId}
@@ -1334,11 +1375,13 @@ export default function App() {
       OneSignal.initialize(process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID ?? '');
       OneSignal.Notifications.requestPermission(true);
       OneSignal.Notifications.addEventListener('click', (event: any) => {
-        const data = event.notification.additionalData as { type?: string; gameId?: string };
+        const data = event.notification.additionalData as { type?: string; gameId?: string; fromUserId?: string };
         if (data?.type === 'STREAMING_STARTED' && data?.gameId) {
           navigationRef.current?.navigate('GameDetail', { gameId: data.gameId });
         } else if (data?.type === 'NEW_CHAT_MESSAGE' && data?.gameId) {
           navigationRef.current?.navigate('GameChat', { gameId: data.gameId });
+        } else if (data?.type === 'NEW_DM_MESSAGE' && data?.fromUserId) {
+          navigationRef.current?.navigate('DirectChat', { userId: data.fromUserId });
         }
       });
     } catch (err) {

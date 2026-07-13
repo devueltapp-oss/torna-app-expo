@@ -491,7 +491,7 @@ export function UpcomingGameTile({ game, onDoubleTap }: {
  *   - 200px wide, 1:1 media (square), tight footer with author + caption + counts
  */
 
-export function FeedPost({ post, onDoubleTap }: { post: FeedPostData; onDoubleTap?: () => void }) {
+export function FeedPost({ post, onDoubleTap, fullWidth }: { post: FeedPostData; onDoubleTap?: () => void; fullWidth?: boolean }) {
   const { colors } = useTheme();
   const isHighlight = post.type === 'highlight';
   const mediaBg = post.tone === 'lime' ? colors.accent
@@ -508,6 +508,8 @@ export function FeedPost({ post, onDoubleTap }: { post: FeedPostData; onDoubleTa
 
   const handlePress = () => {
     if (!onDoubleTap || !isHighlight) return;
+    // En el feed (fullWidth) un tap simple abre; en carrusel se mantiene el doble tap.
+    if (fullWidth) { onDoubleTap(); return; }
     const now = Date.now();
     if (now - lastTap.current < 300) {
       if (tapTimer.current) { clearTimeout(tapTimer.current); tapTimer.current = null; }
@@ -517,7 +519,7 @@ export function FeedPost({ post, onDoubleTap }: { post: FeedPostData; onDoubleTa
   };
 
   return (
-    <Pressable onPress={handlePress} style={{ width: 200 }}>
+    <Pressable onPress={handlePress} style={{ width: fullWidth ? '100%' : 200 }}>
     <View style={{
       borderRadius: 14, overflow: 'hidden',
       backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line,

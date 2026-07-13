@@ -15,7 +15,7 @@ interface Props {
   onOpenPlayerProfile?: (id: string) => void;
 }
 
-export function PlayersScreen({ players, onChangeTab, activeTab = 'players', role = 'club', onOpenPlayerProfile }: Props) {
+export function PlayersScreen({ players, onChangeTab, activeTab = 'chats', role = 'club', onOpenPlayerProfile }: Props) {
   const { colors } = useTheme();
   const [q, setQ] = React.useState('');
   const filtered = players.filter(p => !q || `${p.name} ${p.username} ${p.email || ''}`.toLowerCase().includes(q.toLowerCase()));

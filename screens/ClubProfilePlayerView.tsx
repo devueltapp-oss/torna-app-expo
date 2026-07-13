@@ -3,7 +3,7 @@ import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Svg, Rect, Line } from 'react-native-svg';
 import { Video, ResizeMode } from 'expo-av';
-import { ChevronLeft, MoreHorizontal, MapPin, Eye, Play, Camera } from 'lucide-react-native';
+import { ChevronLeft, MoreHorizontal, MapPin, Eye, Play, Camera, MessageCircle } from 'lucide-react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
@@ -15,6 +15,8 @@ interface Props {
   club: ClubPublic;
   onBack?: () => void;
   onToggleFollow?: () => void;
+  /** Abre un chat directo 1-a-1 con este club. Oculto si no se provee. */
+  onMessage?: () => void;
   onReserveCourt?: (courtId: string) => void;
   onOpenLive?: (gameId: string) => void;
   onOpenClip?: (clip: ClipPreview) => void;
@@ -31,7 +33,7 @@ interface Props {
  * avatar, y una sección extra de "Canchas y horarios" para reservar.
  */
 export function ClubProfilePlayerView({
-  club, onBack, onToggleFollow, onReserveCourt, onOpenLive, onOpenClip,
+  club, onBack, onToggleFollow, onMessage, onReserveCourt, onOpenLive, onOpenClip,
   onChangeTab, activeTab = 'home', onOpenFollowers, onOpenFollowing,
 }: Props) {
   const { colors } = useTheme();
@@ -84,6 +86,19 @@ export function ClubProfilePlayerView({
                 {club.isFollowing ? '✓ Siguiendo' : '+ Seguir'}
               </Text>
             </Pressable>
+            {onMessage && (
+              <Pressable
+                onPress={onMessage}
+                accessibilityLabel="Enviar mensaje"
+                style={{
+                  width: 42, height: 42, borderRadius: 10,
+                  alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: 'rgba(255,255,255,0.18)',
+                }}
+              >
+                <MessageCircle size={18} color="#FFFFFF" />
+              </Pressable>
+            )}
             <Pressable onPress={onOpenFollowers} style={{ alignItems: 'flex-end', minWidth: 60 }}>
               <Text style={{ fontSize: 18, fontWeight: '800', color: '#FFFFFF' }}>{club.followers.toLocaleString('es-AR')}</Text>
               <Text style={{ fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.7)', letterSpacing: 0.8 }}>SEGUIDORES</Text>

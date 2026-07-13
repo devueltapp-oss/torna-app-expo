@@ -15,9 +15,11 @@ import type { FollowItem, SearchableCourt } from '../data/types';
 
 interface Props {
   onBack?: () => void;
-  /** Clubs sugeridos (los que seguís). */
+  /** Clubs sugeridos (los que seguís, o clubs al azar si no seguís ninguno). */
   suggestedClubs?: FollowItem[];
   loadingSuggested?: boolean;
+  /** True si `suggestedClubs` son clubs al azar (no seguidos) → cambia el título. */
+  suggestionsAreFallback?: boolean;
   /** Búsqueda real de canchas/clubs por nombre (GET /padel-court/search). */
   onSearchClubs?: (q: string) => Promise<SearchableCourt[]>;
   /** Elegir un club (y opcionalmente una cancha) → arranca el flujo de reserva. */
@@ -33,6 +35,7 @@ export function ReserveClubPickerScreen({
   onBack,
   suggestedClubs = [],
   loadingSuggested = false,
+  suggestionsAreFallback = false,
   onSearchClubs,
   onPickClub,
 }: Props) {
@@ -144,16 +147,21 @@ export function ReserveClubPickerScreen({
           )}
         </View>
 
-        {/* Clubs que seguís */}
+        {/* Clubs que seguís — o clubs sugeridos al azar si no seguís ninguno */}
         <View>
           <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text, marginBottom: 8 }}>
-            Clubs que seguís
+            {suggestionsAreFallback ? 'Clubs sugeridos' : 'Clubs que seguís'}
           </Text>
+          {suggestionsAreFallback && (
+            <Text style={{ fontSize: 12, color: colors.muted2, marginBottom: 8 }}>
+              Todavía no seguís clubs — te mostramos algunos para reservar.
+            </Text>
+          )}
           {loadingSuggested ? (
             <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 8 }} />
           ) : suggestedClubs.length === 0 ? (
             <Text style={{ fontSize: 13, color: colors.muted2, paddingVertical: 8 }}>
-              Todavía no seguís clubs. Buscalos por nombre arriba.
+              No hay clubs disponibles por ahora. Buscalos por nombre arriba.
             </Text>
           ) : (
             <View style={{ gap: 8 }}>

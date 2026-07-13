@@ -5,7 +5,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { Search, Bell } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { SectionHeader } from '../components/ui';
-import { LiveGameTile, FeedPost, LiveGameData, UpcomingGameTile } from '../components/cards';
+import { LiveGameCard, FeedPost, LiveGameData, UpcomingGameTile } from '../components/cards';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import { VideoPreviewModal } from '../components/VideoPreviewModal';
 import { UpcomingMatchSheet } from '../components/UpcomingMatchSheet';
@@ -20,8 +20,6 @@ interface Props {
   greeting?: string;
   liveGames: LiveGameData[];
   upcomingGames?: UpcomingGameData[];
-  /** Partidas abiertas (isOpenForPlayers) a las que el usuario puede postularse. */
-  openGames?: UpcomingGameData[];
   feedPosts?: FeedPostData[];
   onOpenGame?: (id: string) => void;
   onOpenSearch?: () => void;
@@ -54,7 +52,6 @@ export function HomeScreen({
   greeting = 'Maxi',
   liveGames,
   upcomingGames = [],
-  openGames = [],
   feedPosts = [],
   onOpenGame,
   onOpenSearch,
@@ -109,80 +106,71 @@ export function HomeScreen({
           />
         }
       >
-        {/* En vivo · de quienes seguís */}
-        <View style={{ paddingHorizontal: 16 }}>
-          <SectionHeader title="En vivo · de quienes seguís"
-            action={
-              <Pressable onPress={() => onVerMas?.('live')} hitSlop={10}>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.accentText }}>Ver todos</Text>
-              </Pressable>
-            }/>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}>
-          {liveGames.map((g, i) => (
-            <LiveGameTile key={g.id} game={g} onPress={onOpenGame} onDoubleTap={() => onVerMas?.('live', i)} tornaLogo={tornaLogo} isActive={isFocused}/>
-          ))}
-        </ScrollView>
-
-        {/* Próximos · de tus seguidos */}
-        {upcomingGames.length > 0 && (
+        {/* Feed vertical (scroll hacia abajo): transmisiones en vivo + highlights
+            de quienes seguís, como cards a lo ancho. */}
+        {liveGames.length === 0 && feedPosts.length === 0 && upcomingGames.length === 0 ? (
+          <View style={{ alignItems: 'center', paddingHorizontal: 32, paddingVertical: 56, gap: 8 }}>
+            <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text }}>Tu feed está vacío</Text>
+            <Text style={{ fontSize: 13, color: colors.muted2, textAlign: 'center', lineHeight: 19 }}>
+              Seguí a jugadores y clubes para ver acá sus transmisiones en vivo y sus highlights.
+            </Text>
+          </View>
+        ) : (
           <>
-            <View style={{ paddingHorizontal: 16 }}>
-              <SectionHeader title="Próximos · de tus seguidos"
-                action={
-                  <Pressable onPress={() => onVerMas?.('upcoming')} hitSlop={10}>
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.accentText }}>Ver todos</Text>
-                  </Pressable>
-                }/>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}>
-              {upcomingGames.map(g => (
-                <UpcomingGameTile key={g.id} game={g} onDoubleTap={() => setUpcomingSheet(g)} />
-              ))}
-            </ScrollView>
-          </>
-        )}
+            {/* En vivo · de quienes seguís — cards a lo ancho, apiladas */}
+            {liveGames.length > 0 && (
+              <>
+                <View style={{ paddingHorizontal: 16 }}>
+                  <SectionHeader title="En vivo · de quienes seguís" />
+                </View>
+                <View style={{ paddingHorizontal: 16, gap: 12 }}>
+                  {liveGames.map((g) => (
+                    <LiveGameCard key={g.id} game={g} onPress={onOpenGame} tornaLogo={tornaLogo} isActive={isFocused} />
+                  ))}
+                </View>
+              </>
+            )}
 
-        {/* Partidos abiertos · para unirte */}
-        {openGames.length > 0 && (
-          <>
-            <View style={{ paddingHorizontal: 16 }}>
-              <SectionHeader title="Partidos abiertos · para unirte" />
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}>
-              {openGames.map(g => (
-                <UpcomingGameTile key={g.id} game={g} onDoubleTap={() => setUpcomingSheet(g)} />
-              ))}
-            </ScrollView>
-          </>
-        )}
+            {/* Próximos · de tus seguidos — strip horizontal (secundario) */}
+            {upcomingGames.length > 0 && (
+              <>
+                <View style={{ paddingHorizontal: 16 }}>
+                  <SectionHeader title="Próximos · de tus seguidos"
+                    action={
+                      <Pressable onPress={() => onVerMas?.('upcoming')} hitSlop={10}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: colors.accentText }}>Ver todos</Text>
+                      </Pressable>
+                    }/>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}>
+                  {upcomingGames.map(g => (
+                    <UpcomingGameTile key={g.id} game={g} onDoubleTap={() => setUpcomingSheet(g)} />
+                  ))}
+                </ScrollView>
+              </>
+            )}
 
-        {/* Highlights · de tus seguidos */}
-        {feedPosts.length > 0 && (
-          <>
-            <View style={{ paddingHorizontal: 16 }}>
-              <SectionHeader title="Highlights · de tus seguidos"
-                action={
-                  <Pressable onPress={() => onVerMas?.('highlights')} hitSlop={10}>
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.accentText }}>Ver todos</Text>
-                  </Pressable>
-                }/>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}>
-              {feedPosts.map(p => (
-                <FeedPost
-                  key={p.id}
-                  post={p}
-                  onDoubleTap={p.type === 'highlight' && p.videoUrl
-                    ? () => setHighlightModal({ url: p.videoUrl!, title: p.caption ?? 'Highlight', id: p.id })
-                    : undefined}
-                />
-              ))}
-            </ScrollView>
+            {/* Highlights · de tus seguidos — cards a lo ancho, apiladas */}
+            {feedPosts.length > 0 && (
+              <>
+                <View style={{ paddingHorizontal: 16 }}>
+                  <SectionHeader title="Highlights · de tus seguidos" />
+                </View>
+                <View style={{ paddingHorizontal: 16, gap: 12 }}>
+                  {feedPosts.map(p => (
+                    <FeedPost
+                      key={p.id}
+                      post={p}
+                      fullWidth
+                      onDoubleTap={p.type === 'highlight' && p.videoUrl
+                        ? () => setHighlightModal({ url: p.videoUrl!, title: p.caption ?? 'Highlight', id: p.id })
+                        : undefined}
+                    />
+                  ))}
+                </View>
+              </>
+            )}
           </>
         )}
       </ScrollView>

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, MoreHorizontal, MapPin, Eye, Play, Bell } from 'lucide-react-native';
+import { ChevronLeft, MoreHorizontal, MapPin, Eye, Play, Bell, MessageCircle } from 'lucide-react-native';
 import { Svg, Rect, Line } from 'react-native-svg';
 import { Video, ResizeMode } from 'expo-av';
 import { useIsFocused } from '@react-navigation/native';
@@ -16,6 +16,8 @@ interface Props {
   onBack?: () => void;
   onToggleFollow?: () => void;
   onToggleNotify?: () => void;
+  /** Abre un chat directo 1-a-1 con este usuario. Oculto si no se provee. */
+  onMessage?: () => void;
   onOpenLive?: (gameId: string) => void;
   onOpenClip?: (clip: PlayerClip) => void;
   onChangeTab?: (id: TabId) => void;
@@ -34,7 +36,7 @@ interface Props {
  *   GET /players/:id              → PlayerPublic
  *   POST/DELETE /players/:id/follow → { isFollowing }
  */
-export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onToggleNotify, onOpenLive, onOpenClip, onChangeTab, activeTab = 'players', onOpenFollowers, onOpenFollowing }: Props) {
+export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onToggleNotify, onMessage, onOpenLive, onOpenClip, onChangeTab, activeTab = 'home', onOpenFollowers, onOpenFollowing }: Props) {
   const { colors } = useTheme();
   const isFocused = useIsFocused();
   return (
@@ -100,6 +102,19 @@ export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onTogg
                   color={player.notifyOnMatch ? colors.ink : '#FFFFFF'}
                   fill={player.notifyOnMatch ? colors.ink : 'none'}
                 />
+              </Pressable>
+            )}
+            {onMessage && (
+              <Pressable
+                onPress={onMessage}
+                accessibilityLabel="Enviar mensaje"
+                style={{
+                  width: 42, height: 42, borderRadius: 10,
+                  alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: 'rgba(255,255,255,0.18)',
+                }}
+              >
+                <MessageCircle size={18} color="#FFFFFF" />
               </Pressable>
             )}
             <Pressable onPress={onOpenFollowers} style={{ alignItems: 'flex-end', minWidth: 60 }}>
