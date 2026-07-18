@@ -8,22 +8,20 @@ import {
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Search, ChevronRight, MapPin } from 'lucide-react-native';
+import { ChevronLeft, Search, ChevronRight } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { AppHeader, Avatar } from '../components/ui';
-import type { FollowItem, SearchableCourt } from '../data/types';
+import type { FollowItem } from '../data/types';
 
 interface Props {
   onBack?: () => void;
-  /** Clubs sugeridos (los que seguís, o clubs al azar si no seguís ninguno). */
+  /** Clubs que seguís (vacío si no seguís ninguno → se muestra un mensaje). */
   suggestedClubs?: FollowItem[];
   loadingSuggested?: boolean;
-  /** True si `suggestedClubs` son clubs al azar (no seguidos) → cambia el título. */
-  suggestionsAreFallback?: boolean;
-  /** Búsqueda real de canchas/clubs por nombre (GET /padel-court/search). */
-  onSearchClubs?: (q: string) => Promise<SearchableCourt[]>;
-  /** Elegir un club (y opcionalmente una cancha) → arranca el flujo de reserva. */
-  onPickClub?: (clubId: string, courtId?: string) => void;
+  /** Búsqueda de CLUBS por nombre (solo clubs, no canchas). */
+  onSearchClubs?: (q: string) => Promise<FollowItem[]>;
+  /** Elegir un club → arranca el flujo de reserva (canchas → horarios). */
+  onPickClub?: (clubId: string) => void;
 }
 
 /**
@@ -35,31 +33,35 @@ export function ReserveClubPickerScreen({
   onBack,
   suggestedClubs = [],
   loadingSuggested = false,
-  suggestionsAreFallback = false,
   onSearchClubs,
   onPickClub,
 }: Props) {
   const { colors } = useTheme();
   const [query, setQuery] = React.useState('');
-  const [results, setResults] = React.useState<SearchableCourt[]>([]);
+  const [results, setResults] = React.useState<FollowItem[]>([]);
   const [searching, setSearching] = React.useState(false);
 
   React.useEffect(() => {
     const q = query.trim();
     if (q.length < 2 || !onSearchClubs) {
       setResults([]);
+      setSearching(false);
       return;
     }
     let active = true;
     setSearching(true);
+    // En RN el fetch a veces se cuelga sin resolver: sin timeout el spinner
+    // quedaría cargando PARA SIEMPRE. `withTimeout` garantiza que la búsqueda
+    // SIEMPRE cierre (cae a [] → "No se encontraron clubs" si tarda demasiado).
+    const withTimeout = <T,>(p: Promise<T>, ms: number, fb: T): Promise<T> =>
+      Promise.race([p, new Promise<T>((r) => setTimeout(() => r(fb), ms))]);
     const t = setTimeout(async () => {
-      try {
-        const rows = await onSearchClubs(q);
-        if (active) setResults(rows);
-      } catch {
-        if (active) setResults([]);
-      } finally {
-        if (active) setSearching(false);
+      const rows = await withTimeout(
+        onSearchClubs(q).catch(() => [] as FollowItem[]), 6000, [],
+      );
+      if (active) {
+        setResults(rows);
+        setSearching(false);
       }
     }, 350);
     return () => {
@@ -101,7 +103,7 @@ export function ReserveClubPickerScreen({
             <TextInput
               value={query}
               onChangeText={setQuery}
-              placeholder="Nombre del club o cancha"
+              placeholder="Nombre del club"
               placeholderTextColor={colors.muted2}
               style={{ flex: 1, color: colors.text, fontSize: 14 }}
               autoCorrect={false}
@@ -114,13 +116,13 @@ export function ReserveClubPickerScreen({
             <View style={{ marginTop: 10, gap: 8 }}>
               {results.length === 0 && !searching ? (
                 <Text style={{ fontSize: 13, color: colors.muted2, paddingVertical: 8 }}>
-                  Sin resultados.
+                  No se encontraron clubs con ese nombre.
                 </Text>
               ) : (
-                results.map((c) => (
+                results.map((club) => (
                   <Pressable
-                    key={c.id}
-                    onPress={() => onPickClub?.(c.clubId, c.id)}
+                    key={club.id}
+                    onPress={() => onPickClub?.(club.id)}
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',
@@ -132,12 +134,12 @@ export function ReserveClubPickerScreen({
                       paddingHorizontal: 12,
                       paddingVertical: 10,
                     }}>
-                    <MapPin size={18} color={colors.primary} />
+                    <Avatar name={club.name} imageUri={club.profilePicture} size={36} />
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text }}>
-                        {c.name}
+                        {club.name}
                       </Text>
-                      <Text style={{ fontSize: 12, color: colors.muted2 }}>{c.club}</Text>
+                      <Text style={{ fontSize: 12, color: colors.muted2 }}>{club.username}</Text>
                     </View>
                     <ChevronRight size={18} color={colors.muted2} />
                   </Pressable>
@@ -147,21 +149,16 @@ export function ReserveClubPickerScreen({
           )}
         </View>
 
-        {/* Clubs que seguís — o clubs sugeridos al azar si no seguís ninguno */}
+        {/* Clubs que seguís */}
         <View>
           <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text, marginBottom: 8 }}>
-            {suggestionsAreFallback ? 'Clubs sugeridos' : 'Clubs que seguís'}
+            Clubs que seguís
           </Text>
-          {suggestionsAreFallback && (
-            <Text style={{ fontSize: 12, color: colors.muted2, marginBottom: 8 }}>
-              Todavía no seguís clubs — te mostramos algunos para reservar.
-            </Text>
-          )}
           {loadingSuggested ? (
             <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 8 }} />
           ) : suggestedClubs.length === 0 ? (
-            <Text style={{ fontSize: 13, color: colors.muted2, paddingVertical: 8 }}>
-              No hay clubs disponibles por ahora. Buscalos por nombre arriba.
+            <Text style={{ fontSize: 13, color: colors.muted2, paddingVertical: 8, lineHeight: 19 }}>
+              Todavía no seguís ningún club. Buscá uno por nombre arriba para reservar.
             </Text>
           ) : (
             <View style={{ gap: 8 }}>

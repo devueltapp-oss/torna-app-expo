@@ -55,6 +55,7 @@ import * as gamesApi from './api/games';
 import { useGameDetail } from './hooks/useGameDetail';
 import { usePlayers } from './hooks/usePlayers';
 import { useUserProfile } from './hooks/useUserProfile';
+import { useFollowedClubs } from './hooks/useFollowedClubs';
 import { usePartnerSearch } from './hooks/usePartnerSearch';
 import { useMyHighlights } from './hooks/useMyHighlights';
 import { useHighlightVisibility } from './hooks/useHighlightVisibility';
@@ -62,7 +63,7 @@ import { useInbox } from './hooks/useInbox';
 import { searchUsers, searchUsersAndClubs, fetchUserProfile, setFollowNotify, fetchFollowing, followUser, unfollowUser } from './api/users';
 import type { CourtData, PlayerData } from './components/cards';
 import { updateHighlightMeta } from './api/highlights';
-import { fetchClubCourts, fetchCourt, fetchCourtSlots, createReservation, searchCourts, fetchClubs } from './api/clubs';
+import { fetchClubCourts, fetchCourt, fetchCourtSlots, createReservation } from './api/clubs';
 import type { DayOption } from './screens/ReserveStep2Screen';
 import type {
   LibraryItem, LibraryMatch, LibraryHighlight,
@@ -449,10 +450,56 @@ function ClubProfileScreen({ navigation, clubId }: { navigation: any; clubId: st
   );
 }
 
+/* ─────────── Selector de club para reservar (POV player) ─────────── */
+
+/**
+ * Picker de club para iniciar una reserva. **Debe ser un componente propio** (no un
+ * render-prop inline dentro de `<AppStack.Screen>`): cuando los hooks (`useFollowedClubs`)
+ * viven en el callback `children` del Screen, sus `setState` NO re-renderizan el subárbol
+ * → el `loading` quedaba en `true` para siempre (spinner infinito) aunque el fetch
+ * resolviera. Con un componente real (fiber propio) el `setState` re-renderiza normal,
+ * igual que `ClubProfileScreen`/`PlayerProfileScreen`.
+ */
+function ReservePickClubScreen({ navigation }: { navigation: any }) {
+  const { user } = useAuth();
+  // Carga los clubs seguidos con garantía de no quedar en carga infinita
+  // (timeout + catch → []). Ver hooks/useFollowedClubs.ts.
+  const { clubs: suggestedClubs, loading: loadingFollowed } = useFollowedClubs(
+    user?.id,
+    fetchFollowing,
+  );
+  return (
+    <ReserveClubPickerScreen
+      onBack={() => navigation.goBack()}
+      suggestedClubs={suggestedClubs}
+      loadingSuggested={loadingFollowed}
+      // El buscador busca CLUBS (no canchas): solo nombre del club.
+      onSearchClubs={async (q) => {
+        const res = await searchUsersAndClubs(q);
+        return res
+          .filter((u) => u.isClub)
+          .map((u) => ({
+            id: u.id,
+            name: u.name ?? u.username,
+            username: atHandle(u.username),
+            profilePicture: u.profilePicture ?? undefined,
+            isClub: true,
+          }));
+      }}
+      // Elegir un club (buscador o seguidos) → inicia la reserva (canchas → horarios).
+      onPickClub={(clubId) => navigation.navigate('ReserveCourt', { clubId })}
+    />
+  );
+}
+
 function AuthNavigator() {
   const { registerClub } = useAuth();
+  const { colors } = useTheme();
   return (
-    <AuthStack.Navigator screenOptions={{ headerShown: false }} initialRouteName="LoginWithRole">
+    <AuthStack.Navigator
+      screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}
+      initialRouteName="LoginWithRole"
+    >
       <AuthStack.Screen name="LoginWithRole">
         {({ navigation }) => (
           <LoginWithRoleScreen
@@ -978,12 +1025,13 @@ function MainClub({ navigation }: any) {
 
 function AppNavigator() {
   const { user } = useAuth();
+  const { colors } = useTheme();
   // Derive initial route from the authenticated user's role
   const initialRoute: keyof AppStackParamList = user?.isClub ? 'MainClub' : 'MainPlayer';
 
   return (
     <AppStack.Navigator
-      screenOptions={{ headerShown: false }}
+      screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}
       initialRouteName={initialRoute}
     >
       {/* Main tab containers */}
@@ -1084,58 +1132,7 @@ function AppNavigator() {
       </AppStack.Screen>
 
       <AppStack.Screen name="ReservePickClub">
-        {({ navigation }) => {
-          const { user } = useAuth();
-          const [suggestedClubs, setSuggestedClubs] = React.useState<FollowItem[]>([]);
-          const [loadingFollowed, setLoadingFollowed] = React.useState(true);
-          // fallback=true → los clubs mostrados NO son seguidos sino sugeridos al
-          // azar (el usuario no sigue ninguno), para que igual pueda elegir uno.
-          const [fallback, setFallback] = React.useState(false);
-          React.useEffect(() => {
-            if (!user?.id) { setLoadingFollowed(false); return; }
-            let active = true;
-            // En RN el AbortController del fetch no siempre cancela: si una request
-            // cuelga, el spinner quedaría para siempre. `withTimeout` garantiza que
-            // la carga SIEMPRE resuelva (cae a [] si tarda demasiado).
-            const withTimeout = <T,>(p: Promise<T>, ms: number, fb: T): Promise<T> =>
-              Promise.race([p, new Promise<T>((r) => setTimeout(() => r(fb), ms))]);
-            (async () => {
-              try {
-                const following = await withTimeout(
-                  fetchFollowing(user.id).catch(() => [] as FollowItem[]), 8000, [],
-                );
-                const clubs = following.filter((f) => f.isClub);
-                if (!active) return;
-                if (clubs.length > 0) {
-                  setSuggestedClubs(clubs);
-                  setFallback(false);
-                } else {
-                  // Sin clubs seguidos → algunos al azar (barajados, tope 8).
-                  const all = await withTimeout(
-                    fetchClubs().catch(() => [] as FollowItem[]), 8000, [],
-                  );
-                  if (!active) return;
-                  const shuffled = [...all].sort(() => Math.random() - 0.5).slice(0, 8);
-                  setSuggestedClubs(shuffled);
-                  setFallback(true);
-                }
-              } finally {
-                if (active) setLoadingFollowed(false);
-              }
-            })();
-            return () => { active = false; };
-          }, [user?.id]);
-          return (
-            <ReserveClubPickerScreen
-              onBack={() => navigation.goBack()}
-              suggestedClubs={suggestedClubs}
-              loadingSuggested={loadingFollowed}
-              suggestionsAreFallback={fallback}
-              onSearchClubs={searchCourts}
-              onPickClub={(clubId, courtId) => navigation.navigate('ReserveCourt', { clubId, courtId })}
-            />
-          );
-        }}
+        {({ navigation }) => <ReservePickClubScreen navigation={navigation} />}
       </AppStack.Screen>
 
       <AppStack.Screen name="GlobalSearch">
@@ -1176,17 +1173,29 @@ function AppNavigator() {
           const [clubLoc, setClubLoc] = React.useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null });
           React.useEffect(() => {
             if (!clubId) { setLoadingCourts(false); return; }
+            let active = true;
             setLoadingCourts(true);
-            fetchClubCourts(clubId)
-              .then(setCourts)
-              .catch(() => setCourts([]))
-              .finally(() => setLoadingCourts(false));
-            fetchUserProfile(clubId)
-              .then((p) => {
-                setClubName(p.name ?? p.username);
-                setClubLoc({ lat: p.latitude, lng: p.longitude });
-              })
-              .catch(() => {});
+            // En RN el fetch a veces cuelga sin resolver: sin timeout el spinner
+            // quedaría para siempre ("queda cargando"). `withTimeout` garantiza que
+            // la carga SIEMPRE cierre (cae a un fallback si tarda demasiado).
+            const withTimeout = <T,>(p: Promise<T>, ms: number, fb: T): Promise<T> =>
+              Promise.race([p, new Promise<T>((r) => setTimeout(() => r(fb), ms))]);
+            (async () => {
+              const cs = await withTimeout(
+                fetchClubCourts(clubId).catch(() => [] as ClubCourtPublic[]), 6000, [],
+              );
+              const prof = await withTimeout(
+                fetchUserProfile(clubId)
+                  .then((p) => ({ name: p.name ?? p.username, lat: p.latitude, lng: p.longitude }))
+                  .catch(() => null),
+                6000, null,
+              );
+              if (!active) return;
+              setCourts(cs);
+              if (prof) { setClubName(prof.name); setClubLoc({ lat: prof.lat, lng: prof.lng }); }
+              setLoadingCourts(false);
+            })();
+            return () => { active = false; };
           }, [clubId]);
           return (
             <ReserveStep1Screen
@@ -1390,7 +1399,7 @@ export default function App() {
   }, []);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#2d4c75' }}>
       <SafeAreaProvider>
         <ThemeProvider initial="system">
           <ErrorBoundary>

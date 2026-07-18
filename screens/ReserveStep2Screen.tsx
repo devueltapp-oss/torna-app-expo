@@ -7,6 +7,9 @@ import { fonts } from '../theme/tokens';
 import { Button, AppHeader } from '../components/ui';
 import type { Slot, ClubCourtPublic } from '../data/types';
 import { StepIndicator } from './reserveCommon';
+import {
+  MAX_BLOCKS, firstFreeIndex, maxConsecutiveFreeBlocks, combineSlots,
+} from '../lib/reservation';
 
 export interface DayOption { label: string; date: string; dow: string; iso?: string }
 
@@ -41,27 +44,21 @@ export function ReserveStep2Screen({
   court, slots, days = DEFAULT_DAYS, onBack, onChangeCourt, onDayChange, onContinue,
 }: Props) {
   const { colors } = useTheme();
-  const MAX_BLOCKS = 4;
   const [dayIdx, setDayIdx] = React.useState(0);
   const [pickedIdx, setPickedIdx] = React.useState(0);
   const [blocks, setBlocks] = React.useState(1);
   // Al cambiar los slots (nuevo día), seleccionar el primer slot libre.
   React.useEffect(() => {
-    const i = slots.findIndex((s) => s.status === 'free');
-    setPickedIdx(i >= 0 ? i : 0);
+    setPickedIdx(firstFreeIndex(slots));
     setBlocks(1);
   }, [slots]);
   const picked = slots[pickedIdx];
 
-  // Cantidad de bloques libres consecutivos desde el slot elegido (tope 4).
-  const maxBlocks = React.useMemo(() => {
-    let n = 0;
-    for (let i = pickedIdx; i < slots.length && n < MAX_BLOCKS; i++) {
-      if (slots[i]?.status !== 'free') break;
-      n++;
-    }
-    return Math.max(1, n);
-  }, [slots, pickedIdx]);
+  // Cantidad de bloques libres consecutivos desde el slot elegido (tope MAX_BLOCKS).
+  const maxBlocks = React.useMemo(
+    () => maxConsecutiveFreeBlocks(slots, pickedIdx),
+    [slots, pickedIdx],
+  );
 
   // Si cambia el máximo (nuevo slot), acotar la selección.
   React.useEffect(() => {
@@ -70,16 +67,10 @@ export function ReserveStep2Screen({
 
   // Slot combinado (varios bloques): mismo inicio, fin del último bloque,
   // duración y precio × N. Es lo que se envía a la reserva.
-  const combined: Slot | undefined = React.useMemo(() => {
-    if (!picked) return undefined;
-    const last = slots[pickedIdx + blocks - 1] ?? picked;
-    return {
-      ...picked,
-      end: last.end,
-      duration: picked.duration * blocks,
-      price: picked.price * blocks,
-    };
-  }, [picked, slots, pickedIdx, blocks]);
+  const combined: Slot | undefined = React.useMemo(
+    () => combineSlots(slots, pickedIdx, blocks),
+    [slots, pickedIdx, blocks],
+  );
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>

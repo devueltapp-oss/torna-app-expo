@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   Modal, View, Text, Pressable, Platform, ActivityIndicator,
-  FlatList, TextInput, KeyboardAvoidingView,
+  FlatList, TextInput, KeyboardAvoidingView, Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, Maximize2, Minimize2, MessageCircle, Send, Heart } from 'lucide-react-native';
@@ -153,6 +153,8 @@ export function VideoPreviewModal({
 }: VideoPreviewModalProps) {
   const { colors } = useTheme();
   const videoRef = React.useRef<Video>(null);
+  // Ancho medido de la barra de progreso, para traducir un tap (locationX) → fracción.
+  const seekBarWidth = React.useRef(0);
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [isBuffering, setIsBuffering] = React.useState(false);
   const [positionSec, setPositionSec] = React.useState(0);
@@ -170,8 +172,17 @@ export function VideoPreviewModal({
   // comentarios sobre el video. `showCommentsPanel` abre ese panel en modo expandido.
   const [expanded, setExpanded] = React.useState(false);
   const [showCommentsPanel, setShowCommentsPanel] = React.useState(false);
+  // Teclado abierto → en vista normal se oculta el video y los comentarios ocupan
+  // toda la pantalla, para escribir/leer sin que el player apriete la lista.
+  const [kbVisible, setKbVisible] = React.useState(false);
 
   const threads = React.useMemo(() => buildThreads(comments), [comments]);
+
+  React.useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKbVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKbVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   React.useEffect(() => {
     if (visible) {
@@ -185,6 +196,7 @@ export function VideoPreviewModal({
       setReplyingTo(null);
       setExpanded(false);
       setShowCommentsPanel(false);
+      setKbVisible(false);
       // Comentarios + likes + descripción reales del highlight (si hay highlightId).
       if (highlightId && showComments) {
         let cancelled = false;
@@ -240,6 +252,16 @@ export function VideoPreviewModal({
     else videoRef.current?.playAsync();
   }
 
+  /** Salta a una posición del video (0–1 del total) tras tocar la barra de progreso. */
+  async function seekToFraction(frac: number) {
+    if (totalSec <= 0) return;
+    const clamped = Math.max(0, Math.min(1, frac));
+    setPositionSec(clamped * totalSec); // feedback inmediato de la UI
+    try {
+      await videoRef.current?.setPositionAsync(clamped * totalSec * 1000);
+    } catch { /* video aún no cargado → ignorar */ }
+  }
+
   async function sendComment() {
     const text = commentText.trim();
     if (!text || sending || !highlightId) return;
@@ -275,7 +297,11 @@ export function VideoPreviewModal({
   /** Barra de like + contador, lista de comentarios (threaded) y composer. Reutilizable
    *  tanto en la vista normal (bajo el video) como en el panel de pantalla completa. */
   const renderCommentSection = () => (
-    <>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+    >
       {/* Like + contador de comentarios */}
       <View style={{
         flexDirection: 'row', alignItems: 'center', gap: 16,
@@ -343,7 +369,7 @@ export function VideoPreviewModal({
       />
 
       {/* Input */}
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <>
         {/* Chip "Respondiendo a X" cuando se responde en un thread */}
         {replyingTo && (
           <View style={{
@@ -372,9 +398,10 @@ export function VideoPreviewModal({
                 : 'Escribe un comentario...'
             }
             placeholderTextColor={colors.muted2}
-            editable={!!highlightId && !sending}
+            editable={!!highlightId}
             returnKeyType="send"
             onSubmitEditing={sendComment}
+            blurOnSubmit={false}
             style={{
               flex: 1,
               backgroundColor: colors.surface,
@@ -398,8 +425,8 @@ export function VideoPreviewModal({
             <Send size={18} color={commentText.trim() && !sending ? colors.ink : colors.muted2}/>
           </Pressable>
         </View>
-      </KeyboardAvoidingView>
-    </>
+      </>
+    </KeyboardAvoidingView>
   );
 
   return (
@@ -414,8 +441,8 @@ export function VideoPreviewModal({
         edges={expanded ? [] : ['top', 'bottom']}
       >
 
-        {/* Header (oculto en pantalla completa) */}
-        {!expanded && (
+        {/* Header (oculto en pantalla completa y con el teclado abierto) */}
+        {!expanded && !kbVisible && (
           <View style={{
             flexDirection: 'row', alignItems: 'center',
             paddingHorizontal: 16, paddingVertical: 12, gap: 12,
@@ -437,7 +464,10 @@ export function VideoPreviewModal({
           </View>
         )}
 
-        {/* Contenedor de video: 16:9 normal, pantalla completa cuando expanded */}
+        {/* Contenedor de video: 16:9 normal, pantalla completa cuando expanded.
+            Con el teclado abierto en vista normal se oculta → los comentarios
+            ocupan toda la pantalla para escribir/leer cómodo. */}
+        {(expanded || !kbVisible) && (
         <View style={expanded
           ? { flex: 1, backgroundColor: '#000000' }
           : { backgroundColor: '#000000', aspectRatio: 16 / 9 }}>
@@ -521,23 +551,30 @@ export function VideoPreviewModal({
             </>
           )}
         </View>
+        )}
 
         {/* Chrome normal (oculto en pantalla completa) */}
         {!expanded && (
           <>
-            {/* Controles */}
+            {/* Controles (ocultos con el teclado abierto) */}
+            {!kbVisible && (
             <View style={{
               paddingHorizontal: 16, paddingTop: 14,
               paddingBottom: showComments ? 10 : 24,
               gap: 12,
             }}>
-              {/* Barra de progreso */}
-              <View style={{ height: 4, backgroundColor: colors.line, borderRadius: 2 }}>
+              {/* Barra de progreso (tap para adelantar/retroceder) */}
+              <Pressable
+                onLayout={(e) => { seekBarWidth.current = e.nativeEvent.layout.width; }}
+                onPress={(e) => seekToFraction(e.nativeEvent.locationX / (seekBarWidth.current || 1))}
+                hitSlop={{ top: 14, bottom: 14 }}
+                style={{ height: 4, backgroundColor: colors.line, borderRadius: 2, justifyContent: 'center' }}
+              >
                 <View style={{
                   width: `${pct * 100}%`, height: '100%',
                   backgroundColor: colors.accent, borderRadius: 2,
                 }}/>
-              </View>
+              </Pressable>
 
               {/* Fila de controles */}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -598,11 +635,12 @@ export function VideoPreviewModal({
                 </Pressable>
               </View>
             </View>
+            )}
 
-            {/* Descripción del highlight (si tiene) */}
-            {renderDescription()}
+            {/* Descripción del highlight (oculta con el teclado abierto) */}
+            {!kbVisible && renderDescription()}
 
-            {/* ── Sección de comentarios ── */}
+            {/* ── Sección de comentarios (ocupa toda la pantalla con el teclado) ── */}
             {showComments && renderCommentSection()}
           </>
         )}

@@ -779,6 +779,56 @@ contenido. La búsqueda de gente/clubs vive en el ícono de búsqueda del header
 El componente NO es `@react-navigation/bottom-tabs` — es estado local en
 `MainPlayer` / `MainClub`. Esto permite layouts custom por tab.
 
+### Sin destellos blancos en transiciones
+
+Los navigators son **`native-stack`** (`@react-navigation/native-stack`). Todo
+`native-stack` Navigator DEBE declarar su fondo en `screenOptions`, si no se ve
+un **destello blanco** de la ventana nativa entre escenas durante la animación:
+
+```tsx
+const { colors } = useTheme();
+<AppStack.Navigator
+  screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}
+>
+```
+
+- ⚠️ En native-stack la prop es **`contentStyle`**, NO `cardStyle` (esa es del
+  stack JS `@react-navigation/stack` y acá no hace nada).
+- El `background`/`card` del `theme` del `NavigationContainer` (`navTheme` en
+  `Root`) cubre el root, pero **no** el contenedor de escena en plena animación:
+  el `contentStyle` es imprescindible.
+- El root `GestureHandlerRootView` (`App.tsx`) lleva `backgroundColor: '#2d4c75'`
+  (color de marca = splash) para que no corte a blanco entre splash y primer
+  render.
+- Cada pantalla sigue pintando `colors.bg` en su `SafeAreaView` — eso es el
+  fondo real; `contentStyle` sólo cubre los frames de transición.
+
+### ⚠️ No llames hooks con estado dentro del render-prop `children` de un `Screen`
+
+Los `<AppStack.Screen>` aceptan un callback `children` (`{({ navigation }) => …}`).
+**No pongas ahí hooks con `setState`** (`useFollowedClubs`, cargas async, etc.): React
+Navigation no propaga los `setState` de ese callback al subárbol, así que la pantalla
+**nunca se re-renderiza** cuando el estado cambia. Síntoma real (bug del picker de
+reserva "Clubs que seguís"): el fetch resolvía (`loading=false`, 5 clubs) pero la UI
+quedaba con el spinner **para siempre** porque el render no se actualizaba.
+
+**Regla**: si un screen necesita hooks/estado, hacelo un **componente propio** (fiber
+propio → `setState` re-renderiza normal) y renderízalo desde el callback:
+
+```tsx
+function ReservePickClubScreen({ navigation }: { navigation: any }) {
+  const { clubs, loading } = useFollowedClubs(user?.id, fetchFollowing); // OK: fiber propio
+  return <ReserveClubPickerScreen suggestedClubs={clubs} loadingSuggested={loading} … />;
+}
+// en el navigator:
+<AppStack.Screen name="ReservePickClub">
+  {({ navigation }) => <ReservePickClubScreen navigation={navigation} />}
+</AppStack.Screen>
+```
+
+Es el mismo patrón que ya usan `ClubProfileScreen` y `PlayerProfileScreen`. El callback
+`children` debe limitarse a leer `route.params`/`navigation` y renderizar un componente.
+
 ---
 
 ## 🚦 Convenciones al hacer cambios
