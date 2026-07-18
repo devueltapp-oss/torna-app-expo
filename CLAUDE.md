@@ -829,6 +829,12 @@ function ReservePickClubScreen({ navigation }: { navigation: any }) {
 Es el mismo patrón que ya usan `ClubProfileScreen` y `PlayerProfileScreen`. El callback
 `children` debe limitarse a leer `route.params`/`navigation` y renderizar un componente.
 
+> **Todo el flujo de reserva sigue esta regla**: `ReservePickClubScreen` (club),
+> `ReserveCourtScreen` (canchas), `ReserveTimeScreen` (día + slots/horarios) y
+> `ReserveInviteScreen` (rivales) son componentes propios. El mismo bug hacía que **las
+> canchas y los horarios no aparecieran** (el fetch resolvía pero el `setState` no
+> re-renderizaba). Si sumás un paso al flujo, hacelo componente, no render-prop inline.
+
 ---
 
 ## 🚦 Convenciones al hacer cambios

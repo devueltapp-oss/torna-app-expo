@@ -492,6 +492,149 @@ function ReservePickClubScreen({ navigation }: { navigation: any }) {
   );
 }
 
+/* ─────────── Reserva paso 1: elegir cancha (POV player) ─────────── */
+
+/**
+ * Componente propio (NO render-prop inline): igual que ReservePickClubScreen, los
+ * `setState` de un hook dentro del callback `children` de un `<Screen>` no re-renderizan
+ * el subárbol (React Navigation memoiza el screen) → la lista de canchas quedaba en
+ * spinner infinito. Con fiber propio, `setCourts`/`setLoadingCourts` re-renderizan normal.
+ */
+function ReserveCourtScreen({ route, navigation }: { route: any; navigation: any }) {
+  const { clubId, courtId } = route.params || {};
+  const [courts, setCourts] = React.useState<ClubCourtPublic[]>([]);
+  const [loadingCourts, setLoadingCourts] = React.useState(true);
+  const [clubName, setClubName] = React.useState('');
+  const [clubLoc, setClubLoc] = React.useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null });
+  React.useEffect(() => {
+    if (!clubId) { setLoadingCourts(false); return; }
+    let active = true;
+    setLoadingCourts(true);
+    // En RN el fetch a veces cuelga sin resolver: sin timeout el spinner quedaría para
+    // siempre. `withTimeout` garantiza que la carga SIEMPRE cierre.
+    const withTimeout = <T,>(p: Promise<T>, ms: number, fb: T): Promise<T> =>
+      Promise.race([p, new Promise<T>((r) => setTimeout(() => r(fb), ms))]);
+    (async () => {
+      const cs = await withTimeout(
+        fetchClubCourts(clubId).catch(() => [] as ClubCourtPublic[]), 6000, [],
+      );
+      const prof = await withTimeout(
+        fetchUserProfile(clubId)
+          .then((p) => ({ name: p.name ?? p.username, lat: p.latitude, lng: p.longitude }))
+          .catch(() => null),
+        6000, null,
+      );
+      if (!active) return;
+      setCourts(cs);
+      if (prof) { setClubName(prof.name); setClubLoc({ lat: prof.lat, lng: prof.lng }); }
+      setLoadingCourts(false);
+    })();
+    return () => { active = false; };
+  }, [clubId]);
+  return (
+    <ReserveStep1Screen
+      clubName={clubName}
+      courts={courts}
+      loading={loadingCourts}
+      latitude={clubLoc.lat}
+      longitude={clubLoc.lng}
+      initialCourtId={courtId}
+      onBack={() => navigation.goBack()}
+      onContinue={(id) => navigation.navigate('ReserveTime', { courtId: id })}
+    />
+  );
+}
+
+/* ─────────── Reserva paso 2: día + slots (horarios) (POV player) ─────────── */
+
+/**
+ * Componente propio (NO render-prop inline): mismo motivo que ReserveCourtScreen. Antes,
+ * `setSlots`/`setCourt` dentro del `children` del `<Screen>` no re-renderizaban → los
+ * **horarios (slots) no aparecían** aunque `GET /padel-court/:id/slots?date=` los trajera.
+ */
+function ReserveTimeScreen({ route, navigation }: { route: any; navigation: any }) {
+  const { courtId } = route.params || {};
+  const days = React.useMemo(() => buildDays(6), []);
+  const [court, setCourt] = React.useState<ClubCourtPublic>(() => emptyCourt(courtId ?? ''));
+  const [slots, setSlots] = React.useState<Slot[]>([]);
+  React.useEffect(() => {
+    if (courtId) fetchCourt(courtId).then(setCourt).catch(() => {});
+  }, [courtId]);
+  const loadSlots = React.useCallback((iso?: string) => {
+    if (!courtId || !iso) { setSlots([]); return; }
+    fetchCourtSlots(courtId, iso).then(setSlots).catch(() => setSlots([]));
+  }, [courtId]);
+  React.useEffect(() => { loadSlots(days[0].iso); }, [loadSlots, days]);
+  return (
+    <ReserveStep2Screen
+      court={court}
+      slots={slots}
+      days={days}
+      onBack={() => navigation.goBack()}
+      onChangeCourt={() => navigation.goBack()}
+      onDayChange={(d) => loadSlots(d.iso)}
+      onContinue={(slot, day) => navigation.navigate('ReserveInvite', {
+        courtId: courtId ?? '',
+        courtLabel: `${court.name} · ${court.surface}`,
+        date: day.iso ?? '',
+        slotStart: slot.start,
+        slotEnd: slot.end,
+        durationMinutes: slot.duration,
+      })}
+    />
+  );
+}
+
+/* ─────────── Reserva paso 3: rivales + confirmar (POV player) ─────────── */
+
+/** Componente propio: mantiene estable el ref `submitting` (guarda anti-doble-submit). */
+function ReserveInviteScreen({ route, navigation }: { route: any; navigation: any }) {
+  const { courtId, courtLabel, date, slotStart, slotEnd, durationMinutes } = route.params || ({} as any);
+  const submitting = React.useRef(false);
+  return (
+    <ReserveStep3Screen
+      onSearchPlayers={async (q): Promise<{ id: string; name: string; username: string }[]> => {
+        const res = await searchUsers(q);
+        return res.map((u) => ({ id: u.id, name: u.name ?? u.username, username: atHandle(u.username) }));
+      }}
+      summary={{
+        title: courtLabel || 'Cancha',
+        subtitle: `${date} · ${slotStart}–${slotEnd} · ${durationMinutes} min`,
+        priceLabel: 'Pago en el club',
+      }}
+      onBack={() => navigation.goBack()}
+      onConfirm={async (payload) => {
+        if (submitting.current) return;
+        submitting.current = true;
+        try {
+          const opponents = (payload.opponents ?? []).filter((x): x is string => !!x);
+          const created = await createReservation({
+            courtId,
+            date,
+            slotStart,
+            durationMinutes,
+            mode: payload.mode,
+            partnerUserId: payload.partnerUserId,
+            opponentUserIds: opponents,
+          });
+          navigation.replace('ReserveOk', {
+            reservationId: created.id,
+            courtLabel: courtLabel || '',
+            whenLabel: `${date} · ${slotStart}–${slotEnd}`,
+          });
+        } catch (e) {
+          Alert.alert(
+            'No se pudo crear la reserva',
+            e instanceof Error ? e.message : 'Intentá de nuevo.',
+          );
+        } finally {
+          submitting.current = false;
+        }
+      }}
+    />
+  );
+}
+
 function AuthNavigator() {
   const { registerClub } = useAuth();
   const { colors } = useTheme();
@@ -1165,135 +1308,15 @@ function AppNavigator() {
 
       {/* Reservation flow */}
       <AppStack.Screen name="ReserveCourt">
-        {({ route, navigation }) => {
-          const { clubId, courtId } = route.params || {};
-          const [courts, setCourts] = React.useState<ClubCourtPublic[]>([]);
-          const [loadingCourts, setLoadingCourts] = React.useState(true);
-          const [clubName, setClubName] = React.useState('');
-          const [clubLoc, setClubLoc] = React.useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null });
-          React.useEffect(() => {
-            if (!clubId) { setLoadingCourts(false); return; }
-            let active = true;
-            setLoadingCourts(true);
-            // En RN el fetch a veces cuelga sin resolver: sin timeout el spinner
-            // quedaría para siempre ("queda cargando"). `withTimeout` garantiza que
-            // la carga SIEMPRE cierre (cae a un fallback si tarda demasiado).
-            const withTimeout = <T,>(p: Promise<T>, ms: number, fb: T): Promise<T> =>
-              Promise.race([p, new Promise<T>((r) => setTimeout(() => r(fb), ms))]);
-            (async () => {
-              const cs = await withTimeout(
-                fetchClubCourts(clubId).catch(() => [] as ClubCourtPublic[]), 6000, [],
-              );
-              const prof = await withTimeout(
-                fetchUserProfile(clubId)
-                  .then((p) => ({ name: p.name ?? p.username, lat: p.latitude, lng: p.longitude }))
-                  .catch(() => null),
-                6000, null,
-              );
-              if (!active) return;
-              setCourts(cs);
-              if (prof) { setClubName(prof.name); setClubLoc({ lat: prof.lat, lng: prof.lng }); }
-              setLoadingCourts(false);
-            })();
-            return () => { active = false; };
-          }, [clubId]);
-          return (
-            <ReserveStep1Screen
-              clubName={clubName}
-              courts={courts}
-              loading={loadingCourts}
-              latitude={clubLoc.lat}
-              longitude={clubLoc.lng}
-              initialCourtId={courtId}
-              onBack={() => navigation.goBack()}
-              onContinue={(id) => navigation.navigate('ReserveTime', { courtId: id })}
-            />
-          );
-        }}
+        {({ route, navigation }) => <ReserveCourtScreen route={route} navigation={navigation} />}
       </AppStack.Screen>
 
       <AppStack.Screen name="ReserveTime">
-        {({ route, navigation }) => {
-          const { courtId } = route.params || {};
-          const days = React.useMemo(() => buildDays(6), []);
-          const [court, setCourt] = React.useState<ClubCourtPublic>(() => emptyCourt(courtId ?? ''));
-          const [slots, setSlots] = React.useState<Slot[]>([]);
-          React.useEffect(() => {
-            if (courtId) fetchCourt(courtId).then(setCourt).catch(() => {});
-          }, [courtId]);
-          const loadSlots = React.useCallback((iso?: string) => {
-            if (!courtId || !iso) { setSlots([]); return; }
-            fetchCourtSlots(courtId, iso).then(setSlots).catch(() => setSlots([]));
-          }, [courtId]);
-          React.useEffect(() => { loadSlots(days[0].iso); }, [loadSlots, days]);
-          return (
-            <ReserveStep2Screen
-              court={court}
-              slots={slots}
-              days={days}
-              onBack={() => navigation.goBack()}
-              onChangeCourt={() => navigation.goBack()}
-              onDayChange={(d) => loadSlots(d.iso)}
-              onContinue={(slot, day) => navigation.navigate('ReserveInvite', {
-                courtId: courtId ?? '',
-                courtLabel: `${court.name} · ${court.surface}`,
-                date: day.iso ?? '',
-                slotStart: slot.start,
-                slotEnd: slot.end,
-                durationMinutes: slot.duration,
-              })}
-            />
-          );
-        }}
+        {({ route, navigation }) => <ReserveTimeScreen route={route} navigation={navigation} />}
       </AppStack.Screen>
 
       <AppStack.Screen name="ReserveInvite">
-        {({ route, navigation }) => {
-          const { courtId, courtLabel, date, slotStart, slotEnd, durationMinutes } = route.params || ({} as any);
-          const submitting = React.useRef(false);
-          return (
-            <ReserveStep3Screen
-              onSearchPlayers={async (q): Promise<{ id: string; name: string; username: string }[]> => {
-                const res = await searchUsers(q);
-                return res.map((u) => ({ id: u.id, name: u.name ?? u.username, username: atHandle(u.username) }));
-              }}
-              summary={{
-                title: courtLabel || 'Cancha',
-                subtitle: `${date} · ${slotStart}–${slotEnd} · ${durationMinutes} min`,
-                priceLabel: 'Pago en el club',
-              }}
-              onBack={() => navigation.goBack()}
-              onConfirm={async (payload) => {
-                if (submitting.current) return;
-                submitting.current = true;
-                try {
-                  const opponents = (payload.opponents ?? []).filter((x): x is string => !!x);
-                  const created = await createReservation({
-                    courtId,
-                    date,
-                    slotStart,
-                    durationMinutes,
-                    mode: payload.mode,
-                    partnerUserId: payload.partnerUserId,
-                    opponentUserIds: opponents,
-                  });
-                  navigation.replace('ReserveOk', {
-                    reservationId: created.id,
-                    courtLabel: courtLabel || '',
-                    whenLabel: `${date} · ${slotStart}–${slotEnd}`,
-                  });
-                } catch (e) {
-                  Alert.alert(
-                    'No se pudo crear la reserva',
-                    e instanceof Error ? e.message : 'Intentá de nuevo.',
-                  );
-                } finally {
-                  submitting.current = false;
-                }
-              }}
-            />
-          );
-        }}
+        {({ route, navigation }) => <ReserveInviteScreen route={route} navigation={navigation} />}
       </AppStack.Screen>
 
       <AppStack.Screen name="ReserveOk">
