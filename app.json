@@ -34,8 +34,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "io.torna",
+      "buildNumber": "2",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "NSMicrophoneUsageDescription": "Torna necesita el micrófono para reproducir audio de los partidos en vivo.",
         "NSPhotoLibraryUsageDescription": "Torna accede a tu galería para subir fotos y videos.",
         "NSPhotoLibraryAddUsageDescription": "Torna guarda clips en tu galería."
@@ -76,6 +78,23 @@
     },
     "extra": {
       "eas": {
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "targetName": "OneSignalNotificationServiceExtension",
+                  "bundleIdentifier": "io.torna.OneSignalNotificationServiceExtension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.io.torna.onesignal"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
         "projectId": "6a3a7eab-f27e-4225-989f-4331a6fc578e"
       }
     }
