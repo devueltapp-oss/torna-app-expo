@@ -210,9 +210,14 @@ export interface GameComment {
   createdAt: string;
 }
 
-/** Comentarios de un partido (GET /game/:id/comments), más antiguos primero. */
-export function fetchGameComments(gameId: string): Promise<GameComment[]> {
-  return authedGet<GameComment[]>(`/game/${encodeURIComponent(gameId)}/comments`);
+/**
+ * Comentarios de un partido (GET /game/:id/comments), más antiguos primero.
+ * `since` (ISO) trae solo los posteriores — lo usa el poll incremental de
+ * `useGameComments`.
+ */
+export function fetchGameComments(gameId: string, since?: string): Promise<GameComment[]> {
+  const qs = since ? `?since=${encodeURIComponent(since)}` : '';
+  return authedGet<GameComment[]>(`/game/${encodeURIComponent(gameId)}/comments${qs}`);
 }
 
 /** Comenta un partido (POST /game/:id/comments) y devuelve el comentario creado. */

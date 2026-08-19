@@ -1,0 +1,209 @@
+/**
+ * GameCommentsPanel — hilo de comentarios PÚBLICOS del stream de una partida.
+ *
+ * Presentacional puro: recibe los datos de `useGameComments` por props. Se usa en
+ * dos contextos con la misma instancia de datos:
+ *  - `variant="sheet"`   → dentro de un <Modal> en portrait (colores del tema).
+ *  - `variant="overlay"` → superpuesto sobre el video en pantalla completa
+ *                          landscape (fondo translúcido oscuro, texto blanco).
+ *
+ * ⚠️ Estos comentarios NO son los del highlight (`HighlightComment`, con threads)
+ * ni el chat privado de la partida (`GameChatMessage`). Son `GameComment`: hilo
+ * plano y público del stream.
+ */
+import React from 'react';
+import {
+  View, Text, FlatList, Pressable, TextInput,
+  KeyboardAvoidingView, Platform, ActivityIndicator,
+} from 'react-native';
+import { X, Send } from 'lucide-react-native';
+import { useTheme } from '../theme';
+import { fonts } from '../theme/tokens';
+import type { GameComment } from '../api/games';
+
+export interface GameCommentsPanelProps {
+  comments: GameComment[];
+  loading: boolean;
+  sending: boolean;
+  /** Devuelve true si se persistió; si es false el texto vuelve al input. */
+  onSend: (text: string) => Promise<boolean>;
+  onClose?: () => void;
+  variant?: 'sheet' | 'overlay';
+  title?: string;
+}
+
+/** ISO → etiqueta corta relativa ("Ahora", "5m", "3h", "2d", o fecha). */
+export function relTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const min = Math.floor(Math.max(0, Date.now() - then) / 60000);
+  if (min < 1) return 'Ahora';
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d`;
+  return new Date(then).toLocaleDateString('es', { day: 'numeric', month: 'short' });
+}
+
+export function GameCommentsPanel({
+  comments, loading, sending, onSend, onClose,
+  variant = 'sheet',
+  title = 'Comentarios',
+}: GameCommentsPanelProps) {
+  const { colors } = useTheme();
+  const [text, setText] = React.useState('');
+  const listRef = React.useRef<FlatList<GameComment>>(null);
+  const overlay = variant === 'overlay';
+
+  // Paleta: en overlay el panel flota sobre el video, así que va en oscuro fijo.
+  const C = overlay
+    ? {
+        bg: 'rgba(15,30,71,0.92)',
+        text: '#FFFFFF',
+        muted: 'rgba(255,255,255,0.6)',
+        line: 'rgba(255,255,255,0.14)',
+        field: 'rgba(255,255,255,0.10)',
+        avatarBg: 'rgba(255,255,255,0.14)',
+        avatarFg: colors.accent,
+      }
+    : {
+        bg: colors.bg,
+        text: colors.text,
+        muted: colors.muted2,
+        line: colors.line,
+        field: colors.surface,
+        avatarBg: colors.ink,
+        avatarFg: colors.accent,
+      };
+
+  // Auto-scroll al final cuando entra un comentario nuevo (es un hilo tipo chat).
+  React.useEffect(() => {
+    if (comments.length === 0) return;
+    const t = setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
+    return () => clearTimeout(t);
+  }, [comments.length]);
+
+  async function submit() {
+    const value = text.trim();
+    if (!value || sending) return;
+    setText('');
+    const ok = await onSend(value);
+    if (!ok) setText(value); // restaurar si falló, para no perderlo
+  }
+
+  const canSend = !!text.trim() && !sending;
+
+  return (
+    <View style={{ flex: 1, backgroundColor: C.bg }}>
+      {/* Header */}
+      <View style={{
+        flexDirection: 'row', alignItems: 'center',
+        paddingHorizontal: 16, paddingVertical: overlay ? 10 : 14,
+        borderBottomWidth: 1, borderBottomColor: C.line,
+      }}>
+        <Text style={{ flex: 1, color: C.text, fontFamily: fonts.bold, fontSize: overlay ? 14 : 16, letterSpacing: -0.2 }}>
+          {title}{comments.length > 0 ? ` · ${comments.length}` : ''}
+        </Text>
+        {onClose && (
+          <Pressable onPress={onClose} hitSlop={12}>
+            <X size={overlay ? 18 : 20} color={C.text} />
+          </Pressable>
+        )}
+      </View>
+
+      {/* Lista */}
+      {loading && comments.length === 0 ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={colors.accent} />
+        </View>
+      ) : (
+        <FlatList
+          ref={listRef}
+          data={comments}
+          keyExtractor={(c) => c.id}
+          contentContainerStyle={{ padding: 16, gap: overlay ? 12 : 20, flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <Text style={{ color: C.muted, fontSize: 13, paddingTop: 16, textAlign: 'center', fontFamily: fonts.regular }}>
+              Sé el primero en comentar.
+            </Text>
+          }
+          renderItem={({ item }) => {
+            const who = item.name || item.username || 'Anónimo';
+            const size = overlay ? 28 : 34;
+            return (
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <View style={{
+                  width: size, height: size, borderRadius: size / 2,
+                  backgroundColor: C.avatarBg,
+                  alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                }}>
+                  <Text style={{ color: C.avatarFg, fontFamily: fonts.bold, fontSize: overlay ? 11 : 13 }}>
+                    {who.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={{ color: C.text, fontFamily: fonts.bold, fontSize: overlay ? 12 : 13 }} numberOfLines={1}>
+                      {who}
+                    </Text>
+                    <Text style={{ color: C.muted, fontSize: overlay ? 10 : 11, fontFamily: fonts.regular }}>
+                      {relTime(item.createdAt)}
+                    </Text>
+                  </View>
+                  <Text style={{ color: C.text, fontFamily: fonts.regular, fontSize: overlay ? 13 : 14, lineHeight: overlay ? 18 : 20 }}>
+                    {item.comment}
+                  </Text>
+                </View>
+              </View>
+            );
+          }}
+        />
+      )}
+
+      {/* Input */}
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', gap: 10,
+          paddingHorizontal: 16, paddingVertical: overlay ? 8 : 12,
+          borderTopWidth: 1, borderTopColor: C.line,
+        }}>
+          <TextInput
+            value={text}
+            onChangeText={setText}
+            placeholder="Escribe un comentario..."
+            placeholderTextColor={C.muted}
+            returnKeyType="send"
+            editable={!sending}
+            maxLength={500}
+            onSubmitEditing={submit}
+            style={{
+              flex: 1,
+              backgroundColor: C.field,
+              borderRadius: 12,
+              paddingHorizontal: 14,
+              paddingVertical: overlay ? 8 : 10,
+              color: C.text,
+              fontFamily: fonts.regular,
+              fontSize: overlay ? 13 : 14,
+              borderWidth: 1, borderColor: C.line,
+            }}
+          />
+          <Pressable
+            onPress={submit}
+            disabled={!canSend}
+            style={{
+              width: overlay ? 36 : 42, height: overlay ? 36 : 42, borderRadius: 12,
+              backgroundColor: canSend ? colors.accent : C.line,
+              alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Send size={overlay ? 16 : 18} color={canSend ? colors.ink : C.muted} />
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
+    </View>
+  );
+}

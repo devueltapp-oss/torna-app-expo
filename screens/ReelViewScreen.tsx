@@ -1,16 +1,18 @@
 import React from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Eye, Heart, MessageCircle, Maximize2, X, Send } from 'lucide-react-native';
+import { ChevronLeft, Eye, Heart, MessageCircle, Maximize2 } from 'lucide-react-native';
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { StatusBadge, AvatarStack } from '../components/ui';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
+import { GameCommentsPanel } from '../components/GameCommentsPanel';
+import { useGameComments } from '../hooks/useGameComments';
+import { useAuth } from '../contexts/AuthContext';
 import type { LiveGameData } from '../components/cards';
 import type { UpcomingGameData } from './HomeScreen';
 import type { FeedPost } from '../data/types';
-import { fetchGameComments, addGameComment, type GameComment } from '../api/games';
 
 export type ReelSection = 'live' | 'upcoming' | 'highlights';
 
@@ -45,27 +47,6 @@ const TONE_FG: Record<string, string> = {
 
 /* ─── Live reel item ─── */
 
-/** Fila de comentario ya mapeada para render. */
-interface CommentRow { id: string; user: string; text: string; time: string; }
-
-/** ISO → etiqueta corta relativa ("Ahora", "5m", "3h", "2d", o fecha). */
-function relTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return '';
-  const min = Math.floor(Math.max(0, Date.now() - then) / 60000);
-  if (min < 1) return 'Ahora';
-  if (min < 60) return `${min}m`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `${h}h`;
-  const d = Math.floor(h / 24);
-  if (d < 7) return `${d}d`;
-  return new Date(then).toLocaleDateString('es', { day: 'numeric', month: 'short' });
-}
-
-function mapGameComment(c: GameComment): CommentRow {
-  return { id: c.id, user: c.name ?? c.username, text: c.comment, time: relTime(c.createdAt) };
-}
-
 function LiveReelItem({
   game,
   height,
@@ -79,20 +60,19 @@ function LiveReelItem({
   const videoRef = React.useRef<Video>(null);
   const [isBuffering, setIsBuffering] = React.useState(true);
   const [showComments, setShowComments] = React.useState(false);
-  const [commentText, setCommentText] = React.useState('');
-  const [comments, setComments] = React.useState<CommentRow[]>([]);
-  const [sending, setSending] = React.useState(false);
   const lastTapRef = React.useRef<number>(0);
 
-  // Comentarios reales del partido: se cargan al abrir el modal (GET /game/:id/comments).
-  React.useEffect(() => {
-    if (!showComments) return;
-    let cancelled = false;
-    fetchGameComments(game.id)
-      .then((rows) => { if (!cancelled) setComments(rows.map(mapGameComment)); })
-      .catch(() => { /* sin datos → lista vacía, sin mock */ });
-    return () => { cancelled = true; };
-  }, [showComments, game.id]);
+  // Comentarios públicos del stream, en vivo (poll 3 s). Solo el reel visible
+  // poll-ea: `enabled: isActive` evita N pollers simultáneos en la lista.
+  const { user } = useAuth();
+  const author = React.useMemo(
+    () => (user ? { id: user.id, username: user.username, name: user.name, profilePicture: user.profilePicture } : undefined),
+    [user?.id, user?.username, user?.name, user?.profilePicture],
+  );
+  const { comments, loading: loadingComments, sending, send } = useGameComments(game.id, {
+    enabled: isActive,
+    author,
+  });
 
   React.useEffect(() => {
     if (!isActive) {
@@ -114,21 +94,6 @@ function LiveReelItem({
       videoRef.current?.presentFullscreenPlayer().catch(() => {});
     }
     lastTapRef.current = now;
-  }
-
-  async function sendComment() {
-    const text = commentText.trim();
-    if (!text || sending) return;
-    setSending(true);
-    setCommentText('');
-    try {
-      const created = await addGameComment(game.id, text);
-      setComments((prev) => [...prev, mapGameComment(created)]);
-    } catch {
-      setCommentText(text); // restaurar si falló, para no perderlo
-    } finally {
-      setSending(false);
-    }
   }
 
   return (
@@ -210,112 +175,26 @@ function LiveReelItem({
         >
           <MessageCircle size={16} color={colors.muted2} />
           <Text style={{ flex: 1, color: colors.muted2, fontFamily: fonts.regular, fontSize: 14 }}>
-            Añadir comentario...
+            {comments.length > 0 ? `Comentarios · ${comments.length}` : 'Añadir comentario...'}
           </Text>
         </Pressable>
       </View>
     </View>
 
-    {/* Comments modal */}
+    {/* Comments modal — mismo panel compartido con GameDetailScreen */}
     <Modal
       visible={showComments}
       animationType="slide"
-      presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
       onRequestClose={() => setShowComments(false)}
     >
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top', 'bottom']}>
-        {/* Header */}
-        <View style={{
-          flexDirection: 'row', alignItems: 'center',
-          paddingHorizontal: 16, paddingVertical: 14,
-          borderBottomWidth: 1, borderBottomColor: colors.line,
-        }}>
-          <Text style={{ flex: 1, color: colors.text, fontFamily: fonts.bold, fontSize: 16, letterSpacing: -0.2 }}>
-            Comentarios
-          </Text>
-          <Pressable onPress={() => setShowComments(false)} hitSlop={12}>
-            <X size={20} color={colors.text} />
-          </Pressable>
-        </View>
-
-        {/* Comment list */}
-        <FlatList
-          data={comments}
-          keyExtractor={(c) => c.id}
-          contentContainerStyle={{ padding: 16, gap: 20 }}
-          ListEmptyComponent={
-            <Text style={{ color: colors.muted2, fontSize: 13, paddingTop: 16, textAlign: 'center' }}>
-              Sé el primero en comentar.
-            </Text>
-          }
-          renderItem={({ item }) => (
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <View style={{
-                width: 34, height: 34, borderRadius: 17,
-                backgroundColor: colors.ink,
-                alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0,
-              }}>
-                <Text style={{ color: colors.accent, fontFamily: fonts.bold, fontSize: 13 }}>
-                  {item.user.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-              <View style={{ flex: 1, gap: 2 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: 13 }}>
-                    {item.user}
-                  </Text>
-                  <Text style={{ color: colors.muted2, fontSize: 11, fontFamily: fonts.regular }}>
-                    {item.time}
-                  </Text>
-                </View>
-                <Text style={{ color: colors.text, fontFamily: fonts.regular, fontSize: 14, lineHeight: 20 }}>
-                  {item.text}
-                </Text>
-              </View>
-            </View>
-          )}
+        <GameCommentsPanel
+          comments={comments}
+          loading={loadingComments}
+          sending={sending}
+          onSend={send}
+          onClose={() => setShowComments(false)}
         />
-
-        {/* Input */}
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <View style={{
-            flexDirection: 'row', alignItems: 'center', gap: 10,
-            paddingHorizontal: 16, paddingVertical: 12,
-            borderTopWidth: 1, borderTopColor: colors.line,
-          }}>
-            <TextInput
-              value={commentText}
-              onChangeText={setCommentText}
-              placeholder="Escribe un comentario..."
-              placeholderTextColor={colors.muted2}
-              returnKeyType="send"
-              editable={!sending}
-              onSubmitEditing={sendComment}
-              style={{
-                flex: 1,
-                backgroundColor: colors.surface,
-                borderRadius: 12,
-                paddingHorizontal: 14, paddingVertical: 10,
-                color: colors.text,
-                fontFamily: fonts.regular,
-                fontSize: 14,
-                borderWidth: 1, borderColor: colors.line,
-              }}
-            />
-            <Pressable
-              onPress={sendComment}
-              disabled={!commentText.trim() || sending}
-              style={{
-                width: 42, height: 42, borderRadius: 12,
-                backgroundColor: commentText.trim() && !sending ? colors.accent : colors.line,
-                alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <Send size={18} color={commentText.trim() && !sending ? colors.ink : colors.muted2} />
-            </Pressable>
-          </View>
-        </KeyboardAvoidingView>
       </SafeAreaView>
     </Modal>
     </>

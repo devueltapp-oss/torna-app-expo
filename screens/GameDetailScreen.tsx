@@ -1,18 +1,37 @@
 /**
  * Game Detail — VIEWER mode.
  * The user is a spectator: pick a camera angle, watch the HLS stream,
- * see players, follow the club. NO stream control, NO BLE pairing.
+ * comment on the stream, see players, follow the club. NO stream control,
+ * NO BLE pairing.
+ *
+ * Pantalla completa: **in-app + landscape**, NO el reproductor nativo.
+ * `presentFullscreenPlayer()` no puede rotar porque la app está bloqueada en
+ * portrait (`app.json` → `orientation: "portrait"`), así que expandía en vertical.
+ * Acá el contenedor del MISMO `<Video>` pasa de card 16:9 a absolute-fill y se
+ * bloquea la orientación con `expo-screen-orientation`; además así se puede
+ * superponer el panel de comentarios sobre el video (el fullscreen nativo no
+ * admite overlays).
  */
 import React from 'react';
-import { View, Text, Pressable, ScrollView, Image, StyleSheet, TouchableOpacity } from 'react-native';
+import {
+  View, Text, Pressable, ScrollView, Image, StyleSheet, TouchableOpacity,
+  Modal, StatusBar, BackHandler, useWindowDimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Svg, Rect, Line } from 'react-native-svg';
 import { Video, ResizeMode } from 'expo-av';
-import { ChevronLeft, MoreHorizontal, Eye, Play, ChevronRight, Scissors, Maximize2 } from 'lucide-react-native';
+import * as ScreenOrientation from 'expo-screen-orientation';
+import {
+  ChevronLeft, MoreHorizontal, Eye, ChevronRight, Scissors,
+  Maximize2, Minimize2, MessageCircle,
+} from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { Avatar, AvatarStack, Button, StatusBadge, SurfaceChip, SectionHeader } from '../components/ui';
 import { MatchParticipant, CameraAngleData } from '../components/cards';
+import { GameCommentsPanel } from '../components/GameCommentsPanel';
+import { useGameComments } from '../hooks/useGameComments';
+import { useAuth } from '../contexts/AuthContext';
 
 const tornaLogo = require('../assets/torna-icon.png');
 
@@ -37,10 +56,28 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
   onCreateHighlight?: () => void;
 }) {
   const { colors, radii } = useTheme();
+  const { width } = useWindowDimensions();
   const [camIdx, setCamIdx] = React.useState(0);
   const activeCam = game.cameras[camIdx];
   const [streamError, setStreamError] = React.useState(false);
   const videoRef = React.useRef<Video>(null);
+
+  // Pantalla completa in-app (landscape) + paneles de comentarios.
+  const [fullscreen, setFullscreen] = React.useState(false);
+  const [overlayComments, setOverlayComments] = React.useState(false);
+  const [sheetComments, setSheetComments] = React.useState(false);
+
+  // Comentarios públicos del stream (GameComment) — aislados de los del highlight
+  // (HighlightComment) y del chat privado de la partida (GameChatMessage).
+  const { user } = useAuth();
+  const author = React.useMemo(
+    () => (user ? { id: user.id, username: user.username, name: user.name, profilePicture: user.profilePicture } : undefined),
+    [user?.id, user?.username, user?.name, user?.profilePicture],
+  );
+  const { comments, loading: loadingComments, sending, send } = useGameComments(game.id, {
+    enabled: !!game.id,
+    author,
+  });
 
   // Reutiliza la URL ya validada por la preview del Home (GET /game/live) si la cámara
   // activa del detalle (GET /game/:id) todavía no trae stream o el fetch falló.
@@ -64,34 +101,79 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
 
   React.useEffect(() => { setStreamError(false); }, [activeCam?.id]);
 
-  return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
-      {/* Dark header zone */}
-      <View style={{ backgroundColor: colors.ink, paddingBottom: 12 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 }}>
-          <Pressable onPress={onBack} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' }}>
-            <ChevronLeft size={20} color="#FFFFFF" />
-          </Pressable>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            {game.isLive && <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.live }} />}
-            <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 }}>
-              {game.isLive ? 'EN VIVO' : ''} · {game.viewers} viewers
-            </Text>
-          </View>
-          <Pressable style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' }}>
-            <MoreHorizontal size={20} color="#FFFFFF" />
-          </Pressable>
-        </View>
+  /* ── Pantalla completa: rotar a landscape y volver ──
+     `lockAsync` en runtime pisa el `screenOrientation` del manifest (Android) —
+     por eso la app puede seguir bloqueada en portrait globalmente. */
+  const enterFullscreen = React.useCallback(() => {
+    setFullscreen(true);
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {});
+  }, []);
 
-        {/* HLS player */}
-        <View style={{ marginHorizontal: 16, borderRadius: 18, overflow: 'hidden', aspectRatio: 16/9, backgroundColor: colors.ink2, borderWidth: 1, borderColor: '#334155', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-          {streamSrc && !streamError ? (
+  const exitFullscreen = React.useCallback(() => {
+    setOverlayComments(false);
+    setFullscreen(false);
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+  }, []);
+
+  // Siempre devolver el device a portrait al desmontar la pantalla.
+  React.useEffect(() => () => {
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+  }, []);
+
+  // Botón "atrás" de Android: primero cierra el fullscreen, no la pantalla.
+  React.useEffect(() => {
+    if (!fullscreen) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { exitFullscreen(); return true; });
+    return () => sub.remove();
+  }, [fullscreen, exitFullscreen]);
+
+  const overlayWidth = Math.min(380, Math.max(260, width * 0.4));
+  const hasStream = !!streamSrc && !streamError;
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={fullscreen ? [] : ['top']}>
+      <StatusBar hidden={fullscreen} />
+
+      {/* Dark header — top bar */}
+      {!fullscreen && (
+        <View style={{ backgroundColor: colors.ink }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 }}>
+            <Pressable onPress={onBack} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' }}>
+              <ChevronLeft size={20} color="#FFFFFF" />
+            </Pressable>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {game.isLive && <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.live }} />}
+              <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 }}>
+                {game.isLive ? 'EN VIVO' : ''} · {game.viewers} viewers
+              </Text>
+            </View>
+            <Pressable style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' }}>
+              <MoreHorizontal size={20} color="#FFFFFF" />
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      {/* HLS player — la MISMA instancia de <Video> en ambos modos: solo cambia el
+          estilo del contenedor (card 16:9 ↔ absolute-fill), así el stream no se
+          reinicia al entrar/salir de pantalla completa. */}
+      <View
+        style={fullscreen
+          ? { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 50 }
+          : { backgroundColor: colors.ink, paddingHorizontal: 16 }}
+      >
+        <View
+          style={fullscreen
+            ? { flex: 1, backgroundColor: '#000', position: 'relative', alignItems: 'center', justifyContent: 'center' }
+            : { borderRadius: 18, overflow: 'hidden', aspectRatio: 16 / 9, backgroundColor: colors.ink2, borderWidth: 1, borderColor: '#334155', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
+        >
+          {hasStream ? (
             <Video
               ref={videoRef}
               key={activeCam?.id ?? game.id}
-              source={{ uri: streamSrc }}
+              source={{ uri: streamSrc! }}
               style={StyleSheet.absoluteFill}
-              resizeMode={ResizeMode.COVER}
+              resizeMode={fullscreen ? ResizeMode.CONTAIN : ResizeMode.COVER}
               shouldPlay
               isLooping={false}
               isMuted={false}
@@ -122,6 +204,7 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
               </View>
             </>
           )}
+
           {game.isLive && (
             <View style={{ position: 'absolute', top: 10, left: 10 }}>
               <StatusBadge status="LIVE" />
@@ -134,108 +217,196 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
             <Eye size={14} color="#FFFFFF" />
             <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '600' }}>{game.viewers}</Text>
           </View>
-          {streamSrc && !streamError ? (
-            <TouchableOpacity
-              onPress={() => videoRef.current?.presentFullscreenPlayer()}
-              style={{
-                position: 'absolute',
-                top: 10,
-                right: 10,
-                width: 36,
-                height: 36,
-                borderRadius: 18,
-                backgroundColor: 'rgba(0,0,0,0.55)',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 10,
-              }}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Maximize2 size={18} color="#FFFFFF" />
-            </TouchableOpacity>
-          ) : null}
+
+          {/* Controles superpuestos: comentarios + expandir/contraer */}
+          <View style={{
+            position: 'absolute', top: 10, right: 10, zIndex: 10,
+            flexDirection: 'row', alignItems: 'center', gap: 8,
+          }}>
+            {fullscreen && (
+              <TouchableOpacity
+                onPress={() => setOverlayComments((v) => !v)}
+                style={circleBtn(overlayComments ? 'rgba(214,255,126,0.9)' : 'rgba(0,0,0,0.55)')}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <MessageCircle size={18} color={overlayComments ? colors.ink : '#FFFFFF'} />
+                {comments.length > 0 && !overlayComments && (
+                  <View style={{
+                    position: 'absolute', top: -2, right: -2, minWidth: 16, height: 16,
+                    borderRadius: 8, paddingHorizontal: 4, backgroundColor: colors.accent,
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Text style={{ color: colors.ink, fontSize: 9, fontFamily: fonts.bold }}>
+                      {comments.length > 99 ? '99+' : comments.length}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            )}
+            {hasStream && (
+              <TouchableOpacity
+                onPress={fullscreen ? exitFullscreen : enterFullscreen}
+                style={circleBtn('rgba(0,0,0,0.55)')}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                {fullscreen
+                  ? <Minimize2 size={18} color="#FFFFFF" />
+                  : <Maximize2 size={18} color="#FFFFFF" />}
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
-        {/* Camera angle tabs */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 8, paddingHorizontal: 16, paddingTop: 12 }}>
-          {game.cameras.map((cam, i) => {
-            const on = i === camIdx;
-            const disabled = cam.state === 'inactive';
-            return (
-              <Pressable key={cam.id} disabled={disabled} onPress={() => setCamIdx(i)}
-                style={{
-                  paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, minWidth: 90,
-                  backgroundColor: on ? colors.primary : 'rgba(255,255,255,0.08)',
-                  borderWidth: on ? 0 : 1, borderColor: 'rgba(255,255,255,0.18)',
-                  opacity: disabled ? 0.45 : 1,
-                }}>
-                <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 9, letterSpacing: 0.8, fontWeight: '700' }}>CAM {cam.number}</Text>
-                <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '700', marginTop: 2 }}>{cam.label}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        {/* Panel de comentarios superpuesto (solo en pantalla completa) */}
+        {fullscreen && overlayComments && (
+          <View style={{
+            position: 'absolute', top: 0, right: 0, bottom: 0, width: overlayWidth, zIndex: 60,
+          }}>
+            <GameCommentsPanel
+              variant="overlay"
+              comments={comments}
+              loading={loadingComments}
+              sending={sending}
+              onSend={send}
+              onClose={() => setOverlayComments(false)}
+            />
+          </View>
+        )}
       </View>
 
+      {/* Camera angle tabs */}
+      {!fullscreen && (
+        <View style={{ backgroundColor: colors.ink, paddingBottom: 12 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8, paddingHorizontal: 16, paddingTop: 12 }}>
+            {game.cameras.map((cam, i) => {
+              const on = i === camIdx;
+              const disabled = cam.state === 'inactive';
+              return (
+                <Pressable key={cam.id} disabled={disabled} onPress={() => setCamIdx(i)}
+                  style={{
+                    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, minWidth: 90,
+                    backgroundColor: on ? colors.primary : 'rgba(255,255,255,0.08)',
+                    borderWidth: on ? 0 : 1, borderColor: 'rgba(255,255,255,0.18)',
+                    opacity: disabled ? 0.45 : 1,
+                  }}>
+                  <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 9, letterSpacing: 0.8, fontWeight: '700' }}>CAM {cam.number}</Text>
+                  <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '700', marginTop: 2 }}>{cam.label}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+
       {/* Light info sheet */}
-      <ScrollView style={{ flex: 1, backgroundColor: colors.bg, marginTop: -14, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}
-        contentContainerStyle={{ padding: 16, gap: 14 }}>
-        {/* Heading */}
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-          <View>
-            <Text style={{ color: colors.text, fontWeight: '800', fontSize: 20, letterSpacing: -0.2 }}>{game.court}</Text>
-            <Text style={{ color: colors.muted2, fontSize: 13, marginTop: 2 }}>
-              {[game.time, game.date].filter(Boolean).join(' · ')}
+      {!fullscreen && (
+        <ScrollView style={{ flex: 1, backgroundColor: colors.bg, marginTop: -14, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}
+          contentContainerStyle={{ padding: 16, gap: 14 }}>
+          {/* Heading */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+            <View>
+              <Text style={{ color: colors.text, fontWeight: '800', fontSize: 20, letterSpacing: -0.2 }}>{game.court}</Text>
+              <Text style={{ color: colors.muted2, fontSize: 13, marginTop: 2 }}>
+                {[game.time, game.date].filter(Boolean).join(' · ')}
+              </Text>
+            </View>
+            <SurfaceChip surface={game.floor}/>
+          </View>
+
+          {/* Comentarios del stream — hilo público, en vivo (poll 3 s).
+              Distinto del chat privado de la partida y de los del highlight. */}
+          <Pressable
+            onPress={() => setSheetComments(true)}
+            style={{
+              flexDirection: 'row', alignItems: 'center', gap: 10,
+              backgroundColor: colors.bg2, padding: 12, borderRadius: 14,
+              borderWidth: 1, borderColor: colors.line,
+            }}
+          >
+            <MessageCircle size={18} color={colors.muted2} />
+            <Text style={{ flex: 1, color: colors.muted2, fontSize: 14, fontFamily: fonts.regular }}>
+              {comments.length > 0
+                ? `Comentarios · ${comments.length}`
+                : 'Añadir comentario...'}
             </Text>
-          </View>
-          <SurfaceChip surface={game.floor}/>
-        </View>
+            <ChevronRight size={18} color={colors.muted2} />
+          </Pressable>
 
-        {/* Club row */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.bg2, padding: 12, borderRadius: 14 }}>
-          <View style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' }}>
-            <Image source={tornaLogo} style={{ width: 30, height: 30 }}/>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 14 }} numberOfLines={1}>{game.club}</Text>
-            <Text style={{ color: colors.muted2, fontSize: 12 }}>{game.clubHandle} · {game.clubFollowers} seguidores</Text>
-          </View>
-          <Button size="sm" variant={isFollowing ? 'soft' : 'primary'} onPress={onToggleFollow}>
-            {isFollowing ? 'Siguiendo' : 'Seguir'}
-          </Button>
-        </View>
-
-        {/* Players */}
-        <View>
-          <SectionHeader title={`Jugadores · ${game.players.length}`} />
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-            {game.players.map(p => (
-              <View key={p.username} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, width: '50%' }}>
-                <Avatar name={p.name || p.username} size={32}/>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.text, fontWeight: '700', fontSize: 13 }} numberOfLines={1}>{p.name || p.username}</Text>
-                  <Text style={{ color: colors.muted2, fontSize: 11 }}>{p.username}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* Crear highlight — disponible cuando el partido NO está en vivo
-            (i.e. ya hay grabación completa para recortar). */}
-        {!game.isLive && onCreateHighlight ? (
-          <View style={{ marginTop: 4 }}>
-            <Button fullWidth size="lg" onPress={onCreateHighlight}
-              icon={<Scissors size={16} color={colors.primaryFg}/>}>
-              Crear highlight
+          {/* Club row */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.bg2, padding: 12, borderRadius: 14 }}>
+            <View style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' }}>
+              <Image source={tornaLogo} style={{ width: 30, height: 30 }}/>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.text, fontWeight: '700', fontSize: 14 }} numberOfLines={1}>{game.club}</Text>
+              <Text style={{ color: colors.muted2, fontSize: 12 }}>{game.clubHandle} · {game.clubFollowers} seguidores</Text>
+            </View>
+            <Button size="sm" variant={isFollowing ? 'soft' : 'primary'} onPress={onToggleFollow}>
+              {isFollowing ? 'Siguiendo' : 'Seguir'}
             </Button>
-            <Text style={{ fontSize: 11, color: colors.muted2, marginTop: 6, textAlign: 'center' }}>
-              Recordá hasta 60s para tu perfil o el feed.
-            </Text>
           </View>
-        ) : null}
-      </ScrollView>
+
+          {/* Players */}
+          <View>
+            <SectionHeader title={`Jugadores · ${game.players.length}`} />
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+              {game.players.map(p => (
+                <View key={p.username} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, width: '50%' }}>
+                  <Avatar name={p.name || p.username} size={32}/>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.text, fontWeight: '700', fontSize: 13 }} numberOfLines={1}>{p.name || p.username}</Text>
+                    <Text style={{ color: colors.muted2, fontSize: 11 }}>{p.username}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* Crear highlight — disponible cuando el partido NO está en vivo
+              (i.e. ya hay grabación completa para recortar). */}
+          {!game.isLive && onCreateHighlight ? (
+            <View style={{ marginTop: 4 }}>
+              <Button fullWidth size="lg" onPress={onCreateHighlight}
+                icon={<Scissors size={16} color={colors.primaryFg}/>}>
+                Crear highlight
+              </Button>
+              <Text style={{ fontSize: 11, color: colors.muted2, marginTop: 6, textAlign: 'center' }}>
+                Recordá hasta 60s para tu perfil o el feed.
+              </Text>
+            </View>
+          ) : null}
+        </ScrollView>
+      )}
+
+      {/* Comentarios en portrait — mismo hilo que el overlay del fullscreen */}
+      <Modal
+        visible={sheetComments && !fullscreen}
+        animationType="slide"
+        onRequestClose={() => setSheetComments(false)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top', 'bottom']}>
+          <GameCommentsPanel
+            comments={comments}
+            loading={loadingComments}
+            sending={sending}
+            onSend={send}
+            onClose={() => setSheetComments(false)}
+          />
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
+}
+
+/** Botón circular translúcido para los controles sobre el video. */
+function circleBtn(background: string) {
+  return {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: background,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  };
 }
