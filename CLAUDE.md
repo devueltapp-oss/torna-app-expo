@@ -467,6 +467,35 @@ PATCH /user/me { profilePicture | frontPage } → persiste la URL pública
 GET  /game/:id   → detalle con cameras[] (stream HLS en camera.streamingUrl)
 ```
 
+### Comentarios del stream (`GameComment`) — `hooks/useGameComments.ts`
+
+Hilo **público y plano** del partido, en vivo. ⚠️ Son **tres cosas distintas** que no
+se mezclan nunca:
+
+| | Tabla | Endpoints | Quién |
+|---|---|---|---|
+| Comentarios del **stream** | `GameComment` | `GET·POST /game/:id/comments` | cualquiera; plano |
+| Chat **privado** de la partida | `GameChatMessage` | `GET·POST /game/:id/chat` | solo participantes |
+| Comentarios de **highlight** | `HighlightComment` | `POST /highlights/:id/comments` | threads (`parentId`) |
+
+```
+GET  /game/:id/comments?since=<ISO>   → GameComment[] (asc). `since` = poll incremental
+POST /game/:id/comments  { comment }  → comentario creado (máx 500 chars)
+```
+
+- **`useGameComments(gameId, { enabled, author })`** — mismo transporte que `useGameChat`:
+  REST + **polling 3 s focus-gated** (`useIsFocused`), cursor `since` = `createdAt` del
+  último confirmado, envío optimista con revert. `enabled:false` corta fetch y poll (en
+  `ReelViewScreen` solo poll-ea el reel visible, para no tener N pollers).
+- **`components/GameCommentsPanel.tsx`** — panel presentacional compartido, dos variantes:
+  `sheet` (modal en portrait, colores del tema) y `overlay` (panel translúcido oscuro
+  superpuesto al video en la pantalla completa landscape).
+- Lo consumen `GameDetailScreen` (CTA "Comentarios · N" en la hoja de info + botón
+  `MessageCircle` con badge en fullscreen) y `LiveReelItem` de `ReelViewScreen`.
+- ⚠️ Si el backend desplegado todavía no soporta `?since=`, el endpoint **ignora** el
+  parámetro y devuelve el hilo completo en cada poll: sigue funcionando (el hook dedupea
+  por `id`), solo que sin ahorro de payload.
+
 > Nota: la app **NO** crea ni edita Courts, Slots ni Cameras. Esos
 > endpoints son de **lectura solamente** desde la app. El admin externo es
 > el único escritor.
@@ -537,7 +566,8 @@ PUT /user/update-notification-id  { notificationID }  → registra el push token
 | **Iconos** | `lucide-react-native` (size 22 default, stroke 2) |
 | **Tipografía** | Helvetica (manual de marca) — TODO migrar H1 a Coolvetica |
 | **SVG** | `react-native-svg` (`<Svg>`, `<Rect>`, `<Line>`, `<Path>`) |
-| **Video / HLS** | `expo-av` ~14.0.7 (reproductor HLS). **Fullscreen**: `GameDetailScreen`, `ReelViewScreen` y el `Player` del editor usan el nativo `videoRef.current.presentFullscreenPlayer()` sobre la misma instancia (NO un `Modal` con un segundo `<Video>`); botón `Maximize2`. **Excepción — `VideoPreviewModal`**: usa pantalla completa **in-app** (estado `expanded`, misma instancia de `<Video>`) en vez del nativo, para poder superponer el panel de comentarios (botón flotante "Comentarios (N)" → `showCommentsPanel`) |
+| **Video / HLS** | `expo-av` ~14.0.7 (reproductor HLS). **Fullscreen**: in-app, NO el nativo, en `GameDetailScreen` (landscape, ver abajo) y en `VideoPreviewModal` (estado `expanded`). En ambos casos es la **misma instancia** de `<Video>` (solo cambia el estilo del contenedor: card ↔ absolute-fill), nunca un `Modal` con un segundo `<Video>`. `ReelViewScreen` y el `Player` del editor sí siguen usando el nativo `videoRef.current.presentFullscreenPlayer()`. Regla: **si hay que superponer algo sobre el video (comentarios), tiene que ser fullscreen in-app** — el nativo no admite overlays |
+| **Orientación** | La app está bloqueada en **portrait** (`app.json` + `android:screenOrientation="portrait"` en el manifest). La **única** excepción es la pantalla completa del stream (`GameDetailScreen`), que rota a landscape con `expo-screen-orientation` ~7.0.5: `lockAsync(LANDSCAPE)` al entrar y `PORTRAIT_UP` al salir / al desmontar / con el botón atrás. En Android `setRequestedOrientation` en runtime **pisa** el valor del manifest, y el manifest ya trae `configChanges` con `orientation\|screenSize`, así que la activity no se recrea. ⚠️ **En iOS no alcanza**: `UISupportedInterfaceOrientations` es un límite duro y `orientation: "portrait"` en `app.json` lo escribe solo-portrait (el mod `withOrientation` pisa lo que pongas en `ios.infoPlist`). Para habilitarlo en iOS hay que pasar `orientation` a `"default"` y bloquear `PORTRAIT_UP` globalmente al arrancar la app |
 | **Mapas** | Sin mapa embebido ni librería de mapas. La ubicación se referencia con un botón **"Buscar en Maps"** (`components/MapsButton.tsx`) que abre **Google Maps** (URL universal `maps/search/?api=1&query=lat,lng`) vía `Linking`. Antes había Leaflet en `react-native-webview` + MapTiler; se quitó para no requerir dev-client ni API key |
 | **Ubicación** | Sin GPS. Las ubicaciones se abren en **Google Maps** vía `MapsButton` (`Linking`), usando lat/lng del club (pin exacto) o el nombre como fallback. `expo-location` y el hook `useLocation` fueron **eliminados** (también el permiso `NSLocationWhenInUse` de `app.json`) |
 | **Subida de archivos** | `expo-file-system` ~17.0.1 (`uploadAsync` binario → B2 presigned) |
