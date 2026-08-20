@@ -88,6 +88,10 @@ export interface DirectMessage {
   profilePicture: string | null;
   content: string;
   createdAt: string;
+  /** Cuántas personas likearon el mensaje (una por persona, máx. 1 cada una). */
+  likesCount?: number;
+  /** Si el usuario autenticado ya lo likeó. */
+  likedByMe?: boolean;
 }
 
 export function fetchInbox(): Promise<InboxItem[]> {
@@ -105,4 +109,15 @@ export function sendDirectMessage(userId: string, content: string): Promise<Dire
 
 export function markDmRead(userId: string): Promise<void> {
   return authedSend<void>(`/chat/dm/${encodeURIComponent(userId)}/read`);
+}
+
+/**
+ * Like / unlike de un mensaje de un DM (POST /chat/message/:messageId/like).
+ * Toggle; el backend garantiza un like por persona por mensaje. La ruta no
+ * lleva el userId del hilo: el mensaje ya identifica la conversación.
+ */
+export function toggleDirectMessageLike(
+  messageId: string,
+): Promise<{ messageId: string; likesCount: number; likedByMe: boolean }> {
+  return authedSend(`/chat/message/${encodeURIComponent(messageId)}/like`);
 }

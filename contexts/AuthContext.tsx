@@ -20,6 +20,7 @@ import * as SecureStore from 'expo-secure-store';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import firebaseAuth from '@react-native-firebase/auth';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import { identifyUser, clearIdentity } from '../services/notifications';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -55,7 +56,13 @@ interface AuthContextValue {
   user: TornaUser | null;
   token: string | null;
   isLoading: boolean;
-  loginWithEmailPassword: (email: string, password: string) => Promise<void>;
+  /**
+   * Login por email/contraseña. Devuelve `needs_registration` cuando las
+   * credenciales son válidas en Firebase pero el usuario no existe en la DB de
+   * Torna (p. ej. creado a mano desde la consola de Firebase): la UI lo manda a
+   * CompleteProfile a elegir username en vez de mostrar un error genérico.
+   */
+  loginWithEmailPassword: (email: string, password: string) => Promise<LoginResult>;
   /**
    * Alta por email/contraseña (solo Player). Crea el usuario en Firebase
    * (client SDK), obtiene el idToken y lo registra en el backend. El player
@@ -76,6 +83,12 @@ interface AuthContextValue {
     password: string,
     dto: Omit<RegisterDto, 'authProvider' | 'isClub'>,
   ) => Promise<void>;
+  /**
+   * Recuperación de contraseña (usuario deslogueado): manda el mail con el
+   * enlace de Firebase. NO usa el backend — `POST /auth/reset-password` está
+   * detrás de FirebaseAuthGuard y exige sesión, justo lo que no hay acá.
+   */
+  sendPasswordReset: (email: string) => Promise<void>;
   /**
    * Cambia la contraseña de la cuenta. Re-autentica con la contraseña actual
    * (la verifica de verdad) y actualiza la nueva directamente en Firebase.
@@ -151,8 +164,11 @@ interface BackendUser {
 }
 
 interface EmailPasswordResponse {
+  /** false = las credenciales son válidas en Firebase pero NO hay fila en la DB. */
   exists: boolean;
-  user: BackendUser;
+  /** Ausente cuando `exists:false` — no destructurar sin chequear. */
+  user?: BackendUser;
+  firebaseUser?: { id: string; email: string; name?: string; picture?: string };
   tokens: {
     idToken: string;
     refreshToken: string;
@@ -238,6 +254,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!cancelled) {
           setToken(stored);
           setUser(me);
+          // Re-identificar en cada arranque hace el registro auto-reparable: si
+          // el token de push nunca llegó a guardarse (permiso recién aceptado,
+          // reinstalación, backend caído en el login), se corrige acá sin que el
+          // usuario tenga que volver a loguearse.
+          void identifyUser(me.id, stored);
         }
       } catch (err) {
         console.error('[AuthContext] restoreSession failed:', err);
@@ -253,36 +274,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ------------------------------------------------------------------
-  // registerNotificationId — best-effort: sends OneSignal push subscription
-  // ID to the backend so the server can target this device for push alerts.
-  // Uses require() to avoid static import issues when types may not be resolved.
+  // registerNotificationId — asocia el dispositivo al usuario en OneSignal
+  // (external ID) y registra el subscription ID en el backend. Best-effort.
+  // La lógica vive en services/notifications.ts: pide permiso en contexto y,
+  // si el subscription ID todavía no existe, espera el evento en vez de
+  // abandonar hasta el próximo login.
   // ------------------------------------------------------------------
-  async function registerNotificationId(idToken: string): Promise<void> {
-    try {
-      const OneSignal = require('react-native-onesignal').OneSignal;
-      const subId: string | null = await OneSignal.User.pushSubscription.getIdAsync();
-      if (!subId) return;
-      await fetch(`${API_URL}/user/update-notification-id`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ notificationID: subId }),
-      });
-    } catch (err) {
-      console.error('[AuthContext] registerNotificationId failed (non-critical):', err);
-    }
+  async function registerNotificationId(uid: string, idToken: string): Promise<void> {
+    await identifyUser(uid, idToken);
   }
 
   // ------------------------------------------------------------------
   // loginWithEmailPassword
   // ------------------------------------------------------------------
   const loginWithEmailPassword = useCallback(
-    async (email: string, password: string): Promise<void> => {
-      const { user, tokens } = await apiLoginEmailPassword(email, password);
+    async (email: string, password: string): Promise<LoginResult> => {
+      const { user, tokens, firebaseUser } = await apiLoginEmailPassword(email, password);
+
+      // Credenciales válidas en Firebase pero sin fila en la DB de Torna: pasa
+      // con cuentas creadas a mano desde la consola de Firebase (o si se borró
+      // el registro). El backend responde 200 con `exists:false`, así que NO es
+      // un error de credenciales ni de permisos: hay que completar el alta.
+      // Antes se destructuraba `user` directo y reventaba con "cannot read
+      // property 'id' of undefined", que la UI mostraba como error genérico.
+      if (!user) {
+        return {
+          status: 'needs_registration',
+          idToken: tokens.idToken,
+          email: firebaseUser?.email ?? email,
+          name: firebaseUser?.name,
+        };
+      }
 
       await SecureStore.setItemAsync(TOKEN_KEY, tokens.idToken);
 
       setToken(tokens.idToken);
-      setUser({
+      const tornaUser: TornaUser = {
         id: user.id,
         email: user.email,
         username: user.username,
@@ -293,8 +320,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         profilePicture: user.profilePicture,
         frontPage: user.frontPage,
         authProvider: 'email',
-      });
-      await registerNotificationId(tokens.idToken);
+      };
+      setUser(tornaUser);
+      await registerNotificationId(user.id, tokens.idToken);
+
+      return { status: 'authenticated', user: tornaUser };
     },
     [],
   );
@@ -373,7 +403,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setToken(idToken);
       setUser(tornaUser);
-      await registerNotificationId(idToken);
+      await registerNotificationId(tornaUser.id, idToken);
 
       return { status: 'authenticated', user: tornaUser };
     } catch (err: any) {
@@ -403,7 +433,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isClub: data.isClub ?? false,
         authProvider: dto.authProvider ?? 'google',
       });
-      await registerNotificationId(idToken);
+      await registerNotificationId(data.id, idToken);
     },
     [],
   );
@@ -452,6 +482,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     [],
   );
+
+  // ------------------------------------------------------------------
+  // sendPasswordReset — recuperación con el usuario deslogueado.
+  // Firebase manda el mail con el enlace; el backend no participa (su
+  // POST /auth/reset-password exige sesión, así que no sirve para esto).
+  // Con la protección de enumeración de emails activada, Firebase resuelve
+  // igual exista o no la cuenta: la pantalla muestra el mismo mensaje en
+  // ambos casos para no delatar qué emails están registrados.
+  // ------------------------------------------------------------------
+  const sendPasswordReset = useCallback(async (email: string): Promise<void> => {
+    await firebaseAuth().sendPasswordResetEmail(email.trim());
+  }, []);
 
   // ------------------------------------------------------------------
   // changePassword
@@ -503,11 +545,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // logout
   // ------------------------------------------------------------------
   const logout = useCallback(async (): Promise<void> => {
+    // Antes de soltar el token: desasociar el dispositivo. Si no, el backend
+    // sigue teniendo este notificationId contra la cuenta que se fue y le manda
+    // sus pushes a quien quede usando el teléfono.
+    await clearIdentity(token);
     await SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => {});
     await firebaseAuth().signOut().catch(() => {});
     setToken(null);
     setUser(null);
-  }, []);
+  }, [token]);
 
   const value: AuthContextValue = {
     user,
@@ -516,6 +562,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loginWithEmailPassword,
     registerWithEmailPassword,
     registerClub,
+    sendPasswordReset,
     changePassword,
     loginWithGoogle,
     loginWithApple,

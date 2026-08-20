@@ -26,6 +26,8 @@ interface Props {
     mode: 'full' | 'search-opponents';
     partnerUserId?: string;
     opponents?: [string?, string?];
+    /** Categoría/nivel elegido: 1 = más alta, 7 = iniciación. Opcional. */
+    category?: number;
   }) => void;
 }
 
@@ -52,6 +54,9 @@ export function ReserveStep3Screen({
 }: Props) {
   const { colors } = useTheme();
   const [searching, setSearching] = React.useState(false); // "Buscar rivales" switch
+  // Categoría de la partida: 1 = más alta, 7 = iniciación (convención de pádel).
+  // Opcional: null = sin declarar.
+  const [category, setCategory] = React.useState<number | null>(null);
   const [partner, setPartner] = React.useState<InvitablePlayer | null>(initialPartner || invitablePlayers[0] || null);
   const [opp1, setOpp1] = React.useState<InvitablePlayer | null>(initialOpp1 || invitablePlayers[2] || null);
   const [opp2, setOpp2] = React.useState<InvitablePlayer | null>(initialOpp2 || invitablePlayers[3] || null);
@@ -99,6 +104,41 @@ export function ReserveStep3Screen({
             </Text>
           </View>
           <Switch value={searching} onChange={setSearching}/>
+        </View>
+
+        {/* Categoría / nivel — opcional. 1 = más alta, 7 = iniciación. */}
+        <View>
+          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted2, letterSpacing: 0.8, marginBottom: 6 }}>
+            CATEGORÍA · OPCIONAL
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {[1, 2, 3, 4, 5, 6, 7].map((n) => {
+              const active = category === n;
+              return (
+                <Pressable
+                  key={n}
+                  // Volver a tocar la categoría activa la deselecciona (queda sin declarar).
+                  onPress={() => setCategory(active ? null : n)}
+                  style={{
+                    minWidth: 44, alignItems: 'center',
+                    backgroundColor: active ? colors.primary : 'transparent',
+                    borderWidth: 1.5, borderColor: active ? colors.primary : colors.line,
+                    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+                  }}
+                >
+                  <Text style={{
+                    fontSize: 13, fontWeight: '800',
+                    color: active ? colors.primaryFg : colors.text,
+                  }}>
+                    {n}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={{ fontSize: 11, color: colors.muted2, marginTop: 6, lineHeight: 15 }}>
+            1 es la categoría más alta y 7 la de iniciación.
+          </Text>
         </View>
 
         {/* Required partner */}
@@ -152,6 +192,7 @@ export function ReserveStep3Screen({
           mode: searching ? 'search-opponents' : 'full',
           partnerUserId: partner?.id,
           opponents: searching ? undefined : [opp1?.id, opp2?.id],
+          category: category ?? undefined,
         })}>
           Confirmar reserva
         </Button>

@@ -32,6 +32,8 @@ function mapPlayer(p: BackendMyGame['gamePlayers'][number]): UpcomingGamePlayer 
     name: p.user.name ?? p.user.username,
     profilePicture: p.user.profilePicture ?? undefined,
     team: p.team === 1 || p.team === 2 ? p.team : undefined,
+    // El backend ya marca al organizador con isCaptain; la app lo muestra como HOST.
+    isHost: p.isCaptain === true,
   };
 }
 
@@ -76,6 +78,7 @@ function mapMyGame(g: BackendMyGame, userId?: string): UpcomingGameData {
     status: g.status,
     myTeam,
     viewerIsParticipant: !!mine,
+    category: g.category ?? null,
   };
 }
 

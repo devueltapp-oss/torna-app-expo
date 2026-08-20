@@ -27,7 +27,7 @@ import {
 } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
-import { Avatar, AvatarStack, Button, StatusBadge, SurfaceChip, SectionHeader } from '../components/ui';
+import { Avatar, AvatarStack, Button, StatusBadge, SurfaceChip, SectionHeader, HostBadge } from '../components/ui';
 import { MatchParticipant, CameraAngleData } from '../components/cards';
 import { GameCommentsPanel } from '../components/GameCommentsPanel';
 import { useGameComments } from '../hooks/useGameComments';
@@ -354,8 +354,11 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
               {game.players.map(p => (
                 <View key={p.username} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, width: '50%' }}>
                   <Avatar name={p.name || p.username} size={32}/>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: colors.text, fontWeight: '700', fontSize: 13 }} numberOfLines={1}>{p.name || p.username}</Text>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={{ color: colors.text, fontWeight: '700', fontSize: 13, flexShrink: 1 }} numberOfLines={1}>{p.name || p.username}</Text>
+                      {p.isHost && <HostBadge />}
+                    </View>
                     <Text style={{ color: colors.muted2, fontSize: 11 }}>{p.username}</Text>
                   </View>
                 </View>

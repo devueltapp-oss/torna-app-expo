@@ -3,7 +3,7 @@ import { Modal, View, Text, Pressable, Image, ScrollView, Alert } from 'react-na
 import { Bell, Check, ChevronRight, MessageCircle, X } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
-import { Avatar, Button, StatusBadge } from './ui';
+import { Avatar, Button, CategoryBadge, HostBadge, StatusBadge } from './ui';
 import { ApplyMatchSheet } from './ApplyMatchSheet';
 import { acceptApplication, rejectApplication, watchGame, unwatchGame } from '../api/games';
 import type { GameApplication, InvitablePlayer, UpcomingGameData, UpcomingGamePlayer } from '../data/types';
@@ -223,9 +223,12 @@ function SheetContent({
         <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: 22, letterSpacing: -0.4, marginTop: 6 }}>
           {game.time} · {game.court}
         </Text>
-        <Text style={{ color: colors.muted2, fontSize: 13 }}>
-          {[game.date, game.club].filter(Boolean).join(' · ')}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
+          <Text style={{ color: colors.muted2, fontSize: 13, flexShrink: 1 }}>
+            {[game.date, game.club].filter(Boolean).join(' · ')}
+          </Text>
+          <CategoryBadge category={game.category} />
+        </View>
       </View>
 
       {/* Jugadores confirmados */}
@@ -250,9 +253,15 @@ function SheetContent({
                 <Avatar name={p.name ?? p.username} size={40} />
               )}
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={{ color: colors.text, fontSize: 14, fontFamily: fonts.bold }} numberOfLines={1}>
-                  {p.name ?? p.username}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text
+                    style={{ color: colors.text, fontSize: 14, fontFamily: fonts.bold, flexShrink: 1 }}
+                    numberOfLines={1}
+                  >
+                    {p.name ?? p.username}
+                  </Text>
+                  {p.isHost && <HostBadge />}
+                </View>
                 <Text style={{ color: colors.muted2, fontSize: 12 }} numberOfLines={1}>{p.username}</Text>
               </View>
               {p.id && <ChevronRight size={16} color={colors.muted2} />}

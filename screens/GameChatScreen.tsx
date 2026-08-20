@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Send, Lock } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
-import { AppHeader, Avatar } from '../components/ui';
+import { AppHeader, Avatar, MessageLikeButton } from '../components/ui';
 import { useAuth } from '../contexts/AuthContext';
 import { useGameChat } from '../hooks/useGameChat';
 import type { GameChatMessage } from '../api/games';
@@ -38,7 +38,7 @@ export function GameChatScreen({ gameId, title, readOnly = false, onBack }: Game
     () => (user ? { id: user.id, username: user.username, name: user.name, profilePicture: user.profilePicture } : undefined),
     [user?.id, user?.username, user?.name, user?.profilePicture],
   );
-  const { messages, loading, sending, send } = useGameChat(gameId, sender);
+  const { messages, loading, sending, send, toggleLike } = useGameChat(gameId, sender);
   const [text, setText] = React.useState('');
   const listRef = React.useRef<FlatList<GameChatMessage>>(null);
 
@@ -88,7 +88,12 @@ export function GameChatScreen({ gameId, title, readOnly = false, onBack }: Game
               </View>
             }
             renderItem={({ item }) => (
-              <MessageBubble message={item} isMine={item.senderId === user?.id} colors={colors} />
+              <MessageBubble
+                message={item}
+                isMine={item.senderId === user?.id}
+                colors={colors}
+                onToggleLike={toggleLike}
+              />
             )}
           />
         )}
@@ -141,14 +146,16 @@ export function GameChatScreen({ gameId, title, readOnly = false, onBack }: Game
 }
 
 function MessageBubble({
-  message, isMine, colors,
+  message, isMine, colors, onToggleLike,
 }: {
   message: GameChatMessage;
   isMine: boolean;
   colors: ReturnType<typeof useTheme>['colors'];
+  onToggleLike: (messageId: string) => void;
 }) {
   const displayName = message.name ?? message.username;
   return (
+    <View style={{ gap: 2 }}>
     <View style={{
       flexDirection: 'row', alignItems: 'flex-end', gap: 8,
       justifyContent: isMine ? 'flex-end' : 'flex-start',
@@ -177,6 +184,18 @@ function MessageBubble({
         }}>
           {timeLabel(message.createdAt)}
         </Text>
+      </View>
+    </View>
+      {/* Corazón fuera de la burbuja: adentro competiría con el fondo lima de
+          los mensajes propios. Alineado al lado del mensaje; en el chat grupal
+          el número es cuánta gente lo likeó (uno por persona). */}
+      <View style={{ paddingLeft: isMine ? 0 : 36, paddingRight: isMine ? 2 : 0 }}>
+        <MessageLikeButton
+          count={message.likesCount ?? 0}
+          liked={message.likedByMe ?? false}
+          align={isMine ? 'right' : 'left'}
+          onPress={() => onToggleLike(message.id)}
+        />
       </View>
     </View>
   );

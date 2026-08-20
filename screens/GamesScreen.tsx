@@ -5,7 +5,7 @@ import { Search, ChevronRight, Users, CalendarPlus, MapPin } from 'lucide-react-
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { GameListItem, GameListData } from '../components/cards';
-import { EmptyState, StatusBadge, Avatar, SectionHeader } from '../components/ui';
+import { EmptyState, StatusBadge, Avatar, SectionHeader, CategoryBadge, HostBadge } from '../components/ui';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import { MapsButton } from '../components/MapsButton';
 import type { UpcomingGameData } from '../data/types';
@@ -190,6 +190,7 @@ function MyGameCard({
               <Text style={{ fontSize: 9, fontWeight: '800', color: colors.accentText, letterSpacing: 0.4 }}>ORGANIZÁS</Text>
             </View>
           )}
+          <CategoryBadge category={game.category} />
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 }}>
           <Users size={12} color={colors.muted2} />
@@ -210,6 +211,7 @@ function OpenGameCard({
 }: { game: UpcomingGameData; colors: ReturnType<typeof useTheme>['colors']; onOpenDetail: () => void }) {
   const filled = game.players.length;
   const total = game.maxPlayers ?? 4;
+  const host = game.players.find((p) => p.isHost);
   // Ubicación en Maps: coords del club si están, si no el nombre (club + cancha).
   const mapsQuery = [game.club, game.court].filter(Boolean).join(' ');
 
@@ -227,11 +229,12 @@ function OpenGameCard({
             <Text style={{ color: colors.accentText, fontSize: 11, fontFamily: fonts.bold }}>{filled}/{total}</Text>
           </View>
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <MapPin size={12} color={colors.muted2}/>
-          <Text style={{ color: colors.muted2, fontSize: 13 }} numberOfLines={1}>
+          <Text style={{ color: colors.muted2, fontSize: 13, flexShrink: 1 }} numberOfLines={1}>
             {[game.date, game.club].filter(Boolean).join(' · ')}
           </Text>
+          <CategoryBadge category={game.category} />
         </View>
 
         {game.players.length > 0 && (
@@ -247,9 +250,19 @@ function OpenGameCard({
                 </View>
               ))}
             </View>
-            <Text style={{ color: colors.muted2, fontSize: 12 }} numberOfLines={1}>
+            <Text style={{ color: colors.muted2, fontSize: 12, flexShrink: 1 }} numberOfLines={1}>
               {game.players.map((p) => p.name ?? p.username).slice(0, 2).join(', ')}
               {game.players.length > 2 ? ` +${game.players.length - 2}` : ''}
+            </Text>
+          </View>
+        )}
+
+        {/* Quién organiza: sale de GamePlayer.isCaptain del backend. */}
+        {host && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <HostBadge />
+            <Text style={{ color: colors.muted2, fontSize: 12, flexShrink: 1 }} numberOfLines={1}>
+              {host.name ?? host.username}
             </Text>
           </View>
         )}

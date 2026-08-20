@@ -151,9 +151,9 @@ async function uploadImageToB2(
   }
 }
 
-/** Persiste un campo de imagen del usuario vía PATCH /user/me. */
+/** Persiste campos del usuario vía PATCH /user/me. */
 async function patchMe(
-  patch: Record<string, string>,
+  patch: Record<string, string | number | null>,
   token: string,
   errorMsg: string,
 ): Promise<void> {
@@ -165,6 +165,15 @@ async function patchMe(
   if (!res.ok) {
     throw new Error(errorMsg);
   }
+}
+
+/**
+ * Categoría/nivel del jugador (1 = más alta, 7 = iniciación). El backend valida
+ * el rango 1–7 en `CreateUserDto`; mandar algo fuera de rango da 400.
+ */
+export async function updateMyCategory(category: number): Promise<void> {
+  const token = await getToken();
+  await patchMe({ category }, token, 'No se pudo guardar la categoría.');
 }
 
 /** Foto de perfil (avatar). Sube a B2 y persiste en profilePicture. */

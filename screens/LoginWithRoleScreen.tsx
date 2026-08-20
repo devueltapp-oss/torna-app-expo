@@ -16,8 +16,9 @@ interface Props {
   /** Called when the user wants to register (no social token involved). */
   onRegister?: (role: LoginRole) => void;
   /** Called when a social login returns needs_registration. */
-  onNeedsRegistration?: (result: LoginResult & { status: 'needs_registration' }, provider: 'google' | 'apple' | 'facebook') => void;
-  onForgot?: () => void;
+  onNeedsRegistration?: (result: LoginResult & { status: 'needs_registration' }, provider: 'email' | 'google' | 'apple' | 'facebook') => void;
+  /** Recuperar contraseña. Recibe el email ya tipeado para no pedirlo dos veces. */
+  onForgot?: (email?: string) => void;
 }
 
 /**
@@ -57,7 +58,16 @@ export function LoginWithRoleScreen({ onLogin, onRegister, onNeedsRegistration, 
     setError(null);
     setLoading(true);
     try {
-      await loginWithEmailPassword(email.trim(), pass);
+      const result = await loginWithEmailPassword(email.trim(), pass);
+
+      // Credenciales OK en Firebase pero sin cuenta en Torna (p. ej. usuario
+      // creado desde la consola de Firebase): completar el alta eligiendo
+      // username, igual que en el login social.
+      if (result.status === 'needs_registration') {
+        onNeedsRegistration?.(result, 'email');
+        return;
+      }
+
       // AuthProvider sets user; App.tsx will switch to AppStack automatically.
       // onLogin is also called so App.tsx can know the role (since TornaUser.isClub is the truth).
       onLogin?.(role);
@@ -175,13 +185,17 @@ export function LoginWithRoleScreen({ onLogin, onRegister, onNeedsRegistration, 
           />
         </View>
 
-        {/* Forgot password */}
-        <Text
-          onPress={onForgot}
-          style={{ alignSelf: 'flex-end', fontSize: 12, fontWeight: '700', color: colors.text }}
+        {/* Forgot password → ForgotPasswordScreen (mail de reset de Firebase).
+            Le pasamos el email ya tipeado para no pedirlo de nuevo. */}
+        <Pressable
+          onPress={() => onForgot?.(email.trim() || undefined)}
+          hitSlop={8}
+          style={{ alignSelf: 'flex-end' }}
         >
-          Olvidé mi contraseña
-        </Text>
+          <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }}>
+            Olvidé mi contraseña
+          </Text>
+        </Pressable>
 
         {/* Inline error */}
         {error ? (

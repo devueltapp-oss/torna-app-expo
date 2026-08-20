@@ -18,14 +18,14 @@ import { View, Text, ActivityIndicator, Alert, Pressable } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { OneSignal } from 'react-native-onesignal';
+import { initNotifications, onNavigationReady } from './services/notifications';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ThemeProvider, useTheme } from './theme';
 import { AuthProvider, useAuth, type LoginResult } from './contexts/AuthContext';
 import {
-  LoginWithRoleScreen, RegisterClubScreen, RegisterPlayerScreen,
+  LoginWithRoleScreen, RegisterClubScreen, RegisterPlayerScreen, ForgotPasswordScreen,
   PendingApprovalScreen,
   CompleteProfileScreen,
   HomeScreen, ClubHomeScreen,
@@ -141,12 +141,15 @@ type AuthStackParamList = {
   LoginWithRole: undefined;
   Register: undefined;
   RegisterPlayer: undefined;
+  /** Recuperación de contraseña (mail de Firebase). `prefillEmail` = lo tipeado en el login. */
+  ForgotPassword: { prefillEmail?: string } | undefined;
   Pending: undefined;
   CompleteProfile: {
     idToken: string;
     prefillName?: string;
     prefillEmail?: string;
-    authProvider: 'google' | 'apple' | 'facebook';
+    /** `email` = login por email/contraseña sin cuenta en la DB de Torna. */
+    authProvider: 'email' | 'google' | 'apple' | 'facebook';
   };
 };
 
@@ -154,7 +157,9 @@ type AuthStackParamList = {
  * App stack: shown once user is authenticated (user !== null).
  */
 type AppStackParamList = {
-  MainPlayer: undefined;
+  /** `initialTab` lo usa el routing de push (partida cancelada / baja) para
+   *  aterrizar en el hub de partidos en vez de en Inicio. */
+  MainPlayer: { initialTab?: TabId } | undefined;
   MainClub: undefined;
   GameDetail: { gameId: string; clipData?: GameDetailData; liveStreamUrl?: string };
   GameChat: { gameId: string; title?: string; readOnly?: boolean };
@@ -616,6 +621,7 @@ function ReserveInviteScreen({ route, navigation }: { route: any; navigation: an
             mode: payload.mode,
             partnerUserId: payload.partnerUserId,
             opponentUserIds: opponents,
+            category: payload.category,
           });
           navigation.replace('ReserveOk', {
             reservationId: created.id,
@@ -653,6 +659,9 @@ function AuthNavigator() {
             }}
             onRegister={(role: LoginRole) =>
               navigation.navigate(role === 'club' ? 'Register' : 'RegisterPlayer')
+            }
+            onForgot={(email?: string) =>
+              navigation.navigate('ForgotPassword', { prefillEmail: email })
             }
             onNeedsRegistration={(result: LoginResult & { status: 'needs_registration' }, provider) => {
               navigation.navigate('CompleteProfile', {
@@ -694,6 +703,15 @@ function AuthNavigator() {
         )}
       </AuthStack.Screen>
 
+      <AuthStack.Screen name="ForgotPassword">
+        {({ navigation, route }) => (
+          <ForgotPasswordScreen
+            prefillEmail={route.params?.prefillEmail}
+            onBack={() => navigation.goBack()}
+          />
+        )}
+      </AuthStack.Screen>
+
       <AuthStack.Screen name="Pending">
         {({ navigation }) => (
           <PendingApprovalScreen onHome={() => navigation.replace('LoginWithRole')} />
@@ -724,8 +742,19 @@ function AuthNavigator() {
 
 /* ─────────── Main tabs · PLAYER ─────────── */
 
-function MainPlayer({ navigation }: any) {
-  const [tab, setTab] = React.useState<TabId>('home');
+function MainPlayer({ navigation, route }: any) {
+  const [tab, setTab] = React.useState<TabId>(route?.params?.initialTab ?? 'home');
+
+  // Un push de partida (cancelada / baja / pareja que se bajó) navega acá con
+  // `initialTab`. Si MainPlayer ya estaba montado, el estado inicial no alcanza:
+  // hay que sincronizar. Se limpia el param para que el próximo push del mismo
+  // tipo vuelva a disparar el efecto.
+  React.useEffect(() => {
+    const requested: TabId | undefined = route?.params?.initialTab;
+    if (!requested) return;
+    setTab(requested);
+    navigation.setParams({ initialTab: undefined });
+  }, [route?.params?.initialTab, navigation]);
   const [reelSection, setReelSection] = React.useState<ReelSection | null>(null);
   const [reelInitialIndex, setReelInitialIndex] = React.useState(0);
   const [profileView, setProfileView] = React.useState<'profile' | 'library' | 'settings'>('profile');
@@ -798,6 +827,7 @@ function MainPlayer({ navigation }: any) {
     followers: ownProfile?.followers ?? 0,
     following: ownProfile?.followingCount ?? 0,
     profilePicture: user?.profilePicture,
+    category: ownProfile?.category ?? null,
   };
 
   const handleRefresh = useCallback(async () => {
@@ -1382,14 +1412,14 @@ function Root({ navigationRef }: { navigationRef: React.RefObject<any> }) {
   // Session restore in progress — show a branded loading screen
   if (isLoading) {
     return (
-      <NavigationContainer ref={navigationRef} theme={navTheme}>
+      <NavigationContainer ref={navigationRef} theme={navTheme} onReady={onNavigationReady}>
         <SplashScreen />
       </NavigationContainer>
     );
   }
 
   return (
-    <NavigationContainer ref={navigationRef} theme={navTheme}>
+    <NavigationContainer ref={navigationRef} theme={navTheme} onReady={onNavigationReady}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       {user ? <AppNavigator /> : <AuthNavigator />}
     </NavigationContainer>
@@ -1401,24 +1431,11 @@ function Root({ navigationRef }: { navigationRef: React.RefObject<any> }) {
 export default function App() {
   const navigationRef = useRef<any>(null);
 
+  // Push: init + listeners viven en services/notifications.ts (routing table de
+  // los 8 tipos que emite el backend, buffer de cold start y supresión en
+  // primer plano). El permiso NO se pide acá sino tras el login, en contexto.
   useEffect(() => {
-    if (!OneSignal) return;
-    try {
-      OneSignal.initialize(process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID ?? '');
-      OneSignal.Notifications.requestPermission(true);
-      OneSignal.Notifications.addEventListener('click', (event: any) => {
-        const data = event.notification.additionalData as { type?: string; gameId?: string; fromUserId?: string };
-        if (data?.type === 'STREAMING_STARTED' && data?.gameId) {
-          navigationRef.current?.navigate('GameDetail', { gameId: data.gameId });
-        } else if (data?.type === 'NEW_CHAT_MESSAGE' && data?.gameId) {
-          navigationRef.current?.navigate('GameChat', { gameId: data.gameId });
-        } else if (data?.type === 'NEW_DM_MESSAGE' && data?.fromUserId) {
-          navigationRef.current?.navigate('DirectChat', { userId: data.fromUserId });
-        }
-      });
-    } catch (err) {
-      console.error('[App] OneSignal initialization failed:', err);
-    }
+    initNotifications(navigationRef);
   }, []);
 
   return (

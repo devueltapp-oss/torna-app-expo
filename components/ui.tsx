@@ -11,6 +11,7 @@ import {
   ViewStyle, StyleProp, Image,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { Heart } from 'lucide-react-native';
 import { useTheme } from '../theme';
 
 /* ─────────────────────────────  Button  ───────────────────────────── */
@@ -153,6 +154,93 @@ export function StatusBadge({ status, sub }: { status: GameStatus; sub?: string 
       {c.dot && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.ink }} />}
       <Text style={{ color: c.fg, fontSize: 10, fontWeight: '800', letterSpacing: 0.8 }}>
         {c.label}{sub ? ` · ${sub}` : ''}
+      </Text>
+    </View>
+  );
+}
+
+/* ───────────────────────────  Host Badge  ───────────────────────────
+ * Marca al organizador de la partida (`GamePlayer.isCaptain` en el backend,
+ * `UpcomingGamePlayer.isHost` en la app). Lima sobre azul, como los CTAs.
+ */
+
+export function HostBadge() {
+  const { colors } = useTheme();
+  return (
+    <View style={{
+      backgroundColor: colors.primary,
+      paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6,
+    }}>
+      <Text style={{ color: colors.primaryFg, fontSize: 9, fontWeight: '800', letterSpacing: 0.8 }}>
+        HOST
+      </Text>
+    </View>
+  );
+}
+
+/* ──────────────────────  Message Like Button  ───────────────────────
+ * Corazón de un mensaje de chat (grupal de partida o DM). Muestra el total de
+ * personas que lo likearon; el backend garantiza **un like por persona por
+ * mensaje**, así que el número es "cuánta gente", no "cuántos toques".
+ *
+ * Sin rojo: el manual de marca tiene 3 colores. Likeado = corazón lima relleno;
+ * sin likear = contorno en el gris azulado de los secundarios.
+ */
+
+export function MessageLikeButton({
+  count, liked, onPress, align = 'left',
+}: {
+  count: number;
+  liked: boolean;
+  onPress: () => void;
+  /** Lado del mensaje, para alinear el corazón con su burbuja. */
+  align?: 'left' | 'right';
+}) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={liked ? 'Quitar me gusta' : 'Me gusta'}
+      style={{
+        flexDirection: 'row', alignItems: 'center', gap: 4,
+        alignSelf: align === 'right' ? 'flex-end' : 'flex-start',
+        paddingVertical: 3, paddingHorizontal: 2,
+      }}
+    >
+      <Heart
+        size={14}
+        color={liked ? colors.accentText : colors.muted2}
+        fill={liked ? colors.accentText : 'transparent'}
+        strokeWidth={2}
+      />
+      {count > 0 && (
+        <Text style={{ fontSize: 11, fontWeight: '800', color: liked ? colors.accentText : colors.muted2 }}>
+          {count}
+        </Text>
+      )}
+    </Pressable>
+  );
+}
+
+/* ─────────────────────────  Category Badge  ─────────────────────────
+ * Categoría/nivel de la partida o del jugador. Convención de pádel:
+ * **1 = más alta**, 7 = iniciación. Outline (no compite con el CTA lima).
+ * Devuelve null si no hay categoría declarada, así el llamador no necesita
+ * condicionar el render.
+ */
+
+export function CategoryBadge({ category }: { category?: number | null }) {
+  const { colors } = useTheme();
+  if (!category) return null;
+  return (
+    <View style={{
+      borderWidth: 1.5, borderColor: colors.lineStrong,
+      paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
+    }}>
+      <Text style={{ color: colors.text, fontSize: 10, fontWeight: '800', letterSpacing: 0.6 }}>
+        {`CAT. ${category}`}
       </Text>
     </View>
   );

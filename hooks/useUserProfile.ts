@@ -96,6 +96,7 @@ export function useUserProfile(id: string | undefined) {
       username: withAt(p.username),
       club: '',
       location: p.region ?? '',
+      category: p.category ?? null,
       followers: p.followersCount ?? 0,
       isFollowing: p.isFollowing ?? false,
       notifyOnMatch: p.notifyOnMatch ?? false,

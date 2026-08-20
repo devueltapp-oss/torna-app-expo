@@ -14,6 +14,7 @@ import {
   fetchDirectChat,
   sendDirectMessage,
   markDmRead,
+  toggleDirectMessageLike,
   type DirectMessage,
 } from '../api/chat';
 
@@ -24,6 +25,8 @@ export interface UseDirectChat {
   loading: boolean;
   sending: boolean;
   send: (content: string) => Promise<boolean>;
+  /** Like / unlike de un mensaje (toggle). Optimista, con revert si falla. */
+  toggleLike: (messageId: string) => Promise<void>;
 }
 
 export function useDirectChat(
@@ -36,6 +39,10 @@ export function useDirectChat(
   const isFocused = useIsFocused();
 
   const lastServerAtRef = useRef<string | undefined>(undefined);
+  // Espejo de `messages` para leer el estado actual desde callbacks async
+  // (el toggle de like necesita el valor previo para poder revertir).
+  const messagesRef = useRef<DirectMessage[]>([]);
+  messagesRef.current = messages;
 
   const ingest = useCallback((incoming: DirectMessage[]) => {
     if (incoming.length === 0) return;
@@ -113,5 +120,45 @@ export function useDirectChat(
     }
   }, [userId, sender?.id, sender?.username, sender?.name, sender?.profilePicture]);
 
-  return { messages, loading, sending, send };
+  /**
+   * Toggle de like, igual que en `useGameChat`: optimista con revert, y la
+   * respuesta del servidor pisa el total. Los likes del otro llegan por el
+   * poll (el backend devuelve los mensajes viejos con actividad de likes
+   * posterior al cursor `since`).
+   */
+  const toggleLike = useCallback(async (messageId: string) => {
+    if (messageId.startsWith('temp-')) return; // Optimista: todavía no existe en el servidor.
+
+    // El previo se lee del ref, no dentro del updater: el updater puede correr
+    // después del await y el revert se quedaría sin valor que restaurar.
+    const previous = messagesRef.current.find((m) => m.id === messageId);
+    if (!previous) return;
+
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.id !== messageId) return m;
+        const liked = !m.likedByMe;
+        return {
+          ...m,
+          likedByMe: liked,
+          likesCount: Math.max(0, (m.likesCount ?? 0) + (liked ? 1 : -1)),
+        };
+      }),
+    );
+
+    try {
+      const res = await toggleDirectMessageLike(messageId);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? { ...m, likesCount: res.likesCount, likedByMe: res.likedByMe }
+            : m,
+        ),
+      );
+    } catch {
+      setMessages((prev) => prev.map((m) => (m.id === messageId ? previous : m)));
+    }
+  }, []);
+
+  return { messages, loading, sending, send, toggleLike };
 }

@@ -36,7 +36,7 @@ interface BackendGameDetail {
   durationSeconds?: number | null;
   padelCourt?: { name?: string | null; surface?: string | null } | null;
   cameras?: BackendCamera[];
-  gamePlayers?: Array<{ user: { username: string; name?: string | null } }>;
+  gamePlayers?: Array<{ isCaptain?: boolean; user: { username: string; name?: string | null } }>;
 }
 
 const SURFACES = ['CLAY', 'GRASS', 'HARD', 'CARPET'] as const;
@@ -66,6 +66,7 @@ function mapDetail(data: BackendGameDetail): GameDetailData {
     players: (data.gamePlayers ?? []).map((gp) => ({
       username: '@' + gp.user.username,
       name: gp.user.name ?? gp.user.username,
+      isHost: gp.isCaptain === true,
     })),
     cameras: cams.map((c, i) => {
       // String vacío también cuenta como "sin stream" (no solo null/undefined).

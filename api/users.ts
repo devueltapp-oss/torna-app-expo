@@ -29,6 +29,8 @@ export interface UserProfile {
   address: string | null;
   latitude: number | null;
   longitude: number | null;
+  /** Categoría de juego: 1 = más alta, 7 = iniciación. */
+  category?: number | null;
   followersCount: number;
   followingCount: number;
   isFollowing: boolean;

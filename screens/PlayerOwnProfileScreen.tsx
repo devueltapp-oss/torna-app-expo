@@ -17,7 +17,7 @@ import { View, Text, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Lock, Settings, ChevronRight } from 'lucide-react-native';
 import { useTheme } from '../theme';
-import { Avatar, Button } from '../components/ui';
+import { Avatar, Button, CategoryBadge } from '../components/ui';
 import { ImageViewerModal } from '../components/ImageViewerModal';
 import { ContentThumb } from '../components/ContentThumb';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
@@ -97,7 +97,12 @@ export function PlayerOwnProfileScreen({
         {/* Bio */}
         <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
           <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text }}>{owner.name}</Text>
-          <Text style={{ fontSize: 12, color: colors.muted2 }}>{owner.club} · {owner.location}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
+            <Text style={{ fontSize: 12, color: colors.muted2, flexShrink: 1 }}>
+              {owner.club} · {owner.location}
+            </Text>
+            <CategoryBadge category={owner.category} />
+          </View>
         </View>
 
         {/* CTAs */}

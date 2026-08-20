@@ -14,7 +14,13 @@ import { fonts } from '../theme/tokens';
 import { Avatar, AvatarStack, StatusBadge, SurfaceChip, ClubPill, GameStatus } from './ui';
 import type { FeedPost as FeedPostData, UpcomingGameData } from '../data/types';
 
-export interface MatchParticipant { username: string; name?: string; profilePicture?: string; }
+export interface MatchParticipant {
+  username: string;
+  name?: string;
+  profilePicture?: string;
+  /** Organizador de la partida (`GamePlayer.isCaptain` en el backend). */
+  isHost?: boolean;
+}
 
 export interface LiveGameData {
   id: string;

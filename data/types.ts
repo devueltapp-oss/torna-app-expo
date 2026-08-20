@@ -21,6 +21,8 @@ export interface UpcomingGamePlayer {
   name?: string;
   profilePicture?: string;
   team?: 1 | 2;
+  /** Organizador de la partida (`GamePlayer.isCaptain` en el backend). */
+  isHost?: boolean;
 }
 
 export interface GameApplication {
@@ -49,6 +51,8 @@ export interface UpcomingGameData {
   myTeam?: 1 | 2;
   /** True si el usuario autenticado participa de la partida. */
   viewerIsParticipant?: boolean;
+  /** Categoría/nivel de la partida: 1 = más alta, 7 = iniciación. */
+  category?: number | null;
   /** Ubicación del club (para abrir el pin exacto en Google Maps). */
   clubLat?: number | null;
   clubLng?: number | null;
@@ -163,6 +167,8 @@ export interface PlayerPublic {
   username: string;
   club: string;
   location: string;
+  /** Categoría de juego: 1 = más alta, 7 = iniciación. null = sin declarar. */
+  category?: number | null;
   followers: number;
   isFollowing: boolean;
   /** True cuando el player está en un partido transmitido en vivo. */
@@ -238,6 +244,8 @@ export interface ProfileOwner {
   following: number;
   /** Foto de perfil (URL B2). Si falta, el Avatar cae a iniciales. */
   profilePicture?: string;
+  /** Categoría de juego: 1 = más alta, 7 = iniciación. null/undefined = sin declarar. */
+  category?: number | null;
 }
 
 /* ─────────── Librería del player ─────────── */

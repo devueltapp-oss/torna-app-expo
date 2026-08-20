@@ -19,6 +19,8 @@ const TOKEN_KEY = 'torna_auth_token';
 interface BackendOpenGame {
   id: string;
   scheduledStartAt?: string | null;
+  /** Categoría/nivel de la partida: 1 = más alta, 7 = iniciación. */
+  category?: number | null;
   padelCourt?: { name?: string | null } | null;
   cameras?: Array<{
     isPrimary: boolean;
@@ -36,6 +38,7 @@ interface BackendOpenGame {
     };
   }>;
   gamePlayers?: Array<{
+    isCaptain?: boolean;
     user: { id: string; username: string; name?: string | null; profilePicture?: string | null };
   }>;
 }
@@ -73,11 +76,13 @@ function mapOpenGame(g: BackendOpenGame): UpcomingGameData {
       username: '@' + gp.user.username,
       name: gp.user.name ?? gp.user.username,
       profilePicture: gp.user.profilePicture ?? undefined,
+      isHost: gp.isCaptain === true,
     })),
     following: 'club',
     isOpenForPlayers: true,
     maxPlayers: 4,
     isCreator: false,
+    category: g.category ?? null,
   };
 }
 

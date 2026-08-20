@@ -30,6 +30,7 @@ function mapPlayer(p: BackendUpcomingGame['gamePlayers'][number]): UpcomingGameP
     name: p.user.name ?? p.user.username,
     profilePicture: p.user.profilePicture ?? undefined,
     team: p.team === 1 || p.team === 2 ? p.team : undefined,
+    isHost: p.isCaptain === true,
   };
 }
 

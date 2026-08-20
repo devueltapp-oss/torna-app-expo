@@ -100,6 +100,8 @@ export interface BackendMyGame {
   id: string;
   status: string;
   isOpenForPlayers: boolean;
+  /** Categoría/nivel: 1 = más alta, 7 = iniciación. */
+  category?: number | null;
   scheduledStartAt?: string | null;
   scheduledEndAt?: string | null;
   padelCourt?: { name?: string | null } | null;
@@ -236,6 +238,17 @@ export interface GameChatMessage {
   profilePicture: string | null;
   content: string;
   createdAt: string;
+  /** Cuántas personas likearon el mensaje (una por persona, máx. 1 cada una). */
+  likesCount?: number;
+  /** Si el usuario autenticado ya lo likeó. */
+  likedByMe?: boolean;
+}
+
+/** Respuesta del toggle de like, tanto en chat de partida como en DM. */
+export interface MessageLikeResult {
+  messageId: string;
+  likesCount: number;
+  likedByMe: boolean;
 }
 
 /**
@@ -251,6 +264,21 @@ export function fetchGameChat(gameId: string, since?: string): Promise<GameChatM
 /** Envía un mensaje al chat de la partida (POST /game/:id/chat). */
 export function sendGameChatMessage(gameId: string, content: string): Promise<GameChatMessage> {
   return authedSend('POST', `/game/${encodeURIComponent(gameId)}/chat`, { content });
+}
+
+/**
+ * Like / unlike de un mensaje del chat de la partida
+ * (POST /game/:id/chat/:messageId/like). Es un **toggle**: si ya lo habías
+ * likeado, se lo quita. El backend garantiza un like por persona por mensaje.
+ */
+export function toggleGameChatMessageLike(
+  gameId: string,
+  messageId: string,
+): Promise<MessageLikeResult> {
+  return authedSend(
+    'POST',
+    `/game/${encodeURIComponent(gameId)}/chat/${encodeURIComponent(messageId)}/like`,
+  );
 }
 
 /** Suscribirse a notificaciones de un partido (POST /game/:id/watch). */

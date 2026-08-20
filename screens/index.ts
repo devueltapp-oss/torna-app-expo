@@ -3,6 +3,7 @@ export { RegisterClubScreen } from './RegisterClubScreen';
 export { RegisterPlayerScreen, type RegisterPlayerScreenProps } from './RegisterPlayerScreen';
 export { PendingApprovalScreen } from './PendingApprovalScreen';
 export { CompleteProfileScreen, type CompleteProfileScreenProps } from './CompleteProfileScreen';
+export { ForgotPasswordScreen, type ForgotPasswordScreenProps } from './ForgotPasswordScreen';
 
 // Home
 export { HomeScreen, type UpcomingGameData, type UpcomingGamePlayer } from './HomeScreen';

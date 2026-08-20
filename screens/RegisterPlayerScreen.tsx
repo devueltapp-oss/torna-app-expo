@@ -23,6 +23,7 @@ import {
 import { useTheme } from '../theme';
 import { Button, Input } from '../components/ui';
 import { useAuth } from '../contexts/AuthContext';
+import { checkUsernameAvailable, USERNAME_RE } from '../api/auth';
 
 export interface RegisterPlayerScreenProps {
   onBack: () => void;
@@ -65,7 +66,7 @@ export function RegisterPlayerScreen({ onBack }: RegisterPlayerScreenProps) {
       return;
     }
 
-    if (!/^[a-zA-Z0-9_]+$/.test(raw)) {
+    if (!USERNAME_RE.test(raw)) {
       setUsernameStatus('error');
       return;
     }
@@ -73,10 +74,12 @@ export function RegisterPlayerScreen({ onBack }: RegisterPlayerScreenProps) {
     let cancelled = false;
     setUsernameStatus('checking');
 
-    fetch(`${API_URL}/auth/check-username?username=${encodeURIComponent(raw)}`)
-      .then(r => r.json())
-      .then((data: { available: boolean }) => {
-        if (!cancelled) setUsernameStatus(data.available ? 'available' : 'taken');
+    // ⚠️ Vía api/auth.ts, que desenvuelve el sobre `{ data, statusCode }` del
+    // backend. Leyendo el JSON crudo, `available` daba undefined y TODOS los
+    // usernames quedaban marcados como ocupados → nadie podía registrarse.
+    checkUsernameAvailable(raw)
+      .then((available) => {
+        if (!cancelled) setUsernameStatus(available ? 'available' : 'taken');
       })
       .catch(() => {
         if (!cancelled) setUsernameStatus('error');

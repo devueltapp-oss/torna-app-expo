@@ -15,6 +15,7 @@ import { ArrowLeft, AtSign, User as UserIcon, CheckCircle2, XCircle } from 'luci
 import { useTheme } from '../theme';
 import { Button, Input } from '../components/ui';
 import { useAuth, type TornaUser, type RegisterDto } from '../contexts/AuthContext';
+import { checkUsernameAvailable, USERNAME_RE } from '../api/auth';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -24,7 +25,8 @@ export interface CompleteProfileScreenProps {
   idToken: string;
   prefillName?: string;
   prefillEmail?: string;
-  authProvider: 'google' | 'apple' | 'facebook';
+  /** `email` = entró con email/contraseña pero no tenía cuenta en Torna. */
+  authProvider: 'email' | 'google' | 'apple' | 'facebook';
   onComplete: (user: TornaUser) => void;
   onBack: () => void;
 }
@@ -76,7 +78,7 @@ export function CompleteProfileScreen({
     }
 
     // Only allow alphanumeric + underscores
-    if (!/^[a-zA-Z0-9_]+$/.test(raw)) {
+    if (!USERNAME_RE.test(raw)) {
       setUsernameStatus('error');
       return;
     }
@@ -84,12 +86,11 @@ export function CompleteProfileScreen({
     let cancelled = false;
     setUsernameStatus('checking');
 
-    fetch(`${API_URL}/auth/check-username?username=${encodeURIComponent(raw)}`)
-      .then(r => r.json())
-      .then((data: { available: boolean }) => {
-        if (!cancelled) {
-          setUsernameStatus(data.available ? 'available' : 'taken');
-        }
+    // Ver api/auth.ts: el backend envuelve la respuesta en `{ data }`, así que
+    // leer `available` del JSON crudo marcaba todo como ocupado.
+    checkUsernameAvailable(raw)
+      .then((available) => {
+        if (!cancelled) setUsernameStatus(available ? 'available' : 'taken');
       })
       .catch(() => {
         if (!cancelled) setUsernameStatus('error');
@@ -179,6 +180,7 @@ export function CompleteProfileScreen({
   }
 
   const providerLabel: Record<typeof authProvider, string> = {
+    email: 'email',
     google: 'Google',
     apple: 'Apple',
     facebook: 'Facebook',

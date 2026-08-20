@@ -12,8 +12,21 @@ jest.mock('expo-secure-store', () => ({
 jest.mock('react-native-onesignal', () => ({
   OneSignal: {
     initialize: jest.fn(),
-    Notifications: { requestPermission: jest.fn(), addEventListener: jest.fn() },
-    User: { pushSubscription: { getIdAsync: jest.fn(async () => 'sub-id') } },
+    login: jest.fn(),
+    logout: jest.fn(),
+    Notifications: {
+      requestPermission: jest.fn(async () => true),
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+    },
+    User: {
+      pushSubscription: {
+        getIdAsync: jest.fn(async () => 'sub-id'),
+        optIn: jest.fn(),
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+      },
+    },
   },
 }));
 

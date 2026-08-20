@@ -18,7 +18,7 @@ import { Avatar, Button, Input, AppHeader, SectionHeader } from '../components/u
 import { ImageViewerModal } from '../components/ImageViewerModal';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import { useAuth } from '../contexts/AuthContext';
-import { uploadProfilePicture, uploadFrontPage } from '../api/profile';
+import { uploadProfilePicture, uploadFrontPage, updateMyCategory } from '../api/profile';
 import type { ProfileOwner } from '../data/types';
 
 type Section = 'overview' | 'profile' | 'password';
@@ -42,6 +42,23 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
   const [pwConfirm, setPwConfirm] = React.useState('');
   const [pwSubmitting, setPwSubmitting] = React.useState(false);
   const [pwError, setPwError]     = React.useState<string | null>(null);
+  const [category, setCategory] = React.useState<number | null>(owner.category ?? null);
+  const [categoryError, setCategoryError] = React.useState<string | null>(null);
+
+  // Se guarda al tocar el chip (no hay "Guardar" para este campo). Update
+  // optimista con revert: si el PATCH falla, vuelve al valor anterior.
+  async function handleChangeCategory(next: number | null) {
+    const previous = category;
+    setCategory(next);
+    setCategoryError(null);
+    if (next === null) return; // Deseleccionar es solo local: el backend no acepta null.
+    try {
+      await updateMyCategory(next);
+    } catch {
+      setCategory(previous);
+      setCategoryError('No se pudo guardar la categoría. Intentá de nuevo.');
+    }
+  }
 
   async function handleChangePassword() {
     setPwError(null);
@@ -146,6 +163,7 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
             cover={cover} uploadingCover={uploadingCover} coverError={coverError}
             onChangeCover={changeCover}
             onChangeName={setName} onChangeUsername={setUsername}
+            category={category} onChangeCategory={handleChangeCategory} categoryError={categoryError}
             onCancel={() => setSection('overview')}
             onSave={() => setSection('overview')}
           />
@@ -268,7 +286,7 @@ function ThemeSegment({ mode, current, label, icon, onChange }: {
 function ProfileSection({
   colors, name, username, club, avatar, uploadingPhoto, photoError, onChangePhoto, onViewPhoto,
   cover, uploadingCover, coverError, onChangeCover,
-  onChangeName, onChangeUsername, onCancel, onSave,
+  onChangeName, onChangeUsername, category, onChangeCategory, categoryError, onCancel, onSave,
 }: {
   colors: ReturnType<typeof useTheme>['colors'];
   name: string; username: string; club: string;
@@ -278,6 +296,10 @@ function ProfileSection({
   cover?: string; uploadingCover: boolean; coverError: string | null;
   onChangeCover: () => void;
   onChangeName: (s: string) => void; onChangeUsername: (s: string) => void;
+  /** Categoría del jugador: 1 = más alta, 7 = iniciación. null = sin declarar. */
+  category: number | null;
+  onChangeCategory: (n: number | null) => void;
+  categoryError: string | null;
   onCancel: () => void; onSave: () => void;
 }) {
   return (
@@ -333,6 +355,38 @@ function ProfileSection({
         hint="Cómo te encuentran otros jugadores."/>
       <Input label="Club principal" value={club} onChangeText={() => {}} disabled
         hint="Lo administra el club. Pedile al admin si necesitás cambiarlo."/>
+
+      {/* Categoría del jugador — se guarda al tocarla (PATCH /user/me). */}
+      <View style={{ gap: 6 }}>
+        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text2 }}>Categoría</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {[1, 2, 3, 4, 5, 6, 7].map((n) => {
+            const active = category === n;
+            return (
+              <Pressable
+                key={n}
+                onPress={() => onChangeCategory(active ? null : n)}
+                style={{
+                  minWidth: 44, alignItems: 'center',
+                  backgroundColor: active ? colors.primary : 'transparent',
+                  borderWidth: 1.5, borderColor: active ? colors.primary : colors.line,
+                  borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: '800', color: active ? colors.primaryFg : colors.text }}>
+                  {n}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={{ fontSize: 11, color: colors.muted2, lineHeight: 15 }}>
+          1 es la categoría más alta y 7 la de iniciación.
+        </Text>
+        {categoryError ? (
+          <Text style={{ fontSize: 11, color: colors.warnFg, fontWeight: '700' }}>{categoryError}</Text>
+        ) : null}
+      </View>
 
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
         <Button variant="soft" size="lg" onPress={onCancel}>Cancelar</Button>

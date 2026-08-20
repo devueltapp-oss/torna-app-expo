@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Send } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
-import { AppHeader, Avatar } from '../components/ui';
+import { AppHeader, Avatar, MessageLikeButton } from '../components/ui';
 import { useAuth } from '../contexts/AuthContext';
 import { useDirectChat } from '../hooks/useDirectChat';
 import type { DirectMessage } from '../api/chat';
@@ -36,7 +36,7 @@ export function DirectChatScreen({ userId, title, onBack }: DirectChatScreenProp
     () => (user ? { id: user.id, username: user.username, name: user.name, profilePicture: user.profilePicture } : undefined),
     [user?.id, user?.username, user?.name, user?.profilePicture],
   );
-  const { messages, loading, sending, send } = useDirectChat(userId, sender);
+  const { messages, loading, sending, send, toggleLike } = useDirectChat(userId, sender);
   const [text, setText] = React.useState('');
   const listRef = React.useRef<FlatList<DirectMessage>>(null);
 
@@ -85,7 +85,12 @@ export function DirectChatScreen({ userId, title, onBack }: DirectChatScreenProp
               </View>
             }
             renderItem={({ item }) => (
-              <MessageBubble message={item} isMine={item.senderId === user?.id} colors={colors} />
+              <MessageBubble
+                message={item}
+                isMine={item.senderId === user?.id}
+                colors={colors}
+                onToggleLike={toggleLike}
+              />
             )}
           />
         )}
@@ -125,14 +130,16 @@ export function DirectChatScreen({ userId, title, onBack }: DirectChatScreenProp
 }
 
 function MessageBubble({
-  message, isMine, colors,
+  message, isMine, colors, onToggleLike,
 }: {
   message: DirectMessage;
   isMine: boolean;
   colors: ReturnType<typeof useTheme>['colors'];
+  onToggleLike: (messageId: string) => void;
 }) {
   const displayName = message.name ?? message.username;
   return (
+    <View style={{ gap: 2 }}>
     <View style={{
       flexDirection: 'row', alignItems: 'flex-end', gap: 8,
       justifyContent: isMine ? 'flex-end' : 'flex-start',
@@ -156,6 +163,17 @@ function MessageBubble({
         }}>
           {timeLabel(message.createdAt)}
         </Text>
+      </View>
+    </View>
+      {/* Corazón fuera de la burbuja (adentro competiría con el fondo lima de
+          los mensajes propios). En un DM el total es 0, 1 ó 2. */}
+      <View style={{ paddingLeft: isMine ? 0 : 36, paddingRight: isMine ? 2 : 0 }}>
+        <MessageLikeButton
+          count={message.likesCount ?? 0}
+          liked={message.likedByMe ?? false}
+          align={isMine ? 'right' : 'left'}
+          onPress={() => onToggleLike(message.id)}
+        />
       </View>
     </View>
   );

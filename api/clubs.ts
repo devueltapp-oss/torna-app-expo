@@ -169,6 +169,8 @@ export interface CreateReservationInput {
   mode: 'full' | 'search-opponents';
   partnerUserId?: string;
   opponentUserIds?: string[];
+  /** Categoría/nivel de la partida: 1 = más alta, 7 = iniciación. El backend valida 1–7. */
+  category?: number;
 }
 
 export interface CreatedReservation {

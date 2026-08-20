@@ -277,9 +277,38 @@ Club por email — RegisterClubScreen
   registerWithEmailPassword con isClub:true (el backend ya lo deja en status:false).
 ```
 
+> ⚠️ **`GET /auth/check-username` viene envuelto en `{ data, statusCode }`** como todo el
+> backend. Leer `json.available` del JSON crudo da `undefined` → se interpreta como
+> "ocupado" → **todos** los usernames salen tomados y el botón de registrarse nunca se
+> habilita (bug real que impedía crear cuentas). Usar siempre
+> `checkUsernameAvailable()` de `api/auth.ts`, que desenvuelve `data`. Formato válido:
+> `^[a-zA-Z0-9_]+$`, 3–30 chars (`USERNAME_RE`, espejo del `@Matches` del backend).
+>
+> ⚠️ **`POST /auth/login-email-password` responde 200 con `{ exists:false, firebaseUser }`**
+> cuando las credenciales son válidas en Firebase pero el usuario **no tiene fila en la DB**
+> (típico de cuentas creadas a mano desde la consola de Firebase). No es un error de
+> credenciales ni de roles. `loginWithEmailPassword` devuelve `needs_registration` y la UI
+> manda a `CompleteProfile` con `authProvider:'email'`, igual que el login social. Antes se
+> destructuraba `user` sin chequear y reventaba con "cannot read property 'id' of undefined".
+
 > El botón **"Crear cuenta de Player"** de `LoginWithRoleScreen` navega a
 > `RegisterPlayer` (`App.tsx`); el de club va a `Register`. El username se valida
 > en vivo contra `GET /auth/check-username?username=` (debounce 400 ms).
+
+#### Recuperar contraseña (usuario deslogueado)
+
+`ForgotPasswordScreen` (ruta `ForgotPassword` del AuthStack) → `AuthContext.sendPasswordReset(email)`
+→ `firebaseAuth().sendPasswordResetEmail(email)`. **El backend no participa**: su
+`POST /auth/reset-password` está detrás de `FirebaseAuthGuard` y exige sesión activa, o sea
+que no sirve para alguien que olvidó la clave (es un *cambio*, no una *recuperación*).
+
+- Se entra desde "Olvidé mi contraseña" en `LoginWithRoleScreen`, que pasa el email ya
+  tipeado como `prefillEmail`.
+- ⚠️ **No se revela si el email existe**: `user-not-found` muestra exactamente la misma
+  pantalla de confirmación que el caso feliz. Solo se muestran errores de formato,
+  rate-limit y red. Cubierto por `screens/__tests__/ForgotPasswordScreen.test.tsx`.
+- Cuentas Google/Apple: no tienen contraseña, pero el mismo enlace de Firebase les permite
+  crear una — el copy de la confirmación lo aclara.
 
 #### Cambio de contraseña (player + club)
 
@@ -450,6 +479,24 @@ POST  /game/:id/cancel-pair                   → la pareja retadora (team=2) se
 > que, según el rol del viewer, ofrece *Cancelar partida* (owner), *Darme de baja* (miembro) y
 > *Cancelar nuestra pareja* (team 2). Las bajas/cancelaciones notifican por push (OneSignal).
 
+#### Host (organizador) y categoría
+
+- **Host** = `GamePlayer.isCaptain` del backend (quien creó la partida). Ya viaja en
+  `/game/mine`, `/game/open` y `/game/:id`; la app lo mapea a **`UpcomingGamePlayer.isHost`** /
+  `MatchParticipant.isHost` y lo pinta con **`<HostBadge/>`** (`components/ui.tsx`) en
+  `UpcomingMatchSheet`, las cards de `GamesScreen` y `GameDetailScreen`.
+  ⚠️ No confundir con `isCreator` de `UpcomingGameData`, que es "¿el host soy **yo**?" y es lo
+  que habilita las acciones de owner. Los dos conviven: `isCreator` para permisos, `isHost`
+  para mostrar **quién** organiza.
+- **Categoría** = `Game.category` / `User.category`, **1 = más alta, 7 = iniciación**
+  (convención de pádel), opcional. Se elige al reservar (`ReserveStep3Screen`, chips 1–7 →
+  `POST /game/reserve { category }`) y en el perfil propio (`PlayerSettingsScreen` → sección
+  Editar perfil → `updateMyCategory` → `PATCH /user/me`, guardado optimista con revert).
+  Se muestra con **`<CategoryBadge category/>`**, que devuelve `null` si no hay categoría — el
+  llamador no condiciona el render. Excepción: en `PlayerProfilePublicView` va como texto,
+  porque ahí el fondo es el azul del hero y el badge usa `colors.text`.
+  Cubierto por `components/__tests__/UpcomingMatchSheet.test.tsx`.
+
 ### Subidas a B2 — `api/profile.ts` (avatar/portada)
 
 ```
@@ -530,26 +577,73 @@ POST /chat/dm/:userId/read   → marcar el hilo como leído (limpia el badge del
 - **Push**: OneSignal `type:'NEW_DM_MESSAGE' { conversationId, fromUserId }` → el handler navega a
   `DirectChat`. (El grupal usa `NEW_CHAT_MESSAGE { gameId }` → `GameChat`.)
 
+#### Likes de mensajes (corazón)
+
+Los mensajes de **ambos** chats (grupal de partida y DM) se pueden likear.
+
+```
+POST /game/:id/chat/:messageId/like   → toggle en el chat de la partida
+POST /chat/message/:messageId/like    → toggle en un DM
+                       ambos devuelven { messageId, likesCount, likedByMe }
+```
+
+- **Un like por persona por mensaje** — lo garantiza un índice único
+  `(messageId, userId)` en la DB, no el cliente. Tocar de nuevo el corazón lo quita
+  (toggle). La misma persona sí puede likear muchos mensajes distintos.
+- `likesCount` = **cuánta gente** likeó ese mensaje (en un grupal puede ser >1; en un DM,
+  máximo 2). Se muestra con `<MessageLikeButton/>` (`components/ui.tsx`): un corazón +
+  el número. Sin rojo — likeado = corazón lima relleno, si no contorno gris azulado.
+- El botón va **fuera de la burbuja**: adentro competiría con el fondo lima de los
+  mensajes propios.
+- `toggleLike` de `useGameChat`/`useDirectChat` es **optimista con revert**, y la respuesta
+  del servidor pisa el total (puede haber cambiado si otro likeó en el medio). El valor
+  previo se lee de un **ref**, no del updater de `setState`: el updater puede correr
+  después del `await` y dejaba al revert sin nada que restaurar.
+- ⚠️ **El poll incremental necesitaba un ajuste**: con `since`, el backend ahora también
+  devuelve los mensajes **viejos con actividad de likes posterior al cursor**. Sin eso, un
+  like sobre un mensaje anterior no llegaba nunca (el poll solo miraba `createdAt` del
+  mensaje). El hook dedupea por id, así que reenviar un mensaje conocido solo refresca su
+  contador. Un *unlike* ajeno sí puede tardar hasta la próxima carga completa.
+- Cubierto por `hooks/__tests__/useGameChatLikes.test.ts` y, en el backend,
+  `GameService toggleGameChatMessageLike` en `game.service.spec.ts`.
+
 ### Notificaciones push (OneSignal)
 
-La app usa **`react-native-onesignal`** (NO `expo-notifications`). Init en `App.tsx`
-dentro de `App()`: `OneSignal.initialize(EXPO_PUBLIC_ONESIGNAL_APP_ID)` +
-`requestPermission` + listener de `click`.
+La app usa **`react-native-onesignal`** (NO `expo-notifications`). **Todo vive en
+`services/notifications.ts`** — init, listeners, ruteo e identidad. `App.tsx` solo llama
+`initNotifications(navigationRef)` y le pasa `onNavigationReady` al `NavigationContainer`.
 
 ```
-PUT /user/update-notification-id  { notificationID }  → registra el push token
+PUT    /user/update-notification-id  { notificationID }  → registra el push token
+DELETE /user/notification-id                             → lo borra (logout)
 ```
 
-- `registerNotificationId()` en `contexts/AuthContext.tsx` se llama tras cada login
-  (email / Google / Apple). Toma el subscription ID de OneSignal
-  (`OneSignal.User.pushSubscription.getIdAsync()`) y lo manda al backend.
+**Ruteo — `resolvePushTarget(additionalData)`** traduce el push a pantalla. Son los **8
+tipos** que emite el backend (cubiertos por `services/__tests__/notifications.test.ts`):
+
+| `type` | Pantalla |
+|---|---|
+| `STREAMING_STARTED` · `RECORDING_READY` · `GAME_FINISHED` | `GameDetail { gameId }` |
+| `NEW_CHAT_MESSAGE` | `GameChat { gameId }` |
+| `NEW_DM_MESSAGE` | `DirectChat { userId: fromUserId }` |
+| `GAME_CANCELLED` · `GAME_PLAYER_LEFT` · `GAME_PAIR_CANCELLED` | `MainPlayer { initialTab: 'games' }` |
+
+- Se normaliza a mayúsculas: producción todavía manda los tres últimos en minúscula
+  (`game_cancelled`, …), así que se aceptan ambas formas.
+- **Cold start**: si el tap llega antes de que monte el navigator, el destino se guarda
+  y se aplica en `onNavigationReady()`. Sin eso el `navigate` se perdía en silencio.
+- **Primer plano**: `foregroundWillDisplay` suprime el banner si el usuario ya está
+  parado en esa misma pantalla (el chat que está leyendo).
 - ⚠️ **El campo DEBE ser `notificationID` (con `ID` mayúscula)** para coincidir con el
   DTO del backend (`forbidNonWhitelisted`); un `notificationId` con `d` minúscula da
-  **400** y el token nunca se registra → no llega ningún push. El registro es
-  best-effort (catch silencioso), así que el fallo es invisible.
-- El listener de `click` lee `additionalData`; si `type === 'STREAMING_STARTED'` y hay
-  `gameId`, navega a `GameDetail`. Hoy ese es el único tipo manejado (lo dispara el
-  backend cuando una partida pasa a LIVE desde torna-desktop).
+  **400** y el token nunca se registra → no llega ningún push.
+- **Registro auto-reparable**: `identifyUser(uid, idToken)` corre en cada login **y al
+  restaurar sesión**. Hace `OneSignal.login(uid)` (external ID), pide permiso **en
+  contexto** (ya no en el arranque frío) y, si el subscription ID todavía no existe,
+  espera el evento `change` en vez de abandonar hasta el próximo login.
+- **Logout**: `clearIdentity(token)` borra el `notificationId` en el backend y hace
+  `OneSignal.logout()`. Sin esto el que cerró sesión seguía recibiendo sus pushes en
+  ese teléfono.
 - Env: `EXPO_PUBLIC_ONESIGNAL_APP_ID`. La app **solo recibe** push; no hay WebSocket ni
   polling en tiempo real (los datos se refrescan al montar o con pull-to-refresh).
 

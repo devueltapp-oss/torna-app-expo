@@ -66,8 +66,12 @@ export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onTogg
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={{ fontSize: 11, fontWeight: '800', color: colors.accent, letterSpacing: 0.8 }}>PLAYER</Text>
               <Text style={{ fontSize: 20, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.4 }} numberOfLines={1}>{player.name}</Text>
+              {/* La categoría va como texto y no con CategoryBadge: acá el fondo
+                  es el azul del hero en ambos temas, y el badge usa colors.text. */}
               <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 2 }} numberOfLines={1}>
-                {player.username} · {player.club}
+                {[player.username, player.club, player.category ? `Cat. ${player.category}` : null]
+                  .filter(Boolean)
+                  .join(' · ')}
               </Text>
               {player.isLiveNow && (
                 <View style={{ flexDirection: 'row', alignSelf: 'flex-start', alignItems: 'center', gap: 5, marginTop: 8, backgroundColor: colors.live, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 9999 }}>

@@ -16,6 +16,7 @@ import { useIsFocused } from '@react-navigation/native';
 import {
   fetchGameChat,
   sendGameChatMessage,
+  toggleGameChatMessageLike,
   type GameChatMessage,
 } from '../api/games';
 
@@ -27,6 +28,8 @@ export interface UseGameChat {
   sending: boolean;
   /** Envía un mensaje. Devuelve true si se persistió, false si falló. */
   send: (content: string) => Promise<boolean>;
+  /** Like / unlike de un mensaje (toggle). Optimista, con revert si falla. */
+  toggleLike: (messageId: string) => Promise<void>;
 }
 
 export function useGameChat(gameId: string, sender?: { id: string; username: string; name?: string | null; profilePicture?: string | null }): UseGameChat {
@@ -37,6 +40,10 @@ export function useGameChat(gameId: string, sender?: { id: string; username: str
 
   // Último createdAt confirmado por el servidor (para el `since` del poll).
   const lastServerAtRef = useRef<string | undefined>(undefined);
+  // Espejo de `messages` para leer el estado actual desde callbacks async
+  // (el toggle de like necesita el valor previo para poder revertir).
+  const messagesRef = useRef<GameChatMessage[]>([]);
+  messagesRef.current = messages;
 
   // Integra mensajes del servidor: dedupe por id, mantiene orden por createdAt y
   // avanza el cursor `since`.
@@ -116,5 +123,50 @@ export function useGameChat(gameId: string, sender?: { id: string; username: str
     }
   }, [gameId, sender?.id, sender?.username, sender?.name, sender?.profilePicture]);
 
-  return { messages, loading, sending, send };
+  /**
+   * Toggle de like. Se aplica en el acto (el corazón no puede esperar 3s) y se
+   * revierte si el POST falla. La respuesta del servidor pisa el optimismo con
+   * el total real, que puede diferir si alguien más likeó en el medio.
+   *
+   * Los likes de OTROS llegan por el poll: el backend, cuando hay `since`,
+   * también devuelve los mensajes viejos con actividad de likes posterior al
+   * cursor, y `ingest` los pisa por id.
+   */
+  const toggleLike = useCallback(async (messageId: string) => {
+    // Los mensajes optimistas todavía no existen en el servidor.
+    if (messageId.startsWith('temp-')) return;
+
+    // El estado previo se lee del ref, NO dentro del updater de setMessages: el
+    // updater puede ejecutarse después del await (o dos veces), y ahí el revert
+    // se quedaba sin valor que restaurar.
+    const previous = messagesRef.current.find((m) => m.id === messageId);
+    if (!previous) return;
+
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.id !== messageId) return m;
+        const liked = !m.likedByMe;
+        return {
+          ...m,
+          likedByMe: liked,
+          likesCount: Math.max(0, (m.likesCount ?? 0) + (liked ? 1 : -1)),
+        };
+      }),
+    );
+
+    try {
+      const res = await toggleGameChatMessageLike(gameId, messageId);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? { ...m, likesCount: res.likesCount, likedByMe: res.likedByMe }
+            : m,
+        ),
+      );
+    } catch {
+      setMessages((prev) => prev.map((m) => (m.id === messageId ? previous : m)));
+    }
+  }, [gameId]);
+
+  return { messages, loading, sending, send, toggleLike };
 }
