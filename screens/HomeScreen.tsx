@@ -2,9 +2,9 @@ import React from 'react';
 import { View, Text, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
-import { Search, Bell } from 'lucide-react-native';
+import { Search } from 'lucide-react-native';
 import { useTheme } from '../theme';
-import { SectionHeader } from '../components/ui';
+import { SectionHeader, NotificationBell } from '../components/ui';
 import { LiveGameCard, FeedPost, LiveGameData, UpcomingGameTile } from '../components/cards';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import { VideoPreviewModal } from '../components/VideoPreviewModal';
@@ -38,6 +38,9 @@ interface Props {
   onOpenChat?: (gameId: string, title?: string, readOnly?: boolean) => void;
   onAcceptApplication?: (gameId: string, appId: string) => void;
   onRejectApplication?: (gameId: string, appId: string) => void;
+  /** No leídos de la campanita (GET /notification/unread-count). */
+  unreadNotifications?: number;
+  onOpenNotifications?: () => void;
 }
 
 /**
@@ -67,6 +70,8 @@ export function HomeScreen({
   onOpenChat,
   onAcceptApplication,
   onRejectApplication,
+  unreadNotifications = 0,
+  onOpenNotifications,
 }: Props) {
   const { colors } = useTheme();
   const isFocused = useIsFocused();
@@ -88,10 +93,7 @@ export function HomeScreen({
           <Pressable onPress={onOpenSearch} style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: colors.bg2, alignItems: 'center', justifyContent: 'center' }}>
             <Search size={20} color={colors.text} />
           </Pressable>
-          <Pressable style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: colors.bg2, alignItems: 'center', justifyContent: 'center' }}>
-            <Bell size={20} color={colors.text} />
-            <View style={{ position: 'absolute', top: 9, right: 9, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.live, borderWidth: 2, borderColor: colors.surface }} />
-          </Pressable>
+          <NotificationBell count={unreadNotifications} onPress={onOpenNotifications} />
         </View>
       </View>
 

@@ -8,7 +8,9 @@
  *    vez sirve el horario que el desktop configura (`ScheduleDialog`/`ExceptionsDialog`,
  *    `blockMinutes`/`pricePerBlock`). Si alguien cambia el algoritmo de un lado sin el
  *    otro, estos tests fallan.
- *  - Los helpers de multibloque son los que usa `ReserveStep2Screen` (import directo).
+ *  - Los helpers de multibloque y el agrupado por bloque son los que usa
+ *    `ReserveBlocksScreen` (import directo). `groupSlotsIntoBlocks` es el espejo de
+ *    `agruparPorBloque` de `BloquesDisponibles` en el desktop.
  */
 import type { Slot, SlotStatus } from '../data/types';
 import {
@@ -20,6 +22,8 @@ import {
   firstFreeIndex,
   maxConsecutiveFreeBlocks,
   combineSlots,
+  groupSlotsIntoBlocks,
+  blockAvailability,
   type CourtReservationConfig,
   type DaySchedule,
 } from './reservation';
@@ -147,7 +151,7 @@ describe('generateSlots — homologado 1:1 con backend getSlots', () => {
   });
 });
 
-describe('multibloque — helpers que usa ReserveStep2Screen', () => {
+describe('multibloque — helpers que usa ReserveBlocksScreen', () => {
   it('firstFreeIndex devuelve el primer libre, o 0 si no hay ninguno', () => {
     expect(firstFreeIndex([slot('08:00', 'reserved'), slot('09:30', 'free')])).toBe(1);
     expect(firstFreeIndex([slot('08:00', 'reserved'), slot('09:30', 'reserved')])).toBe(0);
@@ -194,6 +198,69 @@ describe('multibloque — helpers que usa ReserveStep2Screen', () => {
 
   it('combineSlots devuelve undefined si el índice está fuera de rango', () => {
     expect(combineSlots([], 0, 1)).toBeUndefined();
+  });
+});
+
+describe('bloques del día — espejo de BloquesDisponibles (desktop)', () => {
+  const courtA = { id: 'a', name: 'Cancha 1' };
+  const courtB = { id: 'b', name: 'Cancha 2' };
+  const mk = (start: string, end: string, status: SlotStatus = 'free'): Slot => ({
+    start, end, duration: 90, price: 10, status, cams: true,
+  });
+
+  it('agrupa por {start,end} y ordena por hora', () => {
+    const blocks = groupSlotsIntoBlocks([
+      { court: courtA, slots: [mk('09:00', '10:30'), mk('06:00', '07:30')] },
+      { court: courtB, slots: [mk('06:00', '07:30', 'reserved')] },
+    ]);
+    expect(blocks.map((b) => b.key)).toEqual(['06:00-07:30', '09:00-10:30']);
+    expect(blocks[0].items.map((i) => i.court.id)).toEqual(['a', 'b']);
+    expect(blocks[0].duration).toBe(90);
+    expect(blocks[1].items).toHaveLength(1); // Cancha 2 no ofrece ese horario
+  });
+
+  it('guarda el índice del slot dentro de la grilla de SU cancha (multibloque)', () => {
+    const slots = [mk('06:00', '07:30'), mk('07:30', '09:00'), mk('09:00', '10:30')];
+    const blocks = groupSlotsIntoBlocks([{ court: courtA, slots }]);
+    const second = blocks[1].items[0];
+    expect(second.index).toBe(1);
+    // Desde ese índice hay 2 bloques libres consecutivos (07:30→10:30).
+    expect(maxConsecutiveFreeBlocks(slots, second.index)).toBe(2);
+    expect(combineSlots(slots, second.index, 2)).toMatchObject({
+      start: '07:30', end: '10:30', duration: 180, price: 20,
+    });
+  });
+
+  it('blockAvailability cuenta libres vs total (semáforo del bloque)', () => {
+    const [block] = groupSlotsIntoBlocks([
+      { court: courtA, slots: [mk('06:00', '07:30')] },
+      { court: courtB, slots: [mk('06:00', '07:30', 'reserved')] },
+    ]);
+    expect(blockAvailability(block)).toEqual({ free: 1, total: 2 });
+
+    const [full] = groupSlotsIntoBlocks([
+      { court: courtA, slots: [mk('06:00', '07:30', 'reserved')] },
+    ]);
+    expect(blockAvailability(full)).toEqual({ free: 0, total: 1 });
+  });
+
+  it('sin canchas o sin horarios → sin bloques (estado vacío de la pantalla)', () => {
+    expect(groupSlotsIntoBlocks([])).toEqual([]);
+    expect(groupSlotsIntoBlocks([{ court: courtA, slots: [] }])).toEqual([]);
+  });
+
+  it('datos reales de casapadel: 11 bloques de 90 min desde las 06:00 en 3 canchas', () => {
+    const grid = Array.from({ length: 11 }, (_, i) => {
+      const start = 6 * 60 + i * 90;
+      return mk(minutesToHHmm(start), minutesToHHmm(start + 90));
+    });
+    const blocks = groupSlotsIntoBlocks(
+      ['c1', 'c2', 'c3'].map((id) => ({ court: { id, name: id }, slots: grid })),
+    );
+    expect(blocks).toHaveLength(11);
+    expect(blocks[0].key).toBe('06:00-07:30');
+    expect(blocks.every((b) => b.items.length === 3)).toBe(true);
+    expect(blockAvailability(blocks[0])).toEqual({ free: 3, total: 3 });
   });
 });
 

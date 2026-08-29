@@ -90,6 +90,10 @@ export interface ClubCourtPublic {
   nextSlot: string;
   /** Cancha activa. false = desactivada por el club (sin reservas). */
   active?: boolean;
+  /** Duración del bloque de reserva, en minutos (la configura el club en el desktop). */
+  blockMinutes?: number;
+  /** Precio de UN bloque; el total de la reserva es precio × bloques. */
+  pricePerBlock?: number;
 }
 export interface UpcomingPublicGame {
   id: string; court: string; time: string; date: string; players: number;

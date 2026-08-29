@@ -12,7 +12,9 @@
  *     el mismo algoritmo para poder validarlos/predecirlos y para tener el contrato
  *     bajo test (que app y backend/desktop no se desincronicen).
  *
- *  2. Multibloque — los helpers que usa `ReserveStep2Screen` para combinar 1–4
+ *  2. Multibloque + agrupado por bloque — los helpers que usa `ReserveBlocksScreen`
+ *     para armar la grilla de bloques del día (espejo de `BloquesDisponibles` del
+ *     desktop) y para combinar 1–4
  *     bloques libres consecutivos en un "slot combinado" (lo que se envía a
  *     `POST /game/reserve` con `durationMinutes = blockMinutes × N`, que el backend
  *     valida: múltiplo del bloque, 1–4, dentro del horario y cancha activa).
@@ -103,6 +105,66 @@ export function generateSlots(
     });
   }
   return slots;
+}
+
+/* ─────────── Bloques del día (vista por horario, no por cancha) ─────────── */
+
+/** Slots de UNA cancha para un día, tal como los devuelve `GET /padel-court/:id/slots`. */
+export interface CourtSlots<C extends { id: string }> {
+  court: C;
+  slots: Slot[];
+}
+
+/** Una cancha dentro de un bloque + el índice del slot en la grilla de esa cancha. */
+export interface BlockCourt<C extends { id: string }> {
+  court: C;
+  slot: Slot;
+  /** Índice del slot dentro de `CourtSlots.slots` — necesario para el multibloque. */
+  index: number;
+}
+
+/** Un horario del día (ej. 09:00–10:30) con la disponibilidad de cada cancha. */
+export interface TimeBlock<C extends { id: string }> {
+  /** `start-end`, estable entre renders. */
+  key: string;
+  start: string;
+  end: string;
+  duration: number;
+  items: BlockCourt<C>[];
+}
+
+/**
+ * Agrupa los slots de varias canchas en **bloques por horario** — la misma cuenta que
+ * hace el desktop en `BloquesDisponibles` (`agruparPorBloque`): un bloque por cada
+ * `{start,end}` distinto, con una entrada por cancha que lo ofrece. Ordenados por hora.
+ *
+ * ⚠️ Dos canchas con `blockMinutes` distinto NO comparten fila: se agrupa por
+ * `{start,end}` exacto (mismo comportamiento que el desktop).
+ */
+export function groupSlotsIntoBlocks<C extends { id: string }>(
+  perCourt: CourtSlots<C>[],
+): TimeBlock<C>[] {
+  const byKey = new Map<string, TimeBlock<C>>();
+  perCourt.forEach(({ court, slots }) => {
+    slots.forEach((slot, index) => {
+      const key = `${slot.start}-${slot.end}`;
+      if (!byKey.has(key)) {
+        byKey.set(key, { key, start: slot.start, end: slot.end, duration: slot.duration, items: [] });
+      }
+      byKey.get(key)!.items.push({ court, slot, index });
+    });
+  });
+  return Array.from(byKey.values()).sort((a, b) => a.start.localeCompare(b.start));
+}
+
+/** Canchas libres / totales de un bloque. Libre = `status === 'free'`. */
+export function blockAvailability<C extends { id: string }>(
+  block: TimeBlock<C>,
+): { free: number; total: number } {
+  return {
+    free: block.items.filter((i) => i.slot.status === 'free').length,
+    total: block.items.length,
+  };
 }
 
 /** Índice del primer slot libre (o 0 si no hay ninguno). */

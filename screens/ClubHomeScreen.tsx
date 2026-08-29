@@ -1,9 +1,8 @@
 import React from 'react';
 import { View, Text, ScrollView, Pressable, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Bell } from 'lucide-react-native';
 import { useTheme } from '../theme';
-import { SectionHeader } from '../components/ui';
+import { SectionHeader, NotificationBell } from '../components/ui';
 import { LiveGameTile, LiveGameData } from '../components/cards';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import type { ClubTodayReservation } from '../data/types';
@@ -24,6 +23,9 @@ interface Props {
   onOpenGame?: (id: string) => void;
   onChangeTab?: (id: TabId) => void;
   activeTab?: TabId;
+  /** No leídos de la campanita (GET /notification/unread-count). */
+  unreadNotifications?: number;
+  onOpenNotifications?: () => void;
 }
 
 const DEFAULT_STATS: NonNullable<Props['stats']> = {
@@ -48,6 +50,8 @@ export function ClubHomeScreen({
   onOpenGame,
   onChangeTab,
   activeTab = 'home',
+  unreadNotifications = 0,
+  onOpenNotifications,
 }: Props) {
   const { colors } = useTheme();
   return (
@@ -70,10 +74,7 @@ export function ClubHomeScreen({
             <Text style={{ color: colors.text, fontSize: 18, fontWeight: '800', letterSpacing: -0.3 }} numberOfLines={1}>{clubName}</Text>
           </View>
         </View>
-        <Pressable style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: colors.bg2, alignItems: 'center', justifyContent: 'center' }}>
-          <Bell size={20} color={colors.text}/>
-          <View style={{ position: 'absolute', top: 9, right: 9, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.live, borderWidth: 2, borderColor: colors.surface }}/>
-        </Pressable>
+        <NotificationBell count={unreadNotifications} onPress={onOpenNotifications}/>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingTop: 4, paddingBottom: 20, gap: 14 }}>

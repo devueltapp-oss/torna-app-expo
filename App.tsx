@@ -18,7 +18,9 @@ import { View, Text, ActivityIndicator, Alert, Pressable } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { initNotifications, onNavigationReady } from './services/notifications';
+import {
+  initNotifications, onNavigationReady, resolvePushTarget, type PushData,
+} from './services/notifications';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -31,8 +33,8 @@ import {
   HomeScreen, ClubHomeScreen,
   GamesScreen, GameChatScreen, GameDetailScreen, CourtsScreen, ProfileScreen,
   ClubProfilePlayerView, PlayerProfilePublicView, GlobalSearchScreen,
-  ChatsInboxScreen, DirectChatScreen,
-  ReserveClubPickerScreen, ReserveStep1Screen, ReserveStep2Screen, ReserveStep3Screen, ReserveSuccessScreen, MonoValue,
+  ChatsInboxScreen, DirectChatScreen, NotificationsScreen,
+  ReserveClubPickerScreen, ReserveBlocksScreen, ReserveStep3Screen, ReserveSuccessScreen, MonoValue,
   VideoEditorScreen,
   PlayerOwnProfileScreen, MyLibraryScreen, PlayerSettingsScreen,
   ReelViewScreen,
@@ -60,26 +62,25 @@ import { usePartnerSearch } from './hooks/usePartnerSearch';
 import { useMyHighlights } from './hooks/useMyHighlights';
 import { useHighlightVisibility } from './hooks/useHighlightVisibility';
 import { useInbox } from './hooks/useInbox';
+import { useNotifications } from './hooks/useNotifications';
+import { useNotificationBadge } from './hooks/useNotificationBadge';
+import type { AppNotification } from './api/notifications';
 import { searchUsers, searchUsersAndClubs, fetchUserProfile, setFollowNotify, fetchFollowing, followUser, unfollowUser } from './api/users';
 import type { CourtData, PlayerData } from './components/cards';
 import { updateHighlightMeta } from './api/highlights';
-import { fetchClubCourts, fetchCourt, fetchCourtSlots, createReservation } from './api/clubs';
-import type { DayOption } from './screens/ReserveStep2Screen';
+import { fetchClubCourts, fetchCourtSlots, createReservation } from './api/clubs';
+import type { CourtSlots } from './lib/reservation';
+import type { DayOption } from './screens';
 import type {
   LibraryItem, LibraryMatch, LibraryHighlight,
   ProfileOwner, ClubProfile, ClubPublic, ClubCourtPublic,
-  SearchableUser, PlayerPublic, Slot, UpcomingGameData, InvitablePlayer, FollowItem,
+  SearchableUser, PlayerPublic, UpcomingGameData, InvitablePlayer, FollowItem,
 } from './data/types';
 
 /** Antepone '@' al username si no lo trae. */
 function atHandle(username?: string | null): string {
   if (!username) return '';
   return username.startsWith('@') ? username : '@' + username;
-}
-
-/** Cancha vacía para pantallas de reserva sin backend (estado vacío). */
-function emptyCourt(id: string): ClubCourtPublic {
-  return { id, name: '', surface: 'HARD', cams: 0, indoor: false, nextSlot: '' };
 }
 
 const DOW = ['DOM', 'LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB'];
@@ -164,12 +165,14 @@ type AppStackParamList = {
   GameDetail: { gameId: string; clipData?: GameDetailData; liveStreamUrl?: string };
   GameChat: { gameId: string; title?: string; readOnly?: boolean };
   DirectChat: { userId: string; title?: string };
+  /** Campanita: historial de notificaciones (sin chats). */
+  Notifications: undefined;
   ClubProfile: { clubId: string };
   PlayerProfile: { playerId: string };
   GlobalSearch: { mode?: 'chat' } | undefined;
   ReservePickClub: undefined;
-  ReserveCourt: { clubId: string; courtId?: string };
-  ReserveTime: { courtId: string };
+  /** Bloques del día del club. `courtId` = filtro inicial (CTA de una cancha puntual). */
+  ReserveBlocks: { clubId: string; courtId?: string };
   ReserveInvite: {
     courtId: string;
     courtLabel: string;
@@ -426,7 +429,7 @@ function ClubProfileScreen({ navigation, clubId }: { navigation: any; clubId: st
           });
         }}
         onMessage={() => navigation.navigate('DirectChat', { userId: view.id, title: view.name ?? view.username })}
-        onReserveCourt={(courtId) => navigation.navigate('ReserveCourt', { clubId: view.id, courtId })}
+        onReserveCourt={(courtId) => navigation.navigate('ReserveBlocks', { clubId: view.id, courtId })}
         onOpenLive={(gameId) => navigation.navigate('GameDetail', { gameId })}
         onOpenClip={(clip) => setClipModal({ url: clip.videoUrl ?? '', title: clip.title, id: clip.id })}
         onOpenFollowers={() => setSheet('followers')}
@@ -491,30 +494,80 @@ function ReservePickClubScreen({ navigation }: { navigation: any }) {
             isClub: true,
           }));
       }}
-      // Elegir un club (buscador o seguidos) → inicia la reserva (canchas → horarios).
-      onPickClub={(clubId) => navigation.navigate('ReserveCourt', { clubId })}
+      // Elegir un club (buscador o seguidos) → inicia la reserva (bloques del día).
+      onPickClub={(clubId) => navigation.navigate('ReserveBlocks', { clubId })}
     />
   );
 }
 
-/* ─────────── Reserva paso 1: elegir cancha (POV player) ─────────── */
+/* ─────────── Notificaciones (campanita) ─────────── */
 
 /**
- * Componente propio (NO render-prop inline): igual que ReservePickClubScreen, los
- * `setState` de un hook dentro del callback `children` de un `<Screen>` no re-renderizan
- * el subárbol (React Navigation memoiza el screen) → la lista de canchas quedaba en
- * spinner infinito. Con fiber propio, `setCourts`/`setLoadingCourts` re-renderizan normal.
+ * Contenedor de la campanita. **Componente propio** (no render-prop inline): los
+ * `setState` de `useNotifications` dentro del callback `children` de un `<Screen>` no
+ * re-renderizarían el subárbol.
+ *
+ * El tap resuelve el destino con **la misma tabla que el push** (`resolvePushTarget`),
+ * usando el `data` guardado con la notificación.
  */
-function ReserveCourtScreen({ route, navigation }: { route: any; navigation: any }) {
+function NotificationsContainer({ navigation }: { navigation: any }) {
+  const { user } = useAuth();
+  const n = useNotifications();
+
+  const open = (item: AppNotification) => {
+    void n.markRead(item.id);
+    const data: PushData = (item.data as PushData) ?? {
+      type: item.type,
+      gameId: item.gameId ?? undefined,
+    };
+    const target = resolvePushTarget(data);
+    if (!target) return;
+    // `resolvePushTarget` habla en términos del stack del player; una cuenta de club
+    // no tiene `MainPlayer` como hogar.
+    const name = target.name === 'MainPlayer' && user?.isClub ? 'MainClub' : target.name;
+    navigation.navigate(name, target.params);
+  };
+
+  return (
+    <NotificationsScreen
+      items={n.items}
+      loading={n.loading}
+      hasMore={n.hasMore}
+      unreadCount={n.unreadCount}
+      onRefresh={n.refresh}
+      onEndReached={n.loadMore}
+      onPress={open}
+      onMarkAllRead={n.markAllRead}
+      onBack={() => navigation.goBack()}
+    />
+  );
+}
+
+/* ─────────── Reserva paso 1: bloques del día (POV player) ─────────── */
+
+/**
+ * Contenedor del paso de **bloques** (reemplazó a los dos pasos "elegir cancha" +
+ * "día y horario"): trae las canchas activas del club y, para el día elegido, los slots
+ * de TODAS ellas (`GET /padel-court/:id/slots?date=`, una request por cancha, igual que
+ * `BloquesDisponibles` del desktop). La pantalla los agrupa por horario.
+ *
+ * Componente propio (NO render-prop inline): los `setState` de un hook dentro del
+ * callback `children` de un `<Screen>` no re-renderizan el subárbol (React Navigation
+ * memoiza el screen) → la lista quedaba en spinner infinito.
+ */
+function ReserveBlocksContainer({ route, navigation }: { route: any; navigation: any }) {
   const { clubId, courtId } = route.params || {};
+  const days = React.useMemo(() => buildDays(6), []);
   const [courts, setCourts] = React.useState<ClubCourtPublic[]>([]);
-  const [loadingCourts, setLoadingCourts] = React.useState(true);
+  const [courtSlots, setCourtSlots] = React.useState<CourtSlots<ClubCourtPublic>[]>([]);
+  const [loading, setLoading] = React.useState(true);
   const [clubName, setClubName] = React.useState('');
   const [clubLoc, setClubLoc] = React.useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null });
+
   React.useEffect(() => {
-    if (!clubId) { setLoadingCourts(false); return; }
+    if (!clubId) { setLoading(false); return; }
     let active = true;
-    setLoadingCourts(true);
+    setLoading(true);
     // En RN el fetch a veces cuelga sin resolver: sin timeout el spinner quedaría para
     // siempre. `withTimeout` garantiza que la carga SIEMPRE cierre.
     const withTimeout = <T,>(p: Promise<T>, ms: number, fb: T): Promise<T> =>
@@ -530,56 +583,47 @@ function ReserveCourtScreen({ route, navigation }: { route: any; navigation: any
         6000, null,
       );
       if (!active) return;
-      setCourts(cs);
+      // Cancha inactiva = sin slots ni reservas: no entra a la grilla (igual que el desktop).
+      setCourts(cs.filter((c) => c.active !== false));
       if (prof) { setClubName(prof.name); setClubLoc({ lat: prof.lat, lng: prof.lng }); }
-      setLoadingCourts(false);
     })();
     return () => { active = false; };
   }, [clubId]);
+
+  // Un token por carga: si el usuario cambia de día rápido, la respuesta vieja que llega
+  // tarde no debe pisar la nueva.
+  const loadToken = React.useRef(0);
+  const loadSlots = React.useCallback((iso: string | undefined, list: ClubCourtPublic[]) => {
+    const token = ++loadToken.current;
+    if (!iso || list.length === 0) { setCourtSlots([]); setLoading(false); return; }
+    setLoading(true);
+    Promise.all(
+      list.map(async (court) => ({
+        court,
+        slots: await fetchCourtSlots(court.id, iso).catch(() => []),
+      })),
+    ).then((res) => {
+      if (token !== loadToken.current) return;
+      setCourtSlots(res);
+      setLoading(false);
+    });
+  }, []);
+
+  React.useEffect(() => { loadSlots(days[0]?.iso, courts); }, [loadSlots, days, courts]);
+
   return (
-    <ReserveStep1Screen
+    <ReserveBlocksScreen
       clubName={clubName}
-      courts={courts}
-      loading={loadingCourts}
       latitude={clubLoc.lat}
       longitude={clubLoc.lng}
+      courtSlots={courtSlots}
+      loading={loading}
+      days={days}
       initialCourtId={courtId}
       onBack={() => navigation.goBack()}
-      onContinue={(id) => navigation.navigate('ReserveTime', { courtId: id })}
-    />
-  );
-}
-
-/* ─────────── Reserva paso 2: día + slots (horarios) (POV player) ─────────── */
-
-/**
- * Componente propio (NO render-prop inline): mismo motivo que ReserveCourtScreen. Antes,
- * `setSlots`/`setCourt` dentro del `children` del `<Screen>` no re-renderizaban → los
- * **horarios (slots) no aparecían** aunque `GET /padel-court/:id/slots?date=` los trajera.
- */
-function ReserveTimeScreen({ route, navigation }: { route: any; navigation: any }) {
-  const { courtId } = route.params || {};
-  const days = React.useMemo(() => buildDays(6), []);
-  const [court, setCourt] = React.useState<ClubCourtPublic>(() => emptyCourt(courtId ?? ''));
-  const [slots, setSlots] = React.useState<Slot[]>([]);
-  React.useEffect(() => {
-    if (courtId) fetchCourt(courtId).then(setCourt).catch(() => {});
-  }, [courtId]);
-  const loadSlots = React.useCallback((iso?: string) => {
-    if (!courtId || !iso) { setSlots([]); return; }
-    fetchCourtSlots(courtId, iso).then(setSlots).catch(() => setSlots([]));
-  }, [courtId]);
-  React.useEffect(() => { loadSlots(days[0].iso); }, [loadSlots, days]);
-  return (
-    <ReserveStep2Screen
-      court={court}
-      slots={slots}
-      days={days}
-      onBack={() => navigation.goBack()}
-      onChangeCourt={() => navigation.goBack()}
-      onDayChange={(d) => loadSlots(d.iso)}
-      onContinue={(slot, day) => navigation.navigate('ReserveInvite', {
-        courtId: courtId ?? '',
+      onDayChange={(d) => loadSlots(d.iso, courts)}
+      onContinue={({ court, slot, day }) => navigation.navigate('ReserveInvite', {
+        courtId: court.id,
         courtLabel: `${court.name} · ${court.surface}`,
         date: day.iso ?? '',
         slotStart: slot.start,
@@ -590,7 +634,7 @@ function ReserveTimeScreen({ route, navigation }: { route: any; navigation: any 
   );
 }
 
-/* ─────────── Reserva paso 3: rivales + confirmar (POV player) ─────────── */
+/* ─────────── Reserva paso 2: rivales + confirmar (POV player) ─────────── */
 
 /** Componente propio: mantiene estable el ref `submitting` (guarda anti-doble-submit). */
 function ReserveInviteScreen({ route, navigation }: { route: any; navigation: any }) {
@@ -777,6 +821,9 @@ function MainPlayer({ navigation, route }: any) {
 
   // Inbox de Chats (GET /chat/inbox): DMs 1-a-1 + chats grupales de partidas.
   const { items: inbox, loading: inboxLoading, refresh: refreshInbox } = useInbox();
+  // Badge de la campanita (GET /notification/unread-count). Solo el contador: la lista
+  // se carga recién al abrir la pantalla de Notificaciones.
+  const { count: unreadNotifications, refresh: refreshNotificationBadge } = useNotificationBadge();
   const [myGameSheet, setMyGameSheet] = React.useState<UpcomingGameData | null>(null);
   const { matches: apiMatches, refresh: refreshMatches } = usePlayerMatches(user?.id);
 
@@ -843,10 +890,11 @@ function MainPlayer({ navigation, route }: any) {
       refreshOwnProfile(),
       refreshHighlights(),
       refreshInbox(),
+      refreshNotificationBadge(),
       new Promise<void>((r) => setTimeout(r, 800)),
     ]);
     setRefreshing(false);
-  }, [refreshLive, refreshOpen, refreshMyGames, refreshUpcoming, refreshFeed, refreshMatches, refreshPlayers, refreshOwnProfile, refreshHighlights, refreshInbox]);
+  }, [refreshLive, refreshOpen, refreshMyGames, refreshUpcoming, refreshFeed, refreshMatches, refreshPlayers, refreshOwnProfile, refreshHighlights, refreshInbox, refreshNotificationBadge]);
 
   // Acciones de gestión de "Mis partidas" (cierran el sheet y refrescan la lista).
   // Si el backend rechaza (p. ej. estado inválido), avisamos en vez de fallar en silencio.
@@ -982,6 +1030,8 @@ function MainPlayer({ navigation, route }: any) {
             suggestedPartners={partnerSuggestions}
             onSearchPartner={searchPartners}
             onOpenChat={(gameId, title, readOnly) => navigation.navigate('GameChat', { gameId, title, readOnly })}
+            unreadNotifications={unreadNotifications}
+            onOpenNotifications={() => navigation.navigate('Notifications')}
           />
         );
       case 'games':
@@ -1129,6 +1179,8 @@ function MainClub({ navigation }: any) {
   const [courts, setCourts] = React.useState<CourtData[]>([]);
   // Inbox de Chats del club (DMs 1-a-1 + chats grupales de partidas).
   const { items: clubInbox, loading: clubInboxLoading, refresh: refreshClubInbox } = useInbox();
+  // Badge de la campanita del club (mismos endpoints que el player).
+  const { count: clubUnreadNotifications } = useNotificationBadge();
   React.useEffect(() => {
     if (!clubId) return;
     fetchClubCourts(clubId)
@@ -1157,6 +1209,8 @@ function MainClub({ navigation }: any) {
           todayReservations={[]}
           activeTab="home" onChangeTab={setTab}
           onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id })}
+          unreadNotifications={clubUnreadNotifications}
+          onOpenNotifications={() => navigation.navigate('Notifications')}
         />
       );
     case 'games':
@@ -1278,6 +1332,10 @@ function AppNavigator() {
         )}
       </AppStack.Screen>
 
+      <AppStack.Screen name="Notifications">
+        {({ navigation }) => <NotificationsContainer navigation={navigation} />}
+      </AppStack.Screen>
+
       {/* Player POV flows */}
       <AppStack.Screen name="ClubProfile">
         {({ navigation, route }) => (
@@ -1337,12 +1395,8 @@ function AppNavigator() {
       </AppStack.Screen>
 
       {/* Reservation flow */}
-      <AppStack.Screen name="ReserveCourt">
-        {({ route, navigation }) => <ReserveCourtScreen route={route} navigation={navigation} />}
-      </AppStack.Screen>
-
-      <AppStack.Screen name="ReserveTime">
-        {({ route, navigation }) => <ReserveTimeScreen route={route} navigation={navigation} />}
+      <AppStack.Screen name="ReserveBlocks">
+        {({ route, navigation }) => <ReserveBlocksContainer route={route} navigation={navigation} />}
       </AppStack.Screen>
 
       <AppStack.Screen name="ReserveInvite">

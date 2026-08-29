@@ -11,7 +11,7 @@ import {
   ViewStyle, StyleProp, Image,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { Heart } from 'lucide-react-native';
+import { Heart, Bell } from 'lucide-react-native';
 import { useTheme } from '../theme';
 
 /* ─────────────────────────────  Button  ───────────────────────────── */
@@ -384,6 +384,45 @@ export function AppHeader({ title, left, right }: {
       </Text>
       <View style={{ width: 36, alignItems: 'flex-end' }}>{right}</View>
     </View>
+  );
+}
+
+/* ─────────────────────────  Notification bell  ─────────────────────
+ * Campanita del header (Inicio de player y de club) con badge de no leídos.
+ * El badge usa lima sobre azul, como el resto de los contadores de la app
+ * (el punto rojo fijo que había antes no era ni real ni de la marca).
+ */
+
+export function NotificationBell({ count = 0, onPress }: {
+  count?: number;
+  onPress?: () => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={count > 0 ? `Notificaciones, ${count} sin leer` : 'Notificaciones'}
+      style={{
+        width: 40, height: 40, borderRadius: 12,
+        backgroundColor: colors.bg2, alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      <Bell size={20} color={colors.text} />
+      {count > 0 && (
+        <View style={{
+          position: 'absolute', top: 3, right: 3,
+          minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4,
+          backgroundColor: colors.accent,
+          borderWidth: 2, borderColor: colors.surface,
+          alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Text style={{ fontSize: 9, fontWeight: '800', color: colors.ink }}>
+            {count > 9 ? '9+' : count}
+          </Text>
+        </View>
+      )}
+    </Pressable>
   );
 }
 

@@ -84,11 +84,14 @@ con flujo `Register → Pending → MainClub`.
   > El `UpcomingMatchSheet` se renderiza una sola vez en `MainPlayer` (estado
   > `myGameSheet`) y sirve ambos casos: gestión si `viewerIsParticipant`, postularse
   > si es un abierto. `JoinMatchScreen` es legacy y ya no existe.
-- Flujo de reserva en 3 pasos (`ReserveStep1` → `Step2` → `Step3` →
-  `ReserveSuccess`):
-  1. Elegir cancha (radio buttons sobre las canchas del club).
-  2. Día (chips horizontales) + slot (grid 2×N con estado/precio/cámara).
-  3. **Switch "Buscar rivales"**:
+- Flujo de reserva en **2 pasos** (`ReserveBlocks` → `ReserveStep3` →
+  `ReserveSuccess`). **La partida nace de un bloque**, igual que en el desktop
+  (ver "Reserva por bloques" más abajo):
+  1. Día (chips horizontales) + **bloque libre**: una fila por horario del día
+     (`06:00 – 07:30`) con cuántas canchas quedan libres; se despliega en las canchas
+     de ese bloque (Disponible / Ocupada) y al elegir una aparece la duración
+     (1–4 bloques consecutivos libres de esa cancha).
+  2. **Switch "Buscar rivales"**:
      - OFF: el player + 1 compañero **obligatorio** + 2 rivales.
      - ON: el player + 1 compañero. El partido se publica para que 2 más
        se sumen.
@@ -224,9 +227,9 @@ ClubTodayReservation {
 4. Slots `reserved` están bloqueados (solapan una Game existente de esa cancha).
    Los slots ya no son fijos: el backend los genera del horario configurable de la cancha
    (semanal + excepciones por fecha); cancha inactiva o día cerrado → sin slots.
-5. **Multibloque**: `ReserveStep2` permite 1–4 bloques consecutivos libres →
-   `durationMinutes = block × N` (el móvil arma un "slot combinado"; el back valida
-   múltiplo/tope). Badge "Cancha inactiva" cuando `court.active===false`.
+5. **Multibloque**: `ReserveBlocksScreen` permite 1–4 bloques consecutivos libres **de la
+   misma cancha** → `durationMinutes = block × N` (el móvil arma un "slot combinado"; el
+   back valida múltiplo/tope). Canchas inactivas no entran a la grilla (no tienen slots).
 6. **Sin GPS.** La sección "Abiertos" de la pestaña Juegos no pide permiso de ubicación:
    lista partidos abiertos (GET /game/open) y la ubicación de cada uno se abre en Google
    Maps fuera de la app (`MapsButton`).
@@ -451,15 +454,38 @@ PATCH /follow/notify/:userId    { notify }   → toggle "Notificarme" (setFollow
 ### Canchas y reservas — `api/clubs.ts`
 
 ```
-GET  /padel-court?clubId=            → canchas del club (ReserveStep1; trae isActive)
-GET  /padel-court/:id                → una cancha
-GET  /padel-court/:id/slots?date=    → Slot[] del día (ReserveStep2). La grilla sale del
+GET  /padel-court?clubId=            → canchas del club (trae isActive/blockMinutes/
+                                       pricePerBlock/cameras). Solo las activas entran
+                                       a la grilla de bloques
+GET  /padel-court/:id                → una cancha (`fetchCourt`; sin uso en pantalla hoy)
+GET  /padel-court/:id/slots?date=    → Slot[] del día de UNA cancha. La grilla sale del
                                        horario configurable de la cancha (semanal +
                                        excepción de la fecha); [] si inactiva/día cerrado
 POST /game/reserve  { courtId, date, slotStart, durationMinutes, mode,
                       partnerUserId?, opponentUserIds? } → crea la partida (ReserveStep3).
                       durationMinutes = block × N (1–4 bloques, multibloque)
 ```
+
+#### Reserva por bloques (espejo del desktop, 2026-08-26)
+
+La reserva **arranca por el bloque, no por la cancha** — el mismo modelo que Inicio del
+desktop (`BloquesDisponibles`), donde "crear partida" nace de un bloque libre.
+
+- `ReserveBlocksContainer` (`App.tsx`) trae las canchas **activas** del club y dispara
+  `GET /padel-court/:id/slots?date=` **una vez por cancha** (`Promise.all`, igual que el
+  desktop). Un `loadToken` (ref) descarta la respuesta vieja si el usuario cambia de día
+  antes de que llegue.
+- `groupSlotsIntoBlocks` (`lib/reservation.ts`) agrupa esos slots por `{start,end}` →
+  una fila por horario con la disponibilidad de cada cancha. Es el espejo de
+  `agruparPorBloque` del desktop, y guarda el **índice del slot dentro de la grilla de su
+  cancha**: sin eso no se puede calcular el multibloque (que es por cancha, no por bloque).
+- ⚠️ **Dos canchas con `blockMinutes` distinto NO comparten fila** (se agrupa por
+  `{start,end}` exacto) — mismo comportamiento/limitación que el desktop.
+- ⚠️ El backend **no filtra por la hora actual**: un bloque de hoy que ya pasó sigue
+  apareciendo libre si nadie lo reservó (mismo gap conocido que el desktop).
+- Cubierto por `lib/reservation.test.ts` (agrupado + disponibilidad, con la grilla real de
+  casapadel) y `screens/__tests__/ReserveBlocksScreen.test.tsx` (UI: bloques, cancha
+  ocupada no elegible, slot combinado al continuar).
 
 ### Partidas: postular / mis partidas / bajas — `api/games.ts`
 
@@ -564,6 +590,12 @@ POST /chat/dm/:userId/read   → marcar el hilo como leído (limpia el badge del
   `{ kind:'dm'|'game', id, otherUserId?, title, avatar, lastMessage, lastMessageAt, unreadCount, readOnly }`.
   Tap dm → `DirectChat`; tap game → `GameChat`. Botón **"Nuevo chat"** → `GlobalSearch { mode:'chat' }`
   (reusa el buscador; elegir un usuario abre/crea el DM).
+- **Dos bandejas, un solo endpoint**: arriba de la lista hay un segmented control
+  **Partidas** (`kind:'game'`) / **Amigos** (`kind:'dm'`) que **filtra en el cliente** lo que
+  ya trajo `GET /chat/inbox` — no hay request por bandeja. Arranca en **Partidas**. Cada
+  botón muestra el total de no leídos de su bandeja (los grupos de partida hoy siempre dan
+  0: el chat grupal no tiene cursor de lectura en el backend) y el estado vacío es el de la
+  bandeja elegida. Cubierto por `screens/__tests__/ChatsInboxScreen.test.tsx`.
 - **`useDirectChat`** (`hooks/useDirectChat.ts`) → `DirectChatScreen`. **Copia de `useGameChat`**
   keyed por el UID del otro usuario: REST + polling 3s focus-gated, `since` incremental, envío
   optimista. Al montar hace `markDmRead`. Sin modo read-only (los DMs siempre se escriben).
@@ -618,18 +650,24 @@ PUT    /user/update-notification-id  { notificationID }  → registra el push to
 DELETE /user/notification-id                             → lo borra (logout)
 ```
 
-**Ruteo — `resolvePushTarget(additionalData)`** traduce el push a pantalla. Son los **8
+**Ruteo — `resolvePushTarget(additionalData)`** traduce el push a pantalla. Son los **11
 tipos** que emite el backend (cubiertos por `services/__tests__/notifications.test.ts`):
 
 | `type` | Pantalla |
 |---|---|
-| `STREAMING_STARTED` · `RECORDING_READY` · `GAME_FINISHED` | `GameDetail { gameId }` |
+| `STREAMING_STARTED` · `RECORDING_READY` · `GAME_FINISHED` · `GAME_SCHEDULED` | `GameDetail { gameId }` |
 | `NEW_CHAT_MESSAGE` | `GameChat { gameId }` |
 | `NEW_DM_MESSAGE` | `DirectChat { userId: fromUserId }` |
-| `GAME_CANCELLED` · `GAME_PLAYER_LEFT` · `GAME_PAIR_CANCELLED` | `MainPlayer { initialTab: 'games' }` |
+| `GAME_CANCELLED` · `GAME_PLAYER_LEFT` · `GAME_PAIR_CANCELLED` · `GAME_PLAYER_ADDED` · `GAME_APPLICATION_RECEIVED` | `MainPlayer { initialTab: 'games' }` |
 
+- **La misma tabla resuelve el tap en la campanita**: cada notificación guardada trae el
+  mismo `data` que viajó en el push, así que `NotificationsScreen` no necesita un ruteo
+  propio (ver "Notificaciones in-app" abajo).
 - Se normaliza a mayúsculas: producción todavía manda los tres últimos en minúscula
   (`game_cancelled`, …), así que se aceptan ambas formas.
+- **`addPushReceivedListener(cb)`**: mini pub-sub que emite el `additionalData` desde los
+  DOS listeners (`click` y `foregroundWillDisplay`). Lo consume `useNotificationBadge`
+  para refrescar el contador con la app abierta, sin polling.
 - **Cold start**: si el tap llega antes de que monte el navigator, el destino se guarda
   y se aplica en `onNavigationReady()`. Sin eso el `navigate` se perdía en silencio.
 - **Primer plano**: `foregroundWillDisplay` suprime el banner si el usuario ya está
@@ -646,6 +684,40 @@ tipos** que emite el backend (cubiertos por `services/__tests__/notifications.te
   ese teléfono.
 - Env: `EXPO_PUBLIC_ONESIGNAL_APP_ID`. La app **solo recibe** push; no hay WebSocket ni
   polling en tiempo real (los datos se refrescan al montar o con pull-to-refresh).
+- ⚠️ **En tests, `babel-preset-expo` inlina las `EXPO_PUBLIC_*` en tiempo de transform**:
+  setear `process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID` dentro de un test llega tarde (el
+  módulo ya quedó compilado con el valor vacío y `initNotifications` corta al toque). Por
+  eso se define en **`jest.config.js`**, antes de que jest transforme nada.
+
+### Notificaciones in-app (campanita) — `api/notifications.ts`
+
+La campanita del header (Inicio de player y de club) dejó de ser decorativa: lista el
+historial de notificaciones con no leídos. **Los chats NO están acá** — tienen su pestaña.
+
+```
+GET   /notification?limit=&cursor=  → { items, nextCursor, unreadCount }
+GET   /notification/unread-count    → { count }      (badge)
+PATCH /notification/:id/read        → { ok: true }
+PATCH /notification/read-all        → { updated }
+```
+
+- **`useNotifications`** (`hooks/useNotifications.ts`) → `NotificationsScreen` (ruta
+  `Notifications`, apilada, sin tab propio). Carga al montar + refetch al foco (como
+  `useInbox`), `loadMore` por **cursor de id** con dedupe, y `markRead`/`markAllRead`
+  **optimistas con revert desde un ref** (el updater de `setState` puede correr después
+  del `await`). **Sin polling por intervalo.**
+- **`useNotificationBadge`** (`hooks/useNotificationBadge.ts`) — solo el contador. Lo
+  montan `MainPlayer`/`MainClub`; se refresca al foco de la app, con el pull-to-refresh y
+  cuando llega un push (`addPushReceivedListener`). Va aparte para no traer 20 filas cada
+  vez que se vuelve a Inicio.
+- **`NotificationBell`** (`components/ui.tsx`) — campanita + badge lima con el número
+  (antes era un `Pressable` sin `onPress` con un punto rojo fijo, fuera de la paleta).
+- El tap marca leída (optimista) y navega con `resolvePushTarget(item.data)`. ⚠️ Si el
+  destino es `MainPlayer` y el usuario es club, el contenedor redirige a `MainClub`.
+- ⚠️ Mandar cualquier query param que no sea `limit`/`cursor` da **400**
+  (`forbidNonWhitelisted` del backend).
+- Cubierto por `hooks/__tests__/useNotifications.test.ts` y
+  `screens/__tests__/NotificationsScreen.test.tsx`.
 
 ---
 
@@ -834,9 +906,9 @@ expo/
 │   ├── ClubProfilePlayerView.tsx    # POV player
 │   ├── PlayerProfilePublicView.tsx
 │   ├── GlobalSearchScreen.tsx      # búsqueda global de players + clubs por texto (sin canchas)
-│   ├── ReserveStep1Screen.tsx       # elegir cancha
-│   ├── ReserveStep2Screen.tsx       # día + slot
-│   ├── ReserveStep3Screen.tsx       # players + confirmar
+│   ├── NotificationsScreen.tsx      # campanita: historial de notificaciones (sin chats)
+│   ├── ReserveBlocksScreen.tsx      # paso 1: día + bloque libre (cancha adentro del bloque)
+│   ├── ReserveStep3Screen.tsx       # paso 2: players + confirmar
 │   ├── ReserveSuccessScreen.tsx
 │   ├── reserveCommon.tsx            # StepIndicator compartido
 │   └── index.ts                     # barrel de exports
@@ -849,12 +921,15 @@ expo/
 │   ├── usePlayerMatches.ts  # GET /game/player/:id/history → LibraryMatch[]
 │   ├── useGameDetail.ts     # GET /game/:id → GameDetailData (cámaras/HLS) + recordingUrl
 │   ├── usePlayers.ts        # GET /user/players → PlayerData[]
+│   ├── useNotifications.ts  # GET /notification → lista de la campanita (cursor + optimista)
+│   ├── useNotificationBadge.ts # GET /notification/unread-count → badge del header
 │   └── useUserProfile.ts    # GET /user/profile/:id + /highlights?userId= → PlayerPublic
 ├── api/
 │   ├── users.ts            # fetchUserProfile · searchUsers
 │   ├── clubs.ts            # fetchNearbyClubs · fetchClubCourts · fetchCourt · fetchCourtSlots · createReservation
 │   ├── games.ts            # fetchMyGames · applyToGame · accept/rejectApplication · cancelGame · leaveGame · cancelChallengerPair
 │   ├── highlights.ts       # fetchUserHighlights · fetchMyHighlights · createHighlightFromRecording (POST /highlights/from-recording)
+│   ├── notifications.ts    # fetchNotifications · fetchUnreadCount · markNotificationRead · markAllNotificationsRead
 │   └── profile.ts          # uploadProfilePicture · uploadFrontPage (expo-file-system → B2)
 └── data/
     └── types.ts            # tipos públicos (ClubPublic, NearbyClub, PlayerPublic, Slot, etc.) — sin mocks
@@ -877,11 +952,11 @@ Stack único en `App.tsx`. `initialRouteName="LoginWithRole"`.
 | `GameDetail` | Visor HLS | ambos | `{ gameId }` |
 | `GameChat` | Chat grupal de una partida | ambos | `{ gameId, title?, readOnly? }` |
 | `DirectChat` | Chat directo 1-a-1 con un usuario | ambos | `{ userId, title? }` |
+| `Notifications` | Campanita: historial de notificaciones (sin chats) | ambos | — |
 | `ClubProfile` | Perfil público del club | player | `{ clubId }` |
 | `PlayerProfile` | Perfil público de un player | player | `{ playerId }` |
-| `ReserveCourt` | Paso 1 — elegir cancha | player | `{ clubId, courtId? }` |
-| `ReserveTime` | Paso 2 — fecha + slot | player | `{ courtId }` |
-| `ReserveInvite` | Paso 3 — switch + players | player | `{ courtId, date, slot }` |
+| `ReserveBlocks` | Paso 1 — día + bloque libre (`courtId` = filtro inicial) | player | `{ clubId, courtId? }` |
+| `ReserveInvite` | Paso 2 — switch + players | player | `{ courtId, courtLabel, date, slotStart, slotEnd, durationMinutes }` |
 | `ReserveOk` | Confirmación | player | `{ reservationId }` |
 | `VideoEditor` | Editor de highlight (5 pasos) | player | `{ matchId, clipData }` |
 
@@ -954,10 +1029,10 @@ Es el mismo patrón que ya usan `ClubProfileScreen` y `PlayerProfileScreen`. El 
 `children` debe limitarse a leer `route.params`/`navigation` y renderizar un componente.
 
 > **Todo el flujo de reserva sigue esta regla**: `ReservePickClubScreen` (club),
-> `ReserveCourtScreen` (canchas), `ReserveTimeScreen` (día + slots/horarios) y
-> `ReserveInviteScreen` (rivales) son componentes propios. El mismo bug hacía que **las
-> canchas y los horarios no aparecieran** (el fetch resolvía pero el `setState` no
-> re-renderizaba). Si sumás un paso al flujo, hacelo componente, no render-prop inline.
+> `ReserveBlocksContainer` (bloques del día: canchas + slots) y `ReserveInviteScreen`
+> (rivales) son componentes propios. El mismo bug hacía que **las canchas y los horarios
+> no aparecieran** (el fetch resolvía pero el `setState` no re-renderizaba). Si sumás un
+> paso al flujo, hacelo componente, no render-prop inline.
 
 ---
 
@@ -1102,7 +1177,7 @@ npm start                   # arranca sin warnings en Metro
     "Buscar en Maps" que abre **Google Maps** (URL universal `maps/search/?api=1&query=...`)
     vía `Linking`, usando la lat/lng del club (o la dirección/nombre como fallback de
     búsqueda por texto; "Ubicación no disponible" si no hay ninguno). Se usa en
-    `ClubProfilePlayerView`, `ReserveStep1Screen` y por card de partido abierto en la
+    `ClubProfilePlayerView`, `ReserveBlocksScreen` y por card de partido abierto en la
     pestaña Juegos (`GamesScreen`). Se
     eliminaron `ClubMap.tsx`, `NearbyClubsMap.tsx`, `mapTiles.ts`, la dependencia
     `react-native-webview` y la key `EXPO_PUBLIC_MAPTILER_KEY` (ya no se requiere

@@ -79,6 +79,11 @@ interface BackendCourt {
   surface: string | null;
   description: string | null;
   isActive?: boolean;
+  /** Config de bloques de la cancha (la define el club desde el desktop). */
+  blockMinutes?: number;
+  pricePerBlock?: number;
+  cameras?: Array<{ id: string; identifier: string }>;
+  hasCameras?: boolean;
 }
 
 function mapCourt(c: BackendCourt): ClubCourtPublic {
@@ -86,10 +91,14 @@ function mapCourt(c: BackendCourt): ClubCourtPublic {
     id: c.id,
     name: c.name,
     surface: normalizeSurface(c.surface),
-    cams: 0,
+    // `GET /padel-court?clubId=` trae las cámaras montadas; `GET /padel-court/:id` puede
+    // traer solo `hasCameras` — de ahí el fallback a 1.
+    cams: c.cameras?.length ?? (c.hasCameras ? 1 : 0),
     indoor: false,
     nextSlot: '',
     active: c.isActive ?? true,
+    blockMinutes: c.blockMinutes,
+    pricePerBlock: c.pricePerBlock,
   };
 }
 

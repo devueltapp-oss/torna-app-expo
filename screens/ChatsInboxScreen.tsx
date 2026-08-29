@@ -33,16 +33,30 @@ function whenLabel(iso: string | null): string {
   return d.toLocaleDateString('es', { day: 'numeric', month: 'short' });
 }
 
+/** Las dos bandejas: chats grupales de partidas y DMs 1-a-1. */
+type InboxFilter = 'game' | 'dm';
+
 /**
- * Inbox de Chats: lista unificada de DMs 1-a-1 y chats grupales de partidas
- * (cualquier estado). Tap → abre el hilo correspondiente. "Nuevo chat" abre el
- * buscador de usuarios para iniciar un DM.
+ * Inbox de Chats, separado en dos bandejas con un segmented control:
+ * **Partidas** (chats grupales de `GameChatMessage`, cualquier estado) y **Amigos**
+ * (DMs 1-a-1). Tap → abre el hilo correspondiente. "Nuevo chat" abre el buscador de
+ * usuarios para iniciar un DM.
  */
 export function ChatsInboxScreen({
   items, loading, onOpenDm, onOpenGame, onNewChat, onRefresh, refreshing,
   activeTab = 'chats', onChangeTab, role = 'player',
 }: ChatsInboxScreenProps) {
   const { colors } = useTheme();
+  const [filter, setFilter] = React.useState<InboxFilter>('game');
+
+  const visible = React.useMemo(() => items.filter((it) => it.kind === filter), [items, filter]);
+  // No leídos por bandeja (los grupos de partida hoy siempre traen 0 — no hay cursor
+  // de lectura en el backend para el chat grupal).
+  const unread = React.useMemo(() => {
+    const sum = (k: InboxFilter) =>
+      items.reduce((acc, it) => (it.kind === k ? acc + (it.unreadCount || 0) : acc), 0);
+    return { game: sum('game'), dm: sum('dm') };
+  }, [items]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
@@ -55,8 +69,19 @@ export function ChatsInboxScreen({
         }
       />
 
+      <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingTop: 12 }}>
+        <FilterTab
+          label="Partidas" icon={Users} on={filter === 'game'} badge={unread.game}
+          onPress={() => setFilter('game')}
+        />
+        <FilterTab
+          label="Amigos" icon={MessageCircle} on={filter === 'dm'} badge={unread.dm}
+          onPress={() => setFilter('dm')}
+        />
+      </View>
+
       <FlatList
-        data={items}
+        data={visible}
         keyExtractor={(it) => `${it.kind}:${it.id}`}
         contentContainerStyle={{ padding: 12, gap: 6, flexGrow: 1 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
@@ -75,11 +100,17 @@ export function ChatsInboxScreen({
           !loading ? (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 72, paddingHorizontal: 32, gap: 10 }}>
               <View style={{ width: 88, height: 88, borderRadius: 26, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' }}>
-                <MessageCircle size={40} color={colors.ink} strokeWidth={2.2} />
+                {filter === 'game'
+                  ? <Users size={40} color={colors.ink} strokeWidth={2.2} />
+                  : <MessageCircle size={40} color={colors.ink} strokeWidth={2.2} />}
               </View>
-              <Text style={{ fontSize: 16, fontFamily: fonts.bold, color: colors.text }}>Todavía no tenés chats</Text>
+              <Text style={{ fontSize: 16, fontFamily: fonts.bold, color: colors.text }}>
+                {filter === 'game' ? 'Sin chats de partidas' : 'Sin chats con amigos'}
+              </Text>
               <Text style={{ fontSize: 13, color: colors.muted2, textAlign: 'center', lineHeight: 19 }}>
-                Iniciá una conversación con "Nuevo chat", o entrá a una partida para chatear con tus compañeros.
+                {filter === 'game'
+                  ? 'Cuando entres a una partida vas a poder chatear acá con los jugadores.'
+                  : 'Iniciá una conversación con "Nuevo chat" o desde el perfil de un jugador o club.'}
               </Text>
             </View>
           ) : null
@@ -88,6 +119,48 @@ export function ChatsInboxScreen({
 
       {onChangeTab && <BottomTabBar role={role} active={activeTab} onChange={onChangeTab} />}
     </SafeAreaView>
+  );
+}
+
+/** Botón de bandeja (Partidas / Amigos): activo = lima, inactivo = contorno. */
+function FilterTab({
+  label, icon: Icon, on, badge, onPress,
+}: {
+  label: string;
+  icon: typeof Users;
+  on: boolean;
+  badge: number;
+  onPress: () => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: on }}
+      style={{
+        flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+        paddingVertical: 10, borderRadius: 12,
+        backgroundColor: on ? colors.primary : colors.surface,
+        borderWidth: on ? 0 : 1, borderColor: colors.line,
+      }}
+    >
+      <Icon size={16} color={on ? colors.primaryFg : colors.muted2} />
+      <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: on ? colors.primaryFg : colors.text }}>
+        {label}
+      </Text>
+      {badge > 0 && (
+        <View style={{
+          minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5,
+          backgroundColor: on ? colors.primaryFg : colors.accent,
+          alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Text style={{ fontSize: 10, fontFamily: fonts.bold, color: on ? colors.primary : colors.ink }}>
+            {badge}
+          </Text>
+        </View>
+      )}
+    </Pressable>
   );
 }
 

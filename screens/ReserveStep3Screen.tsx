@@ -32,7 +32,8 @@ interface Props {
 }
 
 /**
- * Step 3 of 3 — partner (required) + optional opponents + confirm.
+ * Paso 2 de 2 — compañero (obligatorio) + rivales opcionales + confirmar.
+ * (El paso 1 es `ReserveBlocksScreen`: elegir un bloque libre del club.)
  *
  *   - Switch "Buscar rivales": OFF = full party (you+partner+2 opp);
  *     ON = only partner required, public match waits for 2 more joiners.
@@ -73,10 +74,10 @@ export function ReserveStep3Screen({
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <AppHeader title="Jugadores"
         left={<Pressable onPress={onBack}><ChevronLeft size={22} color={colors.text}/></Pressable>}
-        right={<Text style={{ fontSize: 11, color: colors.muted2, fontWeight: '700' }}>3/3</Text>}
+        right={<Text style={{ fontSize: 11, color: colors.muted2, fontWeight: '700' }}>2/2</Text>}
       />
       <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
-        <StepIndicator step={3}/>
+        <StepIndicator step={2} total={2}/>
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>

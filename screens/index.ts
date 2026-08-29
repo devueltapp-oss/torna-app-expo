@@ -26,6 +26,7 @@ export { PlayerProfilePublicView } from './PlayerProfilePublicView';
 export { GlobalSearchScreen, type GlobalSearchScreenProps } from './GlobalSearchScreen';
 export { ChatsInboxScreen, type ChatsInboxScreenProps } from './ChatsInboxScreen';
 export { DirectChatScreen, type DirectChatScreenProps } from './DirectChatScreen';
+export { NotificationsScreen, type NotificationsScreenProps } from './NotificationsScreen';
 
 // Player main profile + library + settings
 export { PlayerOwnProfileScreen, type PlayerOwnProfileScreenProps } from './PlayerOwnProfileScreen';
@@ -37,7 +38,10 @@ export { VideoEditorScreen, type VideoEditorScreenProps } from './video-editor-s
 
 // Reservation flow
 export { ReserveClubPickerScreen } from './ReserveClubPickerScreen';
-export { ReserveStep1Screen } from './ReserveStep1Screen';
-export { ReserveStep2Screen } from './ReserveStep2Screen';
+export {
+  ReserveBlocksScreen,
+  type DayOption,
+  type BlockSelection,
+} from './ReserveBlocksScreen';
 export { ReserveStep3Screen } from './ReserveStep3Screen';
 export { ReserveSuccessScreen, MonoValue } from './ReserveSuccessScreen';

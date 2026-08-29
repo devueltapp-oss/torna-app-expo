@@ -58,6 +58,12 @@ export interface PushTarget {
  * | GAME_CANCELLED      | game.service (owner canceló)        | Juegos     |
  * | GAME_PLAYER_LEFT    | game.service (alguien se dio baja)  | Juegos     |
  * | GAME_PAIR_CANCELLED | game.service (la pareja se bajó)    | Juegos     |
+ * | GAME_SCHEDULED      | game.service (un seguido agendó)    | GameDetail |
+ * | GAME_PLAYER_ADDED   | game.service (te sumaron)           | Juegos     |
+ * | GAME_APPLICATION_RECEIVED | game.service (se postularon)  | Juegos     |
+ *
+ * La misma tabla resuelve el tap en la **campanita**: cada notificación guardada trae
+ * el mismo `data` que viajó en el push (`NotificationsScreen` → `resolvePushTarget`).
  *
  * ⚠️ Se normaliza a mayúsculas a propósito: el backend en producción todavía
  * manda los tres últimos en minúscula (`game_cancelled`, `game_player_left`,
@@ -72,6 +78,9 @@ export function resolvePushTarget(data: PushData | null | undefined): PushTarget
     case 'STREAMING_STARTED':
     case 'RECORDING_READY':
     case 'GAME_FINISHED':
+    // Un seguido agendó: la partida todavía no tiene stream, pero su detalle es el
+    // único lugar donde se la puede ver (cancha, horario, jugadores).
+    case 'GAME_SCHEDULED':
       return data?.gameId ? { name: 'GameDetail', params: { gameId: data.gameId } } : null;
 
     case 'NEW_CHAT_MESSAGE':
@@ -85,6 +94,10 @@ export function resolvePushTarget(data: PushData | null | undefined): PushTarget
     case 'GAME_CANCELLED':
     case 'GAME_PLAYER_LEFT':
     case 'GAME_PAIR_CANCELLED':
+    // "Te sumaron a una partida" / "se postularon a la tuya": la partida aparece en
+    // "Mis partidas", y ahí se la gestiona (aceptar, darse de baja, cancelar).
+    case 'GAME_PLAYER_ADDED':
+    case 'GAME_APPLICATION_RECEIVED':
       // La partida ya no se puede ver (cancelada) o cambió su composición: el
       // lugar útil es el hub de partidos, no el visor del stream.
       return { name: 'MainPlayer', params: { initialTab: gamesTab } };
@@ -100,6 +113,34 @@ let navigationRef: React.RefObject<any> | null = null;
 let navigationReady = false;
 let pendingTarget: PushTarget | null = null;
 let initialized = false;
+
+/* ─────────── aviso de push recibido (para el badge de la campanita) ─────────── */
+
+type PushListener = (data: PushData) => void;
+const pushListeners = new Set<PushListener>();
+
+/**
+ * Se dispara cuando llega (o se toca) un push con la app abierta. Lo usa
+ * `useNotificationBadge` para refrescar el contador sin esperar al próximo foco.
+ * Devuelve la función para desuscribirse.
+ */
+export function addPushReceivedListener(cb: PushListener): () => void {
+  pushListeners.add(cb);
+  return () => {
+    pushListeners.delete(cb);
+  };
+}
+
+function emitPush(data: PushData | null | undefined): void {
+  if (!data) return;
+  pushListeners.forEach((cb) => {
+    try {
+      cb(data);
+    } catch {
+      // Un listener roto no puede romper la cadena de push.
+    }
+  });
+}
 
 function navigateTo(target: PushTarget): void {
   if (!navigationReady || !navigationRef?.current) {
@@ -158,14 +199,18 @@ export function initNotifications(ref: React.RefObject<any>): void {
     initialized = true;
 
     OneSignal.Notifications.addEventListener('click', (event: any) => {
-      const target = resolvePushTarget(event?.notification?.additionalData);
+      const data = event?.notification?.additionalData;
+      emitPush(data);
+      const target = resolvePushTarget(data);
       if (target) navigateTo(target);
     });
 
     // App en primer plano: no tiene sentido tapar con un banner el chat que el
     // usuario está leyendo en ese mismo momento.
     OneSignal.Notifications.addEventListener('foregroundWillDisplay', (event: any) => {
-      const target = resolvePushTarget(event?.notification?.additionalData);
+      const data = event?.notification?.additionalData;
+      emitPush(data);
+      const target = resolvePushTarget(data);
       if (isAlreadyOnTarget(target)) event.preventDefault?.();
     });
   } catch (err) {
@@ -261,4 +306,5 @@ export function __resetForTests(): void {
   navigationReady = false;
   pendingTarget = null;
   initialized = false;
+  pushListeners.clear();
 }
