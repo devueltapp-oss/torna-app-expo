@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronRight, Camera, Check } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
-import { Button, AppHeader, SurfaceChip } from '../components/ui';
+import { Button, AppHeader } from '../components/ui';
 import { MapsButton } from '../components/MapsButton';
 import type { Slot, ClubCourtPublic } from '../data/types';
 import { StepIndicator } from './reserveCommon';
@@ -317,7 +317,6 @@ function BlockRow({
                     <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text }} numberOfLines={1}>
                       {item.court.name}
                     </Text>
-                    <SurfaceChip surface={item.court.surface} />
                     {item.slot.cams && <Camera size={12} color={colors.muted2} />}
                   </View>
                   <Text style={{ fontSize: 12, fontWeight: '800', color: isFree ? colors.accentText : colors.muted2 }}>

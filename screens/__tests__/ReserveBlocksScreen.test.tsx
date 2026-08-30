@@ -14,7 +14,7 @@ import type { ClubCourtPublic, Slot, SlotStatus } from '../../data/types';
 import type { CourtSlots } from '../../lib/reservation';
 
 const court = (id: string, name: string): ClubCourtPublic => ({
-  id, name, surface: 'CARPET', cams: 1, indoor: false, nextSlot: '', active: true,
+  id, name, cams: 1, indoor: false, nextSlot: '', active: true,
   blockMinutes: 90, pricePerBlock: 10,
 });
 

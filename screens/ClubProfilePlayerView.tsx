@@ -7,7 +7,7 @@ import { ChevronLeft, MoreHorizontal, MapPin, Eye, Play, Camera, MessageCircle }
 import { useIsFocused } from '@react-navigation/native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
-import { SectionHeader, StatusBadge, Avatar, SurfaceChip } from '../components/ui';
+import { SectionHeader, StatusBadge, Avatar } from '../components/ui';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import type { ClubPublic, ClipPreview } from '../data/types';
 
@@ -193,7 +193,6 @@ export function ClubProfilePlayerView({
                     <Rect x={20} y={15} width={160} height={80} stroke={colors.accent} strokeWidth={1.5} fill="none"/>
                     <Line x1={100} y1={15} x2={100} y2={95} stroke={colors.accent} strokeWidth={1.5}/>
                   </Svg>
-                  <View style={{ position: 'absolute', top: 6, left: 6 }}><SurfaceChip surface={c.surface}/></View>
                   <View style={{ position: 'absolute', bottom: 6, right: 6, flexDirection: 'row', alignItems: 'center', gap: 3 }}>
                     <Camera size={11} color={colors.accent}/>
                     <Text style={{ color: colors.accent, fontSize: 10, fontWeight: '800' }}>{c.cams}</Text>

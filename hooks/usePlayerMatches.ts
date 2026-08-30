@@ -46,7 +46,6 @@ function mapToLibraryMatch(item: PlayerMatchApi): LibraryMatch {
     kind: 'match',
     title: court,
     subtitle: undefined,
-    surface: 'HARD',
     cameras: 1,
     highlightsCount: item.clipsCount ?? 0,
     isPublic: false,

@@ -28,7 +28,6 @@ const localMatch: LibraryMatch = {
   kind: 'match',
   title: 'Partido del sábado',
   isPublic: false,
-  surface: 'HARD',
   cameras: 2,
   highlightsCount: 0,
   recordingUrl: 'https://cdn/m1.m3u8',

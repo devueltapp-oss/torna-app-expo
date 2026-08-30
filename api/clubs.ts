@@ -65,18 +65,12 @@ async function authedPost<T>(path: string, body: unknown): Promise<T> {
   return unwrap<T>(await res.json().catch(() => ({})));
 }
 
-const SURFACES = ['CLAY', 'GRASS', 'HARD', 'CARPET'] as const;
-function normalizeSurface(s?: string | null): ClubCourtPublic['surface'] {
-  const up = (s ?? '').toUpperCase();
-  return (SURFACES as readonly string[]).includes(up)
-    ? (up as ClubCourtPublic['surface'])
-    : 'HARD';
-}
-
+// La superficie de la cancha ya no se usa en la app (2026-08-30): el dato que
+// categoriza una partida es el **nivel 1–7** (`Game.category`). El backend sigue
+// devolviendo `surface`; acá simplemente no se mapea.
 interface BackendCourt {
   id: string;
   name: string;
-  surface: string | null;
   description: string | null;
   isActive?: boolean;
   /** Config de bloques de la cancha (la define el club desde el desktop). */
@@ -90,7 +84,6 @@ function mapCourt(c: BackendCourt): ClubCourtPublic {
   return {
     id: c.id,
     name: c.name,
-    surface: normalizeSurface(c.surface),
     // `GET /padel-court?clubId=` trae las cámaras montadas; `GET /padel-court/:id` puede
     // traer solo `hasCameras` — de ahí el fallback a 1.
     cams: c.cameras?.length ?? (c.hasCameras ? 1 : 0),
@@ -151,7 +144,6 @@ interface BackendCourtSearch {
   name: string;
   club: string;
   clubId: string;
-  surface: string | null;
   hasCameras: boolean;
 }
 
@@ -165,7 +157,6 @@ export async function searchCourts(q: string): Promise<SearchableCourt[]> {
     name: c.name,
     club: c.club,
     clubId: c.clubId,
-    surface: normalizeSurface(c.surface),
     hasCameras: c.hasCameras,
   }));
 }

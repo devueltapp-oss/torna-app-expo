@@ -43,7 +43,7 @@ import {
 } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
-import { Avatar, AvatarStack, Button, StatusBadge, HostBadge } from '../components/ui';
+import { Avatar, AvatarStack, Button, StatusBadge, HostBadge, CategoryBadge } from '../components/ui';
 import { MatchParticipant, CameraAngleData } from '../components/cards';
 import { GameCommentsPanel } from '../components/GameCommentsPanel';
 import { useGameComments } from '../hooks/useGameComments';
@@ -57,7 +57,8 @@ type PortraitPanel = null | 'comments' | 'players';
 export interface GameDetailData {
   id: string;
   court: string;
-  floor: 'CLAY' | 'GRASS' | 'HARD' | 'CARPET';
+  /** Nivel de la partida: 1 = más alta, 7 = iniciación. Null = sin declarar. */
+  category?: number | null;
   club: string;
   /** Id (Firebase UID) del club del partido, para seguir/dejar de seguir. '' si no hay. */
   clubId: string;
@@ -384,9 +385,13 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: 18, letterSpacing: -0.2 }}>
-                {game.court}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: 18, letterSpacing: -0.2 }} numberOfLines={1}>
+                  {game.court}
+                </Text>
+                {/* Nivel: ocupa el lugar que tenía el chip de superficie. */}
+                <CategoryBadge category={game.category} />
+              </View>
               {!!(game.time || game.date) && (
                 <Text style={{ color: colors.muted2, fontSize: 13, marginTop: 2 }}>
                   {[game.time, game.date].filter(Boolean).join(' · ')}

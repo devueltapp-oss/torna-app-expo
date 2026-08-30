@@ -19,7 +19,7 @@ import { View, Text, Pressable, ScrollView, Modal, KeyboardAvoidingView, Platfor
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronDown, Lock, Scissors, Play, Trophy, Globe, Pencil, X } from 'lucide-react-native';
 import { useTheme } from '../theme';
-import { Button, Input, AppHeader, SurfaceChip } from '../components/ui';
+import { Button, Input, AppHeader } from '../components/ui';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import { ContentThumb } from '../components/ContentThumb';
 import { VisibilityPill } from '../components/VisibilityPill';
@@ -250,7 +250,6 @@ function MatchRow({ match, onCreateHighlight, onRegisterResult, onToggleVisibili
       <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <VisibilityPill isPublic={match.isPublic} onPress={onToggleVisibility}/>
-          <SurfaceChip surface={match.surface}/>
         </View>
         <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text, lineHeight: 17 }}>
           {match.title}

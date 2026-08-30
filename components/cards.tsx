@@ -11,7 +11,7 @@ import { Video, ResizeMode } from 'expo-av';
 import { Eye, Camera, Heart, MessageCircle, Play, WifiOff } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
-import { Avatar, AvatarStack, StatusBadge, SurfaceChip, ClubPill, GameStatus } from './ui';
+import { Avatar, AvatarStack, StatusBadge, ClubPill, GameStatus } from './ui';
 import type { FeedPost as FeedPostData, UpcomingGameData } from '../data/types';
 
 export interface MatchParticipant {
@@ -307,7 +307,6 @@ export function GameListItem({ game, onPress }: { game: GameListData; onPress?: 
 
 export interface CourtData {
   id: string; name: string;
-  surface: 'CLAY' | 'GRASS' | 'HARD' | 'CARPET';
   description?: string | null;
   cams?: number;
   live?: { gameId: string; viewers: number } | null;
@@ -322,8 +321,7 @@ export function CourtCard({ court, onPress }: { court: CourtData; onPress?: (c: 
         backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line,
         borderRadius: radii['2xl'] + 2, padding: 14, gap: 8, opacity: pressed ? 0.92 : 1,
       }]}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <SurfaceChip surface={court.surface}/>
+      <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' }}>
         <Text style={{ color: colors.muted2, fontSize: 11, fontFamily: fonts.mono }}>#{court.id}</Text>
       </View>
       <Text style={{ color: colors.text, fontWeight: '800', fontSize: 18, letterSpacing: -0.2 }}>{court.name}</Text>

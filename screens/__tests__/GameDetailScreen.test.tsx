@@ -108,6 +108,18 @@ describe('GameDetailScreen — paneles que encogen el video (portrait)', () => {
     expect(getByText('EQUIPO 1')).toBeTruthy();
   });
 
+  it('muestra el NIVEL de la partida (reemplazo del chip de superficie)', () => {
+    const { getByTestId, getByText } = renderScreen({ game: { ...game, category: 3 } });
+    fireEvent.press(getByTestId('toggle-players'));
+    expect(getByText('CAT. 3')).toBeTruthy();
+  });
+
+  it('sin nivel declarado no se pinta ningún badge', () => {
+    const { getByTestId, queryByText } = renderScreen({ game: { ...game, category: null } });
+    fireEvent.press(getByTestId('toggle-players'));
+    expect(queryByText(/^CAT\. /)).toBeNull();
+  });
+
   it('sin equipo 2 no se pinta la sección vacía', () => {
     const solos = { ...game, players: [{ username: '@ana', name: 'Ana', team: 1 }] };
     const { getByTestId, getByText, queryByText } = renderScreen({ game: solos });

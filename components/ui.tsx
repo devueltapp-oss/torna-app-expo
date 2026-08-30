@@ -246,20 +246,9 @@ export function CategoryBadge({ category }: { category?: number | null }) {
   );
 }
 
-/* ───────────────────────────  Surface Chip  ─────────────────────────
- * Brand-strict: every surface type uses lime+blue. Distinction comes from
- * the label, not from color (CLAY/GRASS/HARD/CARPET all render the same).
- */
-
-type Surface = 'CLAY' | 'GRASS' | 'HARD' | 'CARPET';
-export function SurfaceChip({ surface }: { surface: Surface }) {
-  const { colors } = useTheme();
-  return (
-    <View style={{ backgroundColor: colors.accent, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 9999 }}>
-      <Text style={{ color: colors.ink, fontSize: 10, fontWeight: '800', letterSpacing: 0.8 }}>{surface}</Text>
-    </View>
-  );
-}
+/* El `SurfaceChip` (CLAY/GRASS/HARD/CARPET) se eliminó el 2026-08-30: la superficie
+ * dejó de ser el dato que categoriza una partida. Ese lugar lo ocupa ahora el
+ * **nivel 1–7** (`CategoryBadge`, más arriba). */
 
 /* ───────────────────────────  ClubPill  ───────────────────────────── */
 

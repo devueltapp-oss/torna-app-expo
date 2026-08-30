@@ -34,7 +34,9 @@ interface BackendGameDetail {
   viewers?: number;
   recordingUrl?: string | null;
   durationSeconds?: number | null;
-  padelCourt?: { name?: string | null; surface?: string | null } | null;
+  padelCourt?: { name?: string | null } | null;
+  /** Nivel de la partida: 1 = más alta, 7 = iniciación. */
+  category?: number | null;
   cameras?: BackendCamera[];
   gamePlayers?: Array<{
     isCaptain?: boolean;
@@ -44,14 +46,6 @@ interface BackendGameDetail {
   }>;
 }
 
-const SURFACES = ['CLAY', 'GRASS', 'HARD', 'CARPET'] as const;
-function normalizeSurface(s?: string | null): GameDetailData['floor'] {
-  const up = (s ?? '').toUpperCase();
-  return (SURFACES as readonly string[]).includes(up)
-    ? (up as GameDetailData['floor'])
-    : 'HARD';
-}
-
 function mapDetail(data: BackendGameDetail): GameDetailData {
   const cams = data.cameras ?? [];
   const primary = cams.find((c) => c.isPrimary)?.camera ?? cams[0]?.camera;
@@ -59,7 +53,9 @@ function mapDetail(data: BackendGameDetail): GameDetailData {
   return {
     id: data.id,
     court: data.padelCourt?.name ?? primary?.identifier ?? 'Cancha',
-    floor: normalizeSurface(data.padelCourt?.surface),
+    // Nivel de la partida (1 = más alta, 7 = iniciación). Ocupa el lugar que tenía
+    // la superficie de la cancha, que dejó de mostrarse.
+    category: data.category ?? null,
     club: clubUser?.name ?? clubUser?.username ?? '',
     clubId: clubUser?.id ?? '',
     clubHandle: clubUser?.username ? '@' + clubUser.username : '',

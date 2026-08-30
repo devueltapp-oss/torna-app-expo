@@ -103,7 +103,7 @@ function buildDays(n = 6): DayOption[] {
 /** Detalle de partido vacío mientras carga / si no hay datos (sin cámaras → placeholder). */
 function emptyGameDetail(id: string): GameDetailData {
   return {
-    id, court: '', floor: 'HARD', club: '', clubId: '', clubHandle: '', clubFollowers: 0,
+    id, court: '', category: null, club: '', clubId: '', clubHandle: '', clubFollowers: 0,
     time: '', date: '', viewers: 0, isLive: false, players: [], cameras: [],
   };
 }
@@ -215,7 +215,7 @@ function clipToGameDetailParams(
     clipData: {
       id: 'clip',
       court: title || 'Highlight',
-      floor: 'HARD',
+      category: null,
       club: '', clubId: '', clubHandle: '', clubFollowers: 0,
       time: '', date: '',
       viewers: 0, isLive: false,
@@ -624,7 +624,7 @@ function ReserveBlocksContainer({ route, navigation }: { route: any; navigation:
       onDayChange={(d) => loadSlots(d.iso, courts)}
       onContinue={({ court, slot, day }) => navigation.navigate('ReserveInvite', {
         courtId: court.id,
-        courtLabel: `${court.name} · ${court.surface}`,
+        courtLabel: court.name,
         date: day.iso ?? '',
         slotStart: slot.start,
         slotEnd: slot.end,
@@ -1185,7 +1185,7 @@ function MainClub({ navigation }: any) {
     if (!clubId) return;
     fetchClubCourts(clubId)
       .then((cs) => setCourts(cs.map((c) => ({
-        id: c.id, name: c.name, surface: c.surface, cams: c.cams, next: c.nextSlot || null,
+        id: c.id, name: c.name, cams: c.cams, next: c.nextSlot || null,
       }))))
       .catch(() => setCourts([]));
   }, [clubId]);

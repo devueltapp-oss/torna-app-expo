@@ -85,7 +85,6 @@ export interface ClipPreview {
 }
 export interface ClubCourtPublic {
   id: string; name: string;
-  surface: 'CLAY' | 'GRASS' | 'HARD' | 'CARPET';
   cams: number; indoor: boolean;
   nextSlot: string;
   /** Cancha activa. false = desactivada por el club (sin reservas). */
@@ -219,7 +218,6 @@ export interface SearchableCourt {
   name: string;
   club: string;
   clubId: string;
-  surface: 'CLAY' | 'GRASS' | 'HARD' | 'CARPET';
   hasCameras: boolean;
 }
 
@@ -260,8 +258,6 @@ export interface ProfileOwner {
 
 /* ─────────── Librería del player ─────────── */
 
-export type LibrarySurface = 'CLAY' | 'GRASS' | 'HARD' | 'CARPET';
-
 interface LibraryItemBase {
   id: string;
   title: string;
@@ -278,7 +274,6 @@ interface LibraryItemBase {
 
 export interface LibraryMatch extends LibraryItemBase {
   kind: 'match';
-  surface: LibrarySurface;
   cameras: number;
   highlightsCount: number;
   /** URL del HLS del partido completo — se pasa al VideoEditor al recortar. */

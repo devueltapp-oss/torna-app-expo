@@ -522,14 +522,29 @@ POST  /game/:id/cancel-pair                   → la pareja retadora (team=2) se
   ⚠️ No confundir con `isCreator` de `UpcomingGameData`, que es "¿el host soy **yo**?" y es lo
   que habilita las acciones de owner. Los dos conviven: `isCreator` para permisos, `isHost`
   para mostrar **quién** organiza.
-- **Categoría** = `Game.category` / `User.category`, **1 = más alta, 7 = iniciación**
-  (convención de pádel), opcional. Se elige al reservar (`ReserveStep3Screen`, chips 1–7 →
-  `POST /game/reserve { category }`) y en el perfil propio (`PlayerSettingsScreen` → sección
-  Editar perfil → `updateMyCategory` → `PATCH /user/me`, guardado optimista con revert).
-  Se muestra con **`<CategoryBadge category/>`**, que devuelve `null` si no hay categoría — el
-  llamador no condiciona el render. Excepción: en `PlayerProfilePublicView` va como texto,
-  porque ahí el fondo es el azul del hero y el badge usa `colors.text`.
-  Cubierto por `components/__tests__/UpcomingMatchSheet.test.tsx`.
+- **Nivel (categoría)** = `Game.category` / `User.category`, **1 = más alta, 7 = iniciación**
+  (convención de pádel). Es **el** dato que categoriza una partida: desde el 2026-08-30
+  reemplazó a la superficie de la cancha, que se eliminó de toda la app (ver abajo).
+  - **Obligatorio al agendar, en los dos clientes**: en la app, `ReserveStep3Screen` no
+    habilita "Confirmar reserva" hasta elegir un chip 1–7 (ya no se puede deseleccionar);
+    en el desktop, `CreateGameDialog` tiene un select requerido y no deja crear sin él.
+  - ⚠️ En el **backend sigue siendo opcional** a propósito, en `ReserveGameDto` y en
+    `CreateGameDto`: con `forbidNonWhitelisted`, un campo de más da 400 y uno de menos no,
+    así que exigirlo rompería a una versión vieja del desktop todavía instalada. La regla
+    se defiende en las UIs; el `@Min(1) @Max(7)` sí lo valida cuando llega.
+  - También se elige en el perfil propio (`PlayerSettingsScreen` → Editar perfil →
+    `updateMyCategory` → `PATCH /user/me`, optimista con revert).
+  - Se muestra con **`<CategoryBadge category/>`**, que devuelve `null` si no hay nivel — el
+    llamador no condiciona el render. Excepción: en `PlayerProfilePublicView` va como texto,
+    porque ahí el fondo es el azul del hero y el badge usa `colors.text`.
+  - Cubierto por `components/__tests__/UpcomingMatchSheet.test.tsx` y
+    `screens/__tests__/GameDetailScreen.test.tsx`.
+- ⛔ **La superficie de la cancha (CLAY/GRASS/HARD/CARPET) ya no existe en la app.** Se
+  borraron `SurfaceChip`, el tipo `LibrarySurface`, `normalizeSurface` y el campo `surface`
+  de `ClubCourtPublic`/`SearchableCourt`/`LibraryMatch`/`CourtData`, y `GameDetailData.floor`
+  pasó a ser `category`. **El backend la sigue teniendo** (`PadelCourt.surface` es una columna
+  real y el desktop la edita): simplemente no se mapea ni se muestra. No la repongas en una
+  pantalla nueva.
 
 ### Subidas a B2 — `api/profile.ts` (avatar/portada)
 

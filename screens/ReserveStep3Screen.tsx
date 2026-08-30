@@ -107,10 +107,11 @@ export function ReserveStep3Screen({
           <Switch value={searching} onChange={setSearching}/>
         </View>
 
-        {/* Categoría / nivel — opcional. 1 = más alta, 7 = iniciación. */}
+        {/* Nivel — OBLIGATORIO desde el 2026-08-30: reemplazó a la superficie de la
+            cancha como el dato que categoriza la partida, y el desktop lo pide igual. */}
         <View>
           <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted2, letterSpacing: 0.8, marginBottom: 6 }}>
-            CATEGORÍA · OPCIONAL
+            NIVEL · OBLIGATORIO
           </Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {[1, 2, 3, 4, 5, 6, 7].map((n) => {
@@ -118,8 +119,9 @@ export function ReserveStep3Screen({
               return (
                 <Pressable
                   key={n}
-                  // Volver a tocar la categoría activa la deselecciona (queda sin declarar).
-                  onPress={() => setCategory(active ? null : n)}
+                  // Ya no se puede deseleccionar: el nivel es obligatorio.
+                  onPress={() => setCategory(n)}
+                  testID={`level-${n}`}
                   style={{
                     minWidth: 44, alignItems: 'center',
                     backgroundColor: active ? colors.primary : 'transparent',
@@ -138,7 +140,7 @@ export function ReserveStep3Screen({
             })}
           </View>
           <Text style={{ fontSize: 11, color: colors.muted2, marginTop: 6, lineHeight: 15 }}>
-            1 es la categoría más alta y 7 la de iniciación.
+            1 es el nivel más alto y 7 el de iniciación.
           </Text>
         </View>
 
@@ -189,12 +191,26 @@ export function ReserveStep3Screen({
         paddingHorizontal: 16, paddingTop: 12, paddingBottom: 18,
         borderTopWidth: 1, borderTopColor: colors.line, backgroundColor: colors.surface, gap: 8,
       }}>
-        <Button fullWidth size="lg" onPress={() => onConfirm?.({
-          mode: searching ? 'search-opponents' : 'full',
-          partnerUserId: partner?.id,
-          opponents: searching ? undefined : [opp1?.id, opp2?.id],
-          category: category ?? undefined,
-        })}>
+        {!category && (
+          <Text style={{ fontSize: 12, color: colors.muted2, textAlign: 'center' }}>
+            Elegí el nivel de la partida para confirmar.
+          </Text>
+        )}
+        <Button
+          fullWidth
+          size="lg"
+          variant={category ? 'primary' : 'disabled'}
+          onPress={() => {
+            // Sin nivel no se reserva: es obligatorio, igual que en el desktop.
+            if (!category) return;
+            onConfirm?.({
+              mode: searching ? 'search-opponents' : 'full',
+              partnerUserId: partner?.id,
+              opponents: searching ? undefined : [opp1?.id, opp2?.id],
+              category,
+            });
+          }}
+        >
           Confirmar reserva
         </Button>
         <Pressable onPress={onBack} style={{ alignItems: 'center', paddingVertical: 4 }}>
