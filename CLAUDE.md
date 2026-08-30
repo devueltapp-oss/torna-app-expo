@@ -738,6 +738,26 @@ tipos** que emite el backend (cubiertos por `services/__tests__/notifications.te
   ese teléfono.
 - Env: `EXPO_PUBLIC_ONESIGNAL_APP_ID`. La app **solo recibe** push; no hay WebSocket ni
   polling en tiempo real (los datos se refrescan al montar o con pull-to-refresh).
+- 🩺 **Si no llega ningún push, mirá el logcat ANTES de tocar el código.** El síntoma real
+  que apareció el 2026-08-30 no estaba en el código sino en el **estado local del SDK**:
+
+  ```
+  OneSignal: STATUS: 400 - {"errors": ["Failed to parse app_id from request", …]}
+  [OpRepo] Operation execution failed with eventual retry, pausing the operation repo:
+    [{"name":"login-user","appId":""}, {"name":"create-subscription","appId":""}, …]
+  ```
+
+  OneSignal **persiste sus operaciones pendientes** en el almacenamiento de la app. Las que
+  se encolaron cuando el app id estaba vacío quedan con `appId: ""` para siempre, fallan con
+  400 y **pausan la cola entera** (`pausing the operation repo`): a partir de ahí ninguna
+  operación nueva se ejecuta, el dispositivo nunca obtiene subscription id y el token jamás
+  se registra en el backend. Sobreviven a `adb install -r` porque no se borran los datos.
+
+  **Diagnóstico**: `adb logcat -d | grep -i onesignal` — si ves `"appId":""`, es esto.
+  **Arreglo**: `adb shell pm clear io.torna` (o desinstalar/reinstalar) y volver a entrar.
+  Ojo: borra la sesión guardada en SecureStore, hay que loguearse de nuevo.
+  Del lado del servidor, `POST /diagnostics/test-push` lo confirma: reporta
+  `tokenRegistrado: false` mientras la cola esté envenenada.
 - ⚠️ **En tests, `babel-preset-expo` inlina las `EXPO_PUBLIC_*` en tiempo de transform**:
   setear `process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID` dentro de un test llega tarde (el
   módulo ya quedó compilado con el valor vacío y `initNotifications` corta al toque). Por
