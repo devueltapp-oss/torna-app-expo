@@ -13,6 +13,7 @@ import { renderHook, act, waitFor } from '@testing-library/react-native';
 import { useGameChat } from '../useGameChat';
 import {
   fetchGameChat,
+  markGameChatRead,
   toggleGameChatMessageLike,
   type GameChatMessage,
 } from '../../api/games';
@@ -21,6 +22,9 @@ jest.mock('../../api/games');
 jest.mock('@react-navigation/native', () => ({ useIsFocused: () => false }));
 
 const mockFetch = fetchGameChat as jest.MockedFunction<typeof fetchGameChat>;
+// El hook marca el chat como leído al montar; con `jest.mock` automático devolvería
+// undefined y el `.catch(...)` reventaría.
+const mockMarkRead = markGameChatRead as jest.MockedFunction<typeof markGameChatRead>;
 const mockToggle = toggleGameChatMessageLike as jest.MockedFunction<
   typeof toggleGameChatMessageLike
 >;
@@ -44,6 +48,7 @@ function msg(id: string, over: Partial<GameChatMessage> = {}): GameChatMessage {
 beforeEach(() => {
   jest.clearAllMocks();
   mockFetch.mockResolvedValue([msg('m1'), msg('m2')]);
+  mockMarkRead.mockResolvedValue(undefined);
 });
 
 async function setup() {
@@ -122,5 +127,22 @@ describe('useGameChat — likes', () => {
     await act(async () => { await result.current.toggleLike('temp-123'); });
 
     expect(mockToggle).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * No leídos del chat de partida (2026-08-30). Abrir el chat tiene que limpiar el badge
+ * del inbox; el contador real lo calcula el backend desde `GamePlayer.lastReadAt`.
+ */
+describe('useGameChat — marcar como leído', () => {
+  it('al montar marca el chat como leído', async () => {
+    renderHook(() => useGameChat('g1'));
+    await waitFor(() => expect(mockMarkRead).toHaveBeenCalledWith('g1'));
+  });
+
+  it('si falla, no rompe el chat (es best-effort)', async () => {
+    mockMarkRead.mockRejectedValue(new Error('sin red'));
+    const hook = renderHook(() => useGameChat('g1'));
+    await waitFor(() => expect(hook.result.current.messages).toHaveLength(2));
   });
 });

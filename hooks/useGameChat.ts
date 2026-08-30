@@ -16,6 +16,7 @@ import { useIsFocused } from '@react-navigation/native';
 import {
   fetchGameChat,
   sendGameChatMessage,
+  markGameChatRead,
   toggleGameChatMessageLike,
   type GameChatMessage,
 } from '../api/games';
@@ -75,6 +76,10 @@ export function useGameChat(gameId: string, sender?: { id: string; username: str
       })
       .catch(() => { /* sin acceso o vacío → lista vacía */ })
       .finally(() => { if (!cancelled) setLoading(false); });
+    // Abrir el chat lo marca como leído: limpia el badge del inbox. Best-effort, igual
+    // que `markDmRead` en `useDirectChat` — si falla, el contador se corrige en la
+    // próxima apertura y no tiene sentido molestar al usuario con un error.
+    markGameChatRead(gameId).catch(() => {});
     return () => { cancelled = true; };
   }, [gameId]);
 

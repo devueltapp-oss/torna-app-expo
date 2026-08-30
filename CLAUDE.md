@@ -639,9 +639,9 @@ POST /chat/dm/:userId/read   → marcar el hilo como leído (limpia el badge del
 - **Dos bandejas, un solo endpoint**: arriba de la lista hay un segmented control
   **Partidas** (`kind:'game'`) / **Amigos** (`kind:'dm'`) que **filtra en el cliente** lo que
   ya trajo `GET /chat/inbox` — no hay request por bandeja. Arranca en **Partidas**. Cada
-  botón muestra el total de no leídos de su bandeja (los grupos de partida hoy siempre dan
-  0: el chat grupal no tiene cursor de lectura en el backend) y el estado vacío es el de la
-  bandeja elegida. Cubierto por `screens/__tests__/ChatsInboxScreen.test.tsx`.
+  botón muestra el total de no leídos de su bandeja **—real en las dos desde 2026-08-30**,
+  antes los grupos de partida daban 0 fijo— y el estado vacío es el de la bandeja elegida.
+  Cubierto por `screens/__tests__/ChatsInboxScreen.test.tsx`.
 - **`useDirectChat`** (`hooks/useDirectChat.ts`) → `DirectChatScreen`. **Copia de `useGameChat`**
   keyed por el UID del otro usuario: REST + polling 3s focus-gated, `since` incremental, envío
   optimista. Al montar hace `markDmRead`. Sin modo read-only (los DMs siempre se escriben).
@@ -650,10 +650,18 @@ POST /chat/dm/:userId/read   → marcar el hilo como leído (limpia el badge del
   "Nuevo chat" del inbox. Un club es un `User` → el DM con clubs funciona igual.
 - **Backend**: modelos `Conversation`/`ConversationParticipant`/`DirectMessage` (1-a-1 vía
   `pairKey` determinística; genéricos para grupos ad-hoc a futuro). El inbox agrega los chats de
-  partidas vía `GameService.getMyGameThreads` (todos los estados). Unread: **DM sí**
-  (`lastReadAt`), **grupos de partida = 0 en v1** (el game chat no tiene cursor de lectura).
-- **Push**: OneSignal `type:'NEW_DM_MESSAGE' { conversationId, fromUserId }` → el handler navega a
-  `DirectChat`. (El grupal usa `NEW_CHAT_MESSAGE { gameId }` → `GameChat`.)
+  partidas vía `GameService.getMyGameThreads` (todos los estados). **Unread real en los dos**
+  (2026-08-30): DMs por `ConversationParticipant.lastReadAt` y grupales por
+  `GamePlayer.lastReadAt`.
+- **Marcar como leído**: `useGameChat` llama a **`markGameChatRead(gameId)`**
+  (`api/games.ts` → `POST /game/:id/chat/read`) al montar, igual que `useDirectChat` llama a
+  `markDmRead`. Es best-effort: si falla, el contador se corrige en la próxima apertura.
+  ⚠️ Si mockeás `api/games` en un test que monta `useGameChat`, **incluí `markGameChatRead`**
+  o el `.catch(...)` revienta sobre `undefined`.
+- **Push + campanita**: OneSignal `type:'NEW_DM_MESSAGE' { conversationId, fromUserId }` → el
+  handler navega a `DirectChat`; el grupal usa `NEW_CHAT_MESSAGE { gameId }` → `GameChat`.
+  Desde el 2026-08-30 **cada mensaje deja además una fila en la campanita**, colapsada por
+  conversación (una sola sin leer por chat) — ver abajo.
 
 #### Likes de mensajes (corazón)
 
@@ -738,7 +746,13 @@ tipos** que emite el backend (cubiertos por `services/__tests__/notifications.te
 ### Notificaciones in-app (campanita) — `api/notifications.ts`
 
 La campanita del header (Inicio de player y de club) dejó de ser decorativa: lista el
-historial de notificaciones con no leídos. **Los chats NO están acá** — tienen su pestaña.
+historial de notificaciones con no leídos.
+
+**Los chats TAMBIÉN están acá desde el 2026-08-30** (antes no: eran push-only). El motivo del
+cambio es que si el push se perdía no quedaba ningún rastro del mensaje. Entran **colapsados
+por conversación**: una sola fila sin leer por chat, que se refresca con el último mensaje y
+sube al tope — no una fila por mensaje. El tap se rutea con la misma tabla que el push
+(`resolvePushTarget`), así que no hubo que tocar nada en la app para que funcione.
 
 ```
 GET   /notification?limit=&cursor=  → { items, nextCursor, unreadCount }

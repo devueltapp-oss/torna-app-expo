@@ -267,6 +267,15 @@ export function sendGameChatMessage(gameId: string, content: string): Promise<Ga
 }
 
 /**
+ * Marca como leído el chat de la partida (POST /game/:id/chat/read) — avanza el cursor
+ * `GamePlayer.lastReadAt`, que es lo que alimenta el badge de no leídos del inbox.
+ * Espejo de `markDmRead` (`api/chat.ts`).
+ */
+export function markGameChatRead(gameId: string): Promise<void> {
+  return authedSend('POST', `/game/${encodeURIComponent(gameId)}/chat/read`);
+}
+
+/**
  * Like / unlike de un mensaje del chat de la partida
  * (POST /game/:id/chat/:messageId/like). Es un **toggle**: si ya lo habías
  * likeado, se lo quita. El backend garantiza un like por persona por mensaje.
