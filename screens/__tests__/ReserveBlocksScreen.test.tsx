@@ -103,6 +103,24 @@ describe('ReserveBlocksScreen — elegir un bloque libre', () => {
     expect(arg.slot).toMatchObject({ start: '06:00', end: '09:00', duration: 180, price: 20 });
   });
 
+  it('el bloque EN CURSO se muestra pero no se puede elegir', () => {
+    // El backend ya no manda los bloques terminados, pero sí el que está en curso
+    // (lo necesita el desktop). Llega `free` + `started`; reserve exige futuro.
+    const enCurso: CourtSlots<ClubCourtPublic>[] = [
+      {
+        court: court('c1', 'Cancha 1'),
+        slots: [{ ...slot('06:00', '07:30'), started: true }, slot('07:30', '09:00')],
+      },
+    ];
+    const { getByText, getByTestId, queryByText } = renderScreen(enCurso);
+
+    fireEvent.press(getByText('06:00 – 07:30'));
+    expect(getByText('En curso')).toBeTruthy();
+
+    fireEvent.press(getByTestId('block-court-c1'));
+    expect(queryByText('Duración')).toBeNull();
+  });
+
   it('sin selección el botón no dispara nada (no se puede reservar "el aire")', () => {
     const onContinue = jest.fn();
     const { getByText } = renderScreen(base, { onContinue });

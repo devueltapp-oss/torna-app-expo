@@ -142,6 +142,12 @@ export interface Slot {
   status: SlotStatus;
   /** True si el partido reservado se transmite desde este slot. */
   cams: boolean;
+  /**
+   * El bloque ya arrancó (solo puede pasar hoy). No es reservable: `POST /game/reserve`
+   * exige horario futuro. El backend ya no manda los bloques **terminados**, pero sí el
+   * que está en curso, porque el desktop lo necesita para crear la partida del momento.
+   */
+  started?: boolean;
 }
 
 export interface InvitablePlayer {

@@ -24,6 +24,7 @@ import {
   combineSlots,
   groupSlotsIntoBlocks,
   blockAvailability,
+  isBookable,
   type CourtReservationConfig,
   type DaySchedule,
 } from './reservation';
@@ -242,6 +243,18 @@ describe('bloques del día — espejo de BloquesDisponibles (desktop)', () => {
       { court: courtA, slots: [mk('06:00', '07:30', 'reserved')] },
     ]);
     expect(blockAvailability(full)).toEqual({ free: 0, total: 1 });
+  });
+
+  it('el bloque EN CURSO no cuenta como libre (llega `free` pero con `started`)', () => {
+    // El backend manda el bloque en curso porque el desktop lo usa para crear la
+    // partida del momento; para la app no es reservable (reserve exige futuro).
+    const [block] = groupSlotsIntoBlocks([
+      { court: courtA, slots: [{ ...mk('06:00', '07:30'), started: true }] },
+      { court: courtB, slots: [mk('06:00', '07:30')] },
+    ]);
+    expect(blockAvailability(block)).toEqual({ free: 1, total: 2 });
+    expect(isBookable(block.items[0].slot)).toBe(false);
+    expect(isBookable(block.items[1].slot)).toBe(true);
   });
 
   it('sin canchas o sin horarios → sin bloques (estado vacío de la pantalla)', () => {

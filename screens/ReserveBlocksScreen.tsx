@@ -9,7 +9,7 @@ import { MapsButton } from '../components/MapsButton';
 import type { Slot, ClubCourtPublic } from '../data/types';
 import { StepIndicator } from './reserveCommon';
 import {
-  MAX_BLOCKS, groupSlotsIntoBlocks, blockAvailability,
+  MAX_BLOCKS, groupSlotsIntoBlocks, blockAvailability, isBookable,
   maxConsecutiveFreeBlocks, combineSlots,
   type CourtSlots, type TimeBlock,
 } from '../lib/reservation';
@@ -301,8 +301,10 @@ function BlockRow({
       {open && (
         <View style={{ borderTopWidth: 1, borderTopColor: colors.line, paddingHorizontal: 12 }}>
           {block.items.map((item, i) => {
-            const isFree = item.slot.status === 'free';
+            // "Libre" no alcanza: el bloque en curso llega libre y no es reservable.
+            const isFree = isBookable(item.slot);
             const isOwn = item.slot.status === 'own';
+            const inProgress = item.slot.started && item.slot.status === 'free';
             const on = pickedCourtId === item.court.id;
             return (
               <View key={item.court.id} style={{ borderTopWidth: i > 0 ? 1 : 0, borderTopColor: colors.line }}>
@@ -319,7 +321,9 @@ function BlockRow({
                     {item.slot.cams && <Camera size={12} color={colors.muted2} />}
                   </View>
                   <Text style={{ fontSize: 12, fontWeight: '800', color: isFree ? colors.accentText : colors.muted2 }}>
-                    {isFree ? `$${item.slot.price.toLocaleString('es-AR')}` : isOwn ? 'Tuya' : 'Ocupada'}
+                    {isFree
+                      ? `$${item.slot.price.toLocaleString('es-AR')}`
+                      : isOwn ? 'Tuya' : inProgress ? 'En curso' : 'Ocupada'}
                   </Text>
                   <View style={{
                     width: 22, height: 22, borderRadius: 11,

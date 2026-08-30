@@ -481,11 +481,19 @@ desktop (`BloquesDisponibles`), donde "crear partida" nace de un bloque libre.
   cancha**: sin eso no se puede calcular el multibloque (que es por cancha, no por bloque).
 - ⚠️ **Dos canchas con `blockMinutes` distinto NO comparten fila** (se agrupa por
   `{start,end}` exacto) — mismo comportamiento/limitación que el desktop.
-- ⚠️ El backend **no filtra por la hora actual**: un bloque de hoy que ya pasó sigue
-  apareciendo libre si nadie lo reservó (mismo gap conocido que el desktop).
-- Cubierto por `lib/reservation.test.ts` (agrupado + disponibilidad, con la grilla real de
-  casapadel) y `screens/__tests__/ReserveBlocksScreen.test.tsx` (UI: bloques, cancha
-  ocupada no elegible, slot combinado al continuar).
+- **Bloques pasados (2026-08-29)**: el backend ya **no devuelve** los bloques que ya
+  terminaron, pero **sí** devuelve el bloque **en curso**, con `Slot.started = true`
+  (lo necesita el desktop, que crea la partida del momento desde el bloque actual).
+  Para la app ese bloque **no es reservable** — `POST /game/reserve` exige horario
+  futuro —, así que se usa el helper **`isBookable(slot)`** (`= status==='free' &&
+  !started`) en vez de mirar `status` a secas: la fila se muestra como "En curso" y no
+  se puede elegir, y `blockAvailability` no la cuenta como libre. ⚠️ Si agregás una
+  pantalla que ofrezca slots, usá `isBookable`, no `status === 'free'`, o vas a ofrecer
+  un bloque que el backend rechaza con 400.
+- Cubierto por `lib/reservation.test.ts` (agrupado + disponibilidad + bloque en curso,
+  con la grilla real de casapadel) y `screens/__tests__/ReserveBlocksScreen.test.tsx`
+  (UI: bloques, cancha ocupada no elegible, bloque en curso no elegible, slot combinado
+  al continuar).
 
 ### Partidas: postular / mis partidas / bajas — `api/games.ts`
 

@@ -157,12 +157,21 @@ export function groupSlotsIntoBlocks<C extends { id: string }>(
   return Array.from(byKey.values()).sort((a, b) => a.start.localeCompare(b.start));
 }
 
-/** Canchas libres / totales de un bloque. Libre = `status === 'free'`. */
+/**
+ * ¿Se puede reservar este slot? Libre **y** todavía no arrancado: el backend manda el
+ * bloque en curso (lo necesita el desktop para crear la partida del momento), pero
+ * `POST /game/reserve` exige horario futuro, así que para la app no es elegible.
+ */
+export function isBookable(slot: Slot): boolean {
+  return slot.status === 'free' && !slot.started;
+}
+
+/** Canchas reservables / totales de un bloque. */
 export function blockAvailability<C extends { id: string }>(
   block: TimeBlock<C>,
 ): { free: number; total: number } {
   return {
-    free: block.items.filter((i) => i.slot.status === 'free').length,
+    free: block.items.filter((i) => isBookable(i.slot)).length,
     total: block.items.length,
   };
 }
