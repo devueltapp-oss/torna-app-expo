@@ -569,10 +569,26 @@ POST /game/:id/comments  { comment }  → comentario creado (máx 500 chars)
   último confirmado, envío optimista con revert. `enabled:false` corta fetch y poll (en
   `ReelViewScreen` solo poll-ea el reel visible, para no tener N pollers).
 - **`components/GameCommentsPanel.tsx`** — panel presentacional compartido, dos variantes:
-  `sheet` (modal en portrait, colores del tema) y `overlay` (panel translúcido oscuro
-  superpuesto al video en la pantalla completa landscape).
-- Lo consumen `GameDetailScreen` (CTA "Comentarios · N" en la hoja de info + botón
-  `MessageCircle` con badge en fullscreen) y `LiveReelItem` de `ReelViewScreen`.
+  `sheet` (colores del tema) y `overlay` (translúcido oscuro, para ir sobre el video).
+- Lo consumen `GameDetailScreen` y `LiveReelItem` de `ReelViewScreen`.
+- **En `GameDetailScreen` los comentarios van superpuestos al video en LOS DOS modos
+  (2026-08-29)**, siempre con `variant="overlay"`:
+  - **landscape** (pantalla completa): columna a la derecha, arranca **oculta**.
+  - **portrait**: banda inferior del card del video (`PORTRAIT_COMMENTS_HEIGHT`, 52%),
+    arranca **visible**.
+
+  El botón `MessageCircle` de la esquina **oculta/muestra**; ya no abre nada. Antes en
+  portrait era un CTA "Comentarios · N" que abría un `<Modal>` a pantalla completa: para
+  leer un comentario había que tapar el partido. ⚠️ Por eso el card de portrait usa
+  `PORTRAIT_VIDEO_ASPECT` (16:9 **/1.5**, un 50% más alto): el panel se come la mitad de
+  abajo. Si cambiás uno de los dos valores, mirá el otro.
+- ⚠️ El `resizeMode` en portrait sigue siendo `COVER`, así que la caja más alta **recorta
+  a los costados** una fuente 16:9 en vez de dejar franjas negras. Para ver el cuadro
+  completo el cambio es a `CONTAIN` en `GameDetailScreen`.
+- **El botón "Seguir" del club no se muestra si ya lo seguís** (antes decía "Siguiendo" y
+  dejaba de seguir de un toque, en el medio del partido). La baja se hace desde el perfil
+  del club. El bloque del club va **arriba** en la hoja de info, ya que los comentarios se
+  fueron al video. Cubierto por `screens/__tests__/GameDetailScreen.test.tsx`.
 - ⚠️ Si el backend desplegado todavía no soporta `?since=`, el endpoint **ignora** el
   parámetro y devuelve el hilo completo en cada poll: sigue funcionando (el hook dedupea
   por `id`), solo que sin ahorro de payload.

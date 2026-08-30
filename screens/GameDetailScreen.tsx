@@ -7,22 +7,31 @@
  * Pantalla completa: **in-app + landscape**, NO el reproductor nativo.
  * `presentFullscreenPlayer()` no puede rotar porque la app está bloqueada en
  * portrait (`app.json` → `orientation: "portrait"`), así que expandía en vertical.
- * Acá el contenedor del MISMO `<Video>` pasa de card 16:9 a absolute-fill y se
+ * Acá el contenedor del MISMO `<Video>` pasa de card a absolute-fill y se
  * bloquea la orientación con `expo-screen-orientation`; además así se puede
  * superponer el panel de comentarios sobre el video (el fullscreen nativo no
  * admite overlays).
+ *
+ * **Comentarios superpuestos en los dos modos (2026-08-29).** El mismo
+ * `GameCommentsPanel variant="overlay"` se usa en landscape (columna derecha) y en
+ * portrait (banda inferior del video, `PORTRAIT_COMMENTS_HEIGHT`). En portrait
+ * arrancan **visibles**: antes vivían detrás de un botón que abría un `<Modal>` a
+ * pantalla completa, o sea que para leer un comentario había que dejar de ver el
+ * partido. El botón de la esquina ahora **oculta** (no abre), por si se quiere el
+ * cuadro entero. Por eso el card de portrait es 50% más alto que el 16:9 de antes:
+ * el panel se come la mitad de abajo.
  */
 import React from 'react';
 import {
   View, Text, Pressable, ScrollView, Image, StyleSheet, TouchableOpacity,
-  Modal, StatusBar, BackHandler, useWindowDimensions,
+  StatusBar, BackHandler, useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Svg, Rect, Line } from 'react-native-svg';
 import { Video, ResizeMode } from 'expo-av';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import {
-  ChevronLeft, MoreHorizontal, Eye, ChevronRight, Scissors,
+  ChevronLeft, MoreHorizontal, Eye, Scissors,
   Maximize2, Minimize2, MessageCircle,
 } from 'lucide-react-native';
 import { useTheme } from '../theme';
@@ -34,6 +43,20 @@ import { useGameComments } from '../hooks/useGameComments';
 import { useAuth } from '../contexts/AuthContext';
 
 const tornaLogo = require('../assets/torna-icon.png');
+
+/**
+ * Alto del video en portrait. El card era 16:9; se lo hizo un **50% más alto**
+ * (de ahí el `/ 1.5`) para que el stream ocupe más pantalla y para que quepa
+ * abajo el panel de comentarios superpuesto sin tapar el juego.
+ *
+ * ⚠️ El `resizeMode` sigue siendo `COVER`: con una fuente 16:9 en una caja más
+ * alta, eso **recorta a los costados** en vez de dejar franjas negras. Si algún
+ * día se prefiere ver el cuadro completo, el cambio es `CONTAIN` acá.
+ */
+const PORTRAIT_VIDEO_ASPECT = (16 / 9) / 1.5;
+
+/** Cuánto del alto del video ocupa el panel de comentarios superpuesto en portrait. */
+const PORTRAIT_COMMENTS_HEIGHT = '52%';
 
 export interface GameDetailData {
   id: string;
@@ -65,7 +88,13 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
   // Pantalla completa in-app (landscape) + paneles de comentarios.
   const [fullscreen, setFullscreen] = React.useState(false);
   const [overlayComments, setOverlayComments] = React.useState(false);
-  const [sheetComments, setSheetComments] = React.useState(false);
+  /**
+   * Comentarios en portrait: **visibles por defecto** y superpuestos al video, el
+   * mismo concepto que en landscape. Antes eran un `<Modal>` a pantalla completa
+   * detrás de un botón: para leerlos había que tapar el stream, o sea salirse del
+   * partido. Se puede ocultar con el botón de comentarios si molesta.
+   */
+  const [portraitComments, setPortraitComments] = React.useState(true);
 
   // Comentarios públicos del stream (GameComment) — aislados de los del highlight
   // (HighlightComment) y del chat privado de la partida (GameChatMessage).
@@ -129,6 +158,8 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
 
   const overlayWidth = Math.min(380, Math.max(260, width * 0.4));
   const hasStream = !!streamSrc && !streamError;
+  /** ¿Hay un panel de comentarios tapando parte del video, en el modo actual? */
+  const commentsOverVideo = fullscreen ? overlayComments : portraitComments;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={fullscreen ? [] : ['top']}>
@@ -165,7 +196,7 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
         <View
           style={fullscreen
             ? { flex: 1, backgroundColor: '#000', position: 'relative', alignItems: 'center', justifyContent: 'center' }
-            : { borderRadius: 18, overflow: 'hidden', aspectRatio: 16 / 9, backgroundColor: colors.ink2, borderWidth: 1, borderColor: '#334155', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
+            : { borderRadius: 18, overflow: 'hidden', aspectRatio: PORTRAIT_VIDEO_ASPECT, backgroundColor: colors.ink2, borderWidth: 1, borderColor: '#334155', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
         >
           {hasStream ? (
             <Video
@@ -210,27 +241,36 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
               <StatusBadge status="LIVE" />
             </View>
           )}
-          <Text style={{ position: 'absolute', bottom: 10, left: 12, fontSize: 11, color: colors.accent, fontWeight: '600' }}>
-            HLS · 1080p · {activeCam?.label}
-          </Text>
-          <View style={{ position: 'absolute', bottom: 10, right: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Eye size={14} color="#FFFFFF" />
-            <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '600' }}>{game.viewers}</Text>
-          </View>
+          {/* Meta del pie: se oculta cuando el panel de comentarios lo taparía. */}
+          {!commentsOverVideo && (
+            <>
+              <Text style={{ position: 'absolute', bottom: 10, left: 12, fontSize: 11, color: colors.accent, fontWeight: '600' }}>
+                HLS · 1080p · {activeCam?.label}
+              </Text>
+              <View style={{ position: 'absolute', bottom: 10, right: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Eye size={14} color="#FFFFFF" />
+                <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '600' }}>{game.viewers}</Text>
+              </View>
+            </>
+          )}
 
           {/* Controles superpuestos: comentarios + expandir/contraer */}
           <View style={{
             position: 'absolute', top: 10, right: 10, zIndex: 10,
             flexDirection: 'row', alignItems: 'center', gap: 8,
           }}>
-            {fullscreen && (
-              <TouchableOpacity
-                onPress={() => setOverlayComments((v) => !v)}
-                style={circleBtn(overlayComments ? 'rgba(214,255,126,0.9)' : 'rgba(0,0,0,0.55)')}
+            {/* Mostrar/ocultar comentarios. En los DOS modos: en portrait arrancan
+                visibles, así que este botón sirve para taparlos y ver el cuadro entero. */}
+            <TouchableOpacity
+                onPress={() => (fullscreen ? setOverlayComments((v) => !v) : setPortraitComments((v) => !v))}
+                style={circleBtn(commentsOverVideo ? 'rgba(214,255,126,0.9)' : 'rgba(0,0,0,0.55)')}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel={commentsOverVideo ? 'Ocultar comentarios' : 'Mostrar comentarios'}
+                testID="toggle-comments"
               >
-                <MessageCircle size={18} color={overlayComments ? colors.ink : '#FFFFFF'} />
-                {comments.length > 0 && !overlayComments && (
+                <MessageCircle size={18} color={commentsOverVideo ? colors.ink : '#FFFFFF'} />
+                {comments.length > 0 && !commentsOverVideo && (
                   <View style={{
                     position: 'absolute', top: -2, right: -2, minWidth: 16, height: 16,
                     borderRadius: 8, paddingHorizontal: 4, backgroundColor: colors.accent,
@@ -242,7 +282,6 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
                   </View>
                 )}
               </TouchableOpacity>
-            )}
             {hasStream && (
               <TouchableOpacity
                 onPress={fullscreen ? exitFullscreen : enterFullscreen}
@@ -255,6 +294,26 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
               </TouchableOpacity>
             )}
           </View>
+
+          {/* Comentarios superpuestos en PORTRAIT — mismo concepto que el overlay de
+              landscape: se leen y se escriben sin tapar el partido ni salir de la
+              pantalla. Van dentro del card del video (que por eso es más alto), así
+              que el stream sigue corriendo arriba. */}
+          {!fullscreen && portraitComments && (
+            <View style={{
+              position: 'absolute', left: 0, right: 0, bottom: 0,
+              height: PORTRAIT_COMMENTS_HEIGHT, zIndex: 20,
+            }}>
+              <GameCommentsPanel
+                variant="overlay"
+                comments={comments}
+                loading={loadingComments}
+                sending={sending}
+                onSend={send}
+                onClose={() => setPortraitComments(false)}
+              />
+            </View>
+          )}
         </View>
 
         {/* Panel de comentarios superpuesto (solo en pantalla completa) */}
@@ -314,26 +373,11 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
             <SurfaceChip surface={game.floor}/>
           </View>
 
-          {/* Comentarios del stream — hilo público, en vivo (poll 3 s).
-              Distinto del chat privado de la partida y de los del highlight. */}
-          <Pressable
-            onPress={() => setSheetComments(true)}
-            style={{
-              flexDirection: 'row', alignItems: 'center', gap: 10,
-              backgroundColor: colors.bg2, padding: 12, borderRadius: 14,
-              borderWidth: 1, borderColor: colors.line,
-            }}
-          >
-            <MessageCircle size={18} color={colors.muted2} />
-            <Text style={{ flex: 1, color: colors.muted2, fontSize: 14, fontFamily: fonts.regular }}>
-              {comments.length > 0
-                ? `Comentarios · ${comments.length}`
-                : 'Añadir comentario...'}
-            </Text>
-            <ChevronRight size={18} color={colors.muted2} />
-          </Pressable>
-
-          {/* Club row */}
+          {/* Club — va ANTES que cualquier otra cosa de la hoja: los comentarios ahora
+              viven sobre el video, así que "Seguir" es la primera acción de acá abajo.
+              ⚠️ Si ya seguís al club, el botón NO se muestra: ofrecer "Siguiendo" solo
+              servía para dejar de seguir por accidente mientras mirás el partido. Para
+              dejar de seguir está el perfil del club. */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.bg2, padding: 12, borderRadius: 14 }}>
             <View style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' }}>
               <Image source={tornaLogo} style={{ width: 30, height: 30 }}/>
@@ -342,9 +386,11 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
               <Text style={{ color: colors.text, fontWeight: '700', fontSize: 14 }} numberOfLines={1}>{game.club}</Text>
               <Text style={{ color: colors.muted2, fontSize: 12 }}>{game.clubHandle} · {game.clubFollowers} seguidores</Text>
             </View>
-            <Button size="sm" variant={isFollowing ? 'soft' : 'primary'} onPress={onToggleFollow}>
-              {isFollowing ? 'Siguiendo' : 'Seguir'}
-            </Button>
+            {!isFollowing && onToggleFollow && (
+              <Button size="sm" variant="primary" onPress={onToggleFollow}>
+                Seguir
+              </Button>
+            )}
           </View>
 
           {/* Players */}
@@ -382,22 +428,6 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
         </ScrollView>
       )}
 
-      {/* Comentarios en portrait — mismo hilo que el overlay del fullscreen */}
-      <Modal
-        visible={sheetComments && !fullscreen}
-        animationType="slide"
-        onRequestClose={() => setSheetComments(false)}
-      >
-        <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top', 'bottom']}>
-          <GameCommentsPanel
-            comments={comments}
-            loading={loadingComments}
-            sending={sending}
-            onSend={send}
-            onClose={() => setSheetComments(false)}
-          />
-        </SafeAreaView>
-      </Modal>
     </SafeAreaView>
   );
 }
