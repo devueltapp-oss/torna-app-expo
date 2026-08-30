@@ -20,6 +20,11 @@ export interface MatchParticipant {
   profilePicture?: string;
   /** Organizador de la partida (`GamePlayer.isCaptain` en el backend). */
   isHost?: boolean;
+  /**
+   * Lado de la cancha: `1` = equipo del organizador, `2` = pareja retadora
+   * (`GamePlayer.team`). Nullable: una partida vieja puede no tenerlo.
+   */
+  team?: number | null;
 }
 
 export interface LiveGameData {

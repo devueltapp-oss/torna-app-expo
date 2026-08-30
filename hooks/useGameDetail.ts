@@ -36,7 +36,12 @@ interface BackendGameDetail {
   durationSeconds?: number | null;
   padelCourt?: { name?: string | null; surface?: string | null } | null;
   cameras?: BackendCamera[];
-  gamePlayers?: Array<{ isCaptain?: boolean; user: { username: string; name?: string | null } }>;
+  gamePlayers?: Array<{
+    isCaptain?: boolean;
+    /** 1 = lado del organizador, 2 = pareja retadora. */
+    team?: number | null;
+    user: { username: string; name?: string | null; profilePicture?: string | null };
+  }>;
 }
 
 const SURFACES = ['CLAY', 'GRASS', 'HARD', 'CARPET'] as const;
@@ -63,10 +68,14 @@ function mapDetail(data: BackendGameDetail): GameDetailData {
     date: '',
     viewers: data.viewers ?? 0,
     isLive: data.status === 'LIVE',
+    // `team` y `profilePicture` ya venían en GET /game/:id y no se mapeaban: son lo
+    // que le da al panel de jugadores las DOS parejas y las fotos reales.
     players: (data.gamePlayers ?? []).map((gp) => ({
       username: '@' + gp.user.username,
       name: gp.user.name ?? gp.user.username,
       isHost: gp.isCaptain === true,
+      team: gp.team ?? null,
+      profilePicture: gp.user.profilePicture ?? undefined,
     })),
     cameras: cams.map((c, i) => {
       // String vacío también cuenta como "sin stream" (no solo null/undefined).

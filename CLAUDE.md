@@ -571,24 +571,31 @@ POST /game/:id/comments  { comment }  → comentario creado (máx 500 chars)
 - **`components/GameCommentsPanel.tsx`** — panel presentacional compartido, dos variantes:
   `sheet` (colores del tema) y `overlay` (translúcido oscuro, para ir sobre el video).
 - Lo consumen `GameDetailScreen` y `LiveReelItem` de `ReelViewScreen`.
-- **En `GameDetailScreen` los comentarios van superpuestos al video en LOS DOS modos
-  (2026-08-29)**, siempre con `variant="overlay"`:
-  - **landscape** (pantalla completa): columna a la derecha, arranca **oculta**.
-  - **portrait**: banda inferior del card del video (`PORTRAIT_COMMENTS_HEIGHT`, 52%),
-    arranca **visible**.
+- **En `GameDetailScreen` (2026-08-29) el video manda y todo lo demás se abre desde él.**
+  - **portrait**: sin panel abierto el video ocupa **toda** la pantalla bajo el header.
+    Tocar comentarios o jugadores **encoge el video a su 16:9** y el panel toma la mitad
+    de abajo (modelo Instagram): nunca lo tapa, nunca te saca de la pantalla. Estado
+    `portraitPanel: null | 'comments' | 'players'` — **uno por vez**.
+  - **landscape** (pantalla completa): los comentarios siguen siendo una columna
+    superpuesta a la derecha (`variant="overlay"`), que arranca oculta.
 
-  El botón `MessageCircle` de la esquina **oculta/muestra**; ya no abre nada. Antes en
-  portrait era un CTA "Comentarios · N" que abría un `<Modal>` a pantalla completa: para
-  leer un comentario había que tapar el partido. ⚠️ Por eso el card de portrait usa
-  `PORTRAIT_VIDEO_ASPECT` (16:9 **/1.5**, un 50% más alto): el panel se come la mitad de
-  abajo. Si cambiás uno de los dos valores, mirá el otro.
-- ⚠️ El `resizeMode` en portrait sigue siendo `COVER`, así que la caja más alta **recorta
-  a los costados** una fuente 16:9 en vez de dejar franjas negras. Para ver el cuadro
-  completo el cambio es a `CONTAIN` en `GameDetailScreen`.
+  Antes en portrait el CTA "Comentarios · N" abría un `<Modal>` a pantalla completa: para
+  leer un comentario había que tapar el partido.
+- ⚠️ `resizeMode` es **`CONTAIN` en los tres tamaños**: la fuente es 16:9 (cancha
+  apaisada) y las cajas ya no lo son; con `COVER` el video a pantalla completa en vertical
+  perdería media cancha por recorte.
+- **La hoja de info debajo del video ya no existe** — no hay "debajo". Lo que vivía ahí se
+  movió al panel **`players`**, que se abre con los **avatares superpuestos** al video
+  (`testID="toggle-players"`) y trae: las **dos parejas** (separadas por
+  `MatchParticipant.team`: 1 = organizador, 2 = retadores), el **club con su ícono** y
+  "Crear highlight". Se quitaron el chip de superficie (HARD) y la sección "Jugadores · N".
+  Las **cámaras** pasaron a chips superpuestos abajo, y solo si hay más de una.
+- ⚠️ `team` y `profilePicture` ya venían en `GET /game/:id` pero `useGameDetail` **no los
+  mapeaba**: sin eso no hay dos parejas ni fotos reales. Si agregás un campo del jugador,
+  revisá ese mapper.
 - **El botón "Seguir" del club no se muestra si ya lo seguís** (antes decía "Siguiendo" y
   dejaba de seguir de un toque, en el medio del partido). La baja se hace desde el perfil
-  del club. El bloque del club va **arriba** en la hoja de info, ya que los comentarios se
-  fueron al video. Cubierto por `screens/__tests__/GameDetailScreen.test.tsx`.
+  del club. Cubierto por `screens/__tests__/GameDetailScreen.test.tsx`.
 - ⚠️ Si el backend desplegado todavía no soporta `?since=`, el endpoint **ignora** el
   parámetro y devuelve el hilo completo en cada poll: sigue funcionando (el hook dedupea
   por `id`), solo que sin ahorro de payload.

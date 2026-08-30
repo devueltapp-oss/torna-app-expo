@@ -1,11 +1,13 @@
 /**
- * Pantalla del stream (POV espectador). Lo que se fija acá es el rediseño del
- * 2026-08-29, que nació de un problema concreto de uso: para leer los comentarios
- * había que abrir un modal a pantalla completa, o sea **dejar de ver el partido**.
+ * Pantalla del stream (POV espectador). Fija el rediseño del 2026-08-29, que nació de
+ * un problema de uso: para leer los comentarios había que abrir un modal a pantalla
+ * completa, o sea **dejar de ver el partido**.
  *
- *  - En vertical los comentarios se ven SIEMPRE, superpuestos al video (mismo
- *    concepto que ya se usaba en horizontal), y el botón sirve para ocultarlos.
- *  - Si ya seguís al club, el botón "Seguir" no se ofrece.
+ *  - En vertical el video ocupa toda la pantalla; al abrir comentarios o jugadores
+ *    se encoge y el panel toma la mitad de abajo (modelo Instagram). Nunca lo tapa.
+ *  - Un panel por vez.
+ *  - Los jugadores salen del video (botón de avatares) y traen las dos parejas + el
+ *    club; si ya seguís al club, "Seguir" no se ofrece.
  */
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
@@ -47,7 +49,12 @@ const game: GameDetailData = {
   date: 'hoy',
   viewers: 4,
   isLive: true,
-  players: [],
+  players: [
+    { username: '@ana', name: 'Ana', team: 1, isHost: true },
+    { username: '@beto', name: 'Beto', team: 1 },
+    { username: '@caro', name: 'Caro', team: 2 },
+    { username: '@dani', name: 'Dani', team: 2 },
+  ],
   cameras: [{ id: 'cam1', number: 1, label: 'Principal', state: 'available', streamUrl: 'https://x/y.m3u8' } as any],
 };
 
@@ -59,29 +66,67 @@ function renderScreen(props: Partial<React.ComponentProps<typeof GameDetailScree
   );
 }
 
-describe('GameDetailScreen — comentarios sobre el video', () => {
-  it('en vertical los comentarios se ven sin tocar nada', () => {
-    const { getByText, getByPlaceholderText } = renderScreen();
-    // El panel está montado de entrada: se lee el hilo mientras corre el stream.
-    expect(getByText('Buen punto')).toBeTruthy();
-    // Y también se puede escribir sin abrir nada.
-    expect(getByPlaceholderText('Escribe un comentario...')).toBeTruthy();
+describe('GameDetailScreen — paneles que encogen el video (portrait)', () => {
+  it('arranca con el video solo: ningún panel abierto', () => {
+    const { queryByText } = renderScreen();
+    expect(queryByText('Buen punto')).toBeNull();
+    expect(queryByText('EQUIPO 1')).toBeNull();
   });
 
-  it('el botón de la esquina OCULTA los comentarios (ya no abre un modal)', () => {
-    const { getByTestId, queryByText } = renderScreen();
+  it('el botón de comentarios los abre abajo y vuelve a cerrarlos', () => {
+    const { getByTestId, getByText, getByPlaceholderText, queryByText } = renderScreen();
+
+    fireEvent.press(getByTestId('toggle-comments'));
+    expect(getByText('Buen punto')).toBeTruthy();
+    // Se puede escribir sin salir de la pantalla del partido.
+    expect(getByPlaceholderText('Escribe un comentario...')).toBeTruthy();
+
     fireEvent.press(getByTestId('toggle-comments'));
     expect(queryByText('Buen punto')).toBeNull();
+  });
 
-    // Y los devuelve.
+  it('los avatares abren el panel con LAS DOS parejas y el club', () => {
+    const { getByTestId, getByText } = renderScreen();
+    fireEvent.press(getByTestId('toggle-players'));
+
+    expect(getByText('EQUIPO 1')).toBeTruthy();
+    expect(getByText('EQUIPO 2')).toBeTruthy();
+    expect(getByText('Ana')).toBeTruthy();
+    expect(getByText('Dani')).toBeTruthy();
+    // El club va en el mismo panel.
+    expect(getByText('CasaPadel')).toBeTruthy();
+  });
+
+  it('abrir un panel cierra el otro (uno por vez)', () => {
+    const { getByTestId, getByText, queryByText } = renderScreen();
+
     fireEvent.press(getByTestId('toggle-comments'));
-    expect(queryByText('Buen punto')).toBeTruthy();
+    expect(getByText('Buen punto')).toBeTruthy();
+
+    fireEvent.press(getByTestId('toggle-players'));
+    expect(queryByText('Buen punto')).toBeNull();
+    expect(getByText('EQUIPO 1')).toBeTruthy();
+  });
+
+  it('sin equipo 2 no se pinta la sección vacía', () => {
+    const solos = { ...game, players: [{ username: '@ana', name: 'Ana', team: 1 }] };
+    const { getByTestId, getByText, queryByText } = renderScreen({ game: solos });
+    fireEvent.press(getByTestId('toggle-players'));
+    expect(getByText('EQUIPO 1')).toBeTruthy();
+    expect(queryByText('EQUIPO 2')).toBeNull();
   });
 });
 
 describe('GameDetailScreen — seguir al club', () => {
+  /** El club vive dentro del panel de jugadores. */
+  function openPlayers(props: Partial<React.ComponentProps<typeof GameDetailScreen>> = {}) {
+    const utils = renderScreen(props);
+    fireEvent.press(utils.getByTestId('toggle-players'));
+    return utils;
+  }
+
   it('NO ofrece "Seguir" si ya seguís al club', () => {
-    const { queryByText } = renderScreen({ isFollowing: true, onToggleFollow: jest.fn() });
+    const { queryByText } = openPlayers({ isFollowing: true, onToggleFollow: jest.fn() });
     expect(queryByText('Seguir')).toBeNull();
     expect(queryByText('Siguiendo')).toBeNull();
     // El club se sigue mostrando, solo desaparece la acción.
@@ -90,13 +135,13 @@ describe('GameDetailScreen — seguir al club', () => {
 
   it('ofrece "Seguir" si todavía no lo seguís', () => {
     const onToggleFollow = jest.fn();
-    const { getByText } = renderScreen({ isFollowing: false, onToggleFollow });
+    const { getByText } = openPlayers({ isFollowing: false, onToggleFollow });
     fireEvent.press(getByText('Seguir'));
     expect(onToggleFollow).toHaveBeenCalledTimes(1);
   });
 
   it('sin handler de follow no se pinta el botón (no hay acción posible)', () => {
-    const { queryByText } = renderScreen({ isFollowing: false });
+    const { queryByText } = openPlayers({ isFollowing: false });
     expect(queryByText('Seguir')).toBeNull();
   });
 });
