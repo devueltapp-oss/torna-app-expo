@@ -276,6 +276,17 @@ export function markGameChatRead(gameId: string): Promise<void> {
 }
 
 /**
+ * Borra el chat de la partida **solo para mí** (DELETE /game/:id/chat).
+ *
+ * No borra ningún mensaje: el resto de los participantes siguen viendo el hilo
+ * completo. Sale de mi inbox y me tapa lo anterior; si alguien escribe de nuevo,
+ * vuelve con lo nuevo. Espejo de `deleteDirectChat` (`api/chat.ts`).
+ */
+export function deleteGameChat(gameId: string): Promise<{ ok: true }> {
+  return authedSend('DELETE', `/game/${encodeURIComponent(gameId)}/chat`);
+}
+
+/**
  * Like / unlike de un mensaje del chat de la partida
  * (POST /game/:id/chat/:messageId/like). Es un **toggle**: si ya lo habías
  * likeado, se lo quita. El backend garantiza un like por persona por mensaje.

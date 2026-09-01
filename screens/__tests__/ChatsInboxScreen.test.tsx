@@ -74,3 +74,60 @@ describe('ChatsInboxScreen — bandejas Partidas / Amigos', () => {
     expect(getByText('Sin chats con amigos')).toBeTruthy();
   });
 });
+
+describe('ChatsInboxScreen — borrar un chat (solo para mí)', () => {
+  /** Alert.alert es nativo: se intercepta para poder "tocar" el botón Borrar. */
+  function pressDestructive() {
+    const Alert = require('react-native').Alert;
+    const [, , buttons] = Alert.alert.mock.calls[Alert.alert.mock.calls.length - 1];
+    buttons.find((b: any) => b.style === 'destructive').onPress();
+  }
+
+  beforeEach(() => {
+    jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => {});
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it('mantener presionado pide confirmación y aclara que es solo para vos', () => {
+    const Alert = require('react-native').Alert;
+    const { getByTestId } = renderScreen({ onDeleteChat: jest.fn() });
+
+    fireEvent(getByTestId('chat-row-game-g1'), 'longPress');
+
+    const [title, body] = Alert.alert.mock.calls[0];
+    expect(title).toBe('Borrar chat');
+    expect(body).toMatch(/solo para ti/i);
+    expect(body).toMatch(/sigue viendo/i);
+  });
+
+  it('confirmar borra ESE chat (grupal) y no toca los demás', () => {
+    const onDeleteChat = jest.fn();
+    const { getByTestId } = renderScreen({ onDeleteChat });
+
+    fireEvent(getByTestId('chat-row-game-g1'), 'longPress');
+    pressDestructive();
+
+    expect(onDeleteChat).toHaveBeenCalledTimes(1);
+    expect(onDeleteChat.mock.calls[0][0]).toMatchObject({ kind: 'game', id: 'g1' });
+  });
+
+  it('también borra un DM, con el otro usuario en el ítem', () => {
+    const onDeleteChat = jest.fn();
+    const { getByText, getByTestId } = renderScreen({ onDeleteChat });
+    fireEvent.press(getByText('Amigos'));
+
+    fireEvent(getByTestId('chat-row-dm-d1'), 'longPress');
+    pressDestructive();
+
+    expect(onDeleteChat.mock.calls[0][0]).toMatchObject({ kind: 'dm', otherUserId: 'u9' });
+  });
+
+  it('sin handler de borrado el long-press no abre ningún diálogo', () => {
+    const Alert = require('react-native').Alert;
+    const { getByTestId } = renderScreen();
+
+    fireEvent(getByTestId('chat-row-game-g1'), 'longPress');
+
+    expect(Alert.alert).not.toHaveBeenCalled();
+  });
+});

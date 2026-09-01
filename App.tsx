@@ -821,7 +821,7 @@ function MainPlayer({ navigation, route }: any) {
   const { myGames, refresh: refreshMyGames } = useMyGames(user?.id);
 
   // Inbox de Chats (GET /chat/inbox): DMs 1-a-1 + chats grupales de partidas.
-  const { items: inbox, loading: inboxLoading, refresh: refreshInbox } = useInbox();
+  const { items: inbox, loading: inboxLoading, refresh: refreshInbox, remove: removeChat } = useInbox();
   // Badge de la campanita (GET /notification/unread-count). Solo el contador: la lista
   // se carga recién al abrir la pantalla de Notificaciones.
   const { count: unreadNotifications, refresh: refreshNotificationBadge } = useNotificationBadge();
@@ -1055,6 +1055,7 @@ function MainPlayer({ navigation, route }: any) {
             onOpenDm={(userId, title) => navigation.navigate('DirectChat', { userId, title })}
             onOpenGame={(gameId, title, readOnly) => navigation.navigate('GameChat', { gameId, title, readOnly })}
             onNewChat={() => navigation.navigate('GlobalSearch', { mode: 'chat' })}
+            onDeleteChat={removeChat}
           />
         );
       case 'profile': {
@@ -1179,7 +1180,9 @@ function MainClub({ navigation }: any) {
   const { games: clubGames } = useClubGames(clubId);
   const [courts, setCourts] = React.useState<CourtData[]>([]);
   // Inbox de Chats del club (DMs 1-a-1 + chats grupales de partidas).
-  const { items: clubInbox, loading: clubInboxLoading, refresh: refreshClubInbox } = useInbox();
+  const {
+    items: clubInbox, loading: clubInboxLoading, refresh: refreshClubInbox, remove: removeClubChat,
+  } = useInbox();
   // Badge de la campanita del club (mismos endpoints que el player).
   const { count: clubUnreadNotifications } = useNotificationBadge();
   React.useEffect(() => {
@@ -1233,6 +1236,7 @@ function MainClub({ navigation }: any) {
           onOpenDm={(userId, title) => navigation.navigate('DirectChat', { userId, title })}
           onOpenGame={(gameId, title, readOnly) => navigation.navigate('GameChat', { gameId, title, readOnly })}
           onNewChat={() => navigation.navigate('GlobalSearch', { mode: 'chat' })}
+          onDeleteChat={removeClubChat}
         />
       );
     case 'profile':

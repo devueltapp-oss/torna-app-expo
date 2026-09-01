@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, FlatList, Pressable, RefreshControl } from 'react-native';
+import { View, Text, FlatList, Pressable, RefreshControl, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PenSquare, Users, MessageCircle } from 'lucide-react-native';
 import { useTheme } from '../theme';
@@ -16,6 +16,11 @@ export interface ChatsInboxScreenProps {
   onNewChat: () => void;
   onRefresh: () => void;
   refreshing: boolean;
+  /**
+   * Borrar un chat, **solo para el usuario actual**. Sin este handler la fila no
+   * ofrece la acción (el long-press no hace nada).
+   */
+  onDeleteChat?: (item: InboxItem) => void;
   activeTab?: TabId;
   onChangeTab?: (id: TabId) => void;
   role?: Role;
@@ -44,10 +49,28 @@ type InboxFilter = 'game' | 'dm';
  */
 export function ChatsInboxScreen({
   items, loading, onOpenDm, onOpenGame, onNewChat, onRefresh, refreshing,
-  activeTab = 'chats', onChangeTab, role = 'player',
+  onDeleteChat, activeTab = 'chats', onChangeTab, role = 'player',
 }: ChatsInboxScreenProps) {
   const { colors } = useTheme();
   const [filter, setFilter] = React.useState<InboxFilter>('game');
+
+  /**
+   * Borrar un chat es **solo para vos**: el otro (o el resto de la partida) sigue
+   * viendo el hilo entero. Se avisa en el propio diálogo para que nadie crea que
+   * borró la conversación para todos.
+   */
+  const confirmDelete = React.useCallback((item: InboxItem) => {
+    if (!onDeleteChat) return;
+    Alert.alert(
+      'Borrar chat',
+      `Se borra "${item.title}" solo para ti. La otra persona sigue viendo la conversación completa. ` +
+        'Si te vuelven a escribir, el chat reaparece con los mensajes nuevos.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Borrar', style: 'destructive', onPress: () => onDeleteChat(item) },
+      ],
+    );
+  }, [onDeleteChat]);
 
   const visible = React.useMemo(() => items.filter((it) => it.kind === filter), [items, filter]);
   // No leídos por bandeja (los grupos de partida hoy siempre traen 0 — no hay cursor
@@ -94,6 +117,7 @@ export function ChatsInboxScreen({
                 ? item.otherUserId && onOpenDm(item.otherUserId, item.title)
                 : onOpenGame(item.id, item.title, item.readOnly)
             }
+            onDelete={() => confirmDelete(item)}
           />
         )}
         ListEmptyComponent={
@@ -165,16 +189,23 @@ function FilterTab({
 }
 
 function ChatRow({
-  item, colors, onPress,
+  item, colors, onPress, onDelete,
 }: {
   item: InboxItem;
   colors: ReturnType<typeof useTheme>['colors'];
   onPress: () => void;
+  onDelete: () => void;
 }) {
   const isGame = item.kind === 'game';
   return (
     <Pressable
       onPress={onPress}
+      // Mantener presionado = borrar. Sin swipe: la fila ya vive dentro de un
+      // FlatList vertical y un gesto horizontal acá pelea con el scroll.
+      onLongPress={onDelete}
+      delayLongPress={350}
+      accessibilityHint="Mantené presionado para borrar el chat"
+      testID={`chat-row-${item.kind}-${item.id}`}
       style={({ pressed }) => ({
         flexDirection: 'row', alignItems: 'center', gap: 12,
         paddingHorizontal: 12, paddingVertical: 12, borderRadius: 14,

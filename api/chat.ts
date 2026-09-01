@@ -62,6 +62,20 @@ async function authedSend<T>(path: string, body?: unknown): Promise<T> {
   return unwrap<T>(await res.json().catch(() => ({})));
 }
 
+async function authedDelete<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${await token()}` },
+  });
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { message?: string };
+    const err = new Error(payload.message ?? `HTTP ${res.status}`);
+    (err as any).status = res.status;
+    throw err;
+  }
+  return unwrap<T>(await res.json().catch(() => ({})));
+}
+
 /** Ítem del inbox: DM 1-a-1 (`kind:'dm'`) o chat grupal de una partida (`kind:'game'`). */
 export interface InboxItem {
   kind: 'dm' | 'game';
@@ -109,6 +123,17 @@ export function sendDirectMessage(userId: string, content: string): Promise<Dire
 
 export function markDmRead(userId: string): Promise<void> {
   return authedSend<void>(`/chat/dm/${encodeURIComponent(userId)}/read`);
+}
+
+/**
+ * Borra el chat con ese usuario **solo para mí** (DELETE /chat/dm/:userId).
+ *
+ * No borra la conversación ni los mensajes: el otro sigue viendo el hilo entero.
+ * Sale de mi inbox y me tapa lo anterior; si esa persona escribe de nuevo, el
+ * chat vuelve con el mensaje nuevo (lo viejo no).
+ */
+export function deleteDirectChat(userId: string): Promise<{ ok: true }> {
+  return authedDelete<{ ok: true }>(`/chat/dm/${encodeURIComponent(userId)}`);
 }
 
 /**
