@@ -181,12 +181,19 @@ function MyGameCard({
       })}
     >
       <View style={{ flex: 1, minWidth: 0 }}>
+        {/* `flexShrink` en el título: en RN el default es 0, así que sin esto el
+            texto se queda con su ancho medido, empuja los badges fuera de la
+            columna y "CAT. N" termina montado sobre el badge de EN VIVO. Lo que
+            cede es el título (ya viene con numberOfLines={1}), no los badges. */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text style={{ color: colors.text, fontSize: 15, fontWeight: '800' }} numberOfLines={1}>
+          <Text
+            style={{ color: colors.text, fontSize: 15, fontWeight: '800', flexShrink: 1 }}
+            numberOfLines={1}
+          >
             {game.time} · {game.court}
           </Text>
           {game.isCreator && (
-            <View style={{ backgroundColor: colors.accentSoft, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 }}>
+            <View style={{ backgroundColor: colors.accentSoft, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, flexShrink: 0 }}>
               <Text style={{ fontSize: 9, fontWeight: '800', color: colors.accentText, letterSpacing: 0.4 }}>ORGANIZÁS</Text>
             </View>
           )}
