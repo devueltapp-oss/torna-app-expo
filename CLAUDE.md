@@ -1163,6 +1163,21 @@ function ReservePickClubScreen({ navigation }: { navigation: any }) {
 Es el mismo patrón que ya usan `ClubProfileScreen` y `PlayerProfileScreen`. El callback
 `children` debe limitarse a leer `route.params`/`navigation` y renderizar un componente.
 
+> **El visor también cayó en esto (2026-08-31)**: la ruta `GameDetail` llamaba
+> `useGameDetail` dentro del callback, así que el `setDetail` del fetch no re-renderizaba y
+> la pantalla se quedaba con `emptyGameDetail` (**`cameras: []` → sin stream**). Se veía
+> **solo al entrar desde una notificación**: desde Inicio el `liveStreamUrl` viaja en
+> `route.params` y ya está en el primer render, así que el `fallbackStreamUrl` tapaba la
+> falla. Los comentarios sí cargaban porque solo necesitan el `gameId` de los params — por
+> eso el síntoma era "comentarios sí, video no". Arreglado con `GameDetailContainer`
+> (componente propio). El mismo render congelado dejaba el botón "Seguir" sin hidratar y
+> "Crear highlight" nunca aparecía (el `recordingUrl` llega async).
+>
+> La causa exacta está en `@react-navigation/core`: `SceneView` envuelve el resultado del
+> callback en **`StaticContainer`**, cuyo comparador de `React.memo` **saltea `children`
+> a propósito** (`if (key === 'children') continue`). O sea: el subárbol solo se actualiza
+> si cambian `render`/`navigation`/`route`; un `setState` propio jamás lo hace.
+
 > **Todo el flujo de reserva sigue esta regla**: `ReservePickClubScreen` (club),
 > `ReserveBlocksContainer` (bloques del día: canchas + slots) y `ReserveInviteScreen`
 > (rivales) son componentes propios. El mismo bug hacía que **las canchas y los horarios

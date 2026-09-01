@@ -1249,6 +1249,63 @@ function MainClub({ navigation }: any) {
   }
 }
 
+/* ─────────── Game detail ─────────── */
+
+/**
+ * Contenedor del visor. **Tiene que ser un componente propio**, no el callback
+ * `children` del `<Screen>`: React Navigation envuelve ese callback en un
+ * `StaticContainer` que ignora `children` al comparar props, así que los
+ * `setState` de los hooks (acá `useGameDetail`) re-renderizan pero el subárbol
+ * se queda con el PRIMER elemento — el de `detail === null`.
+ *
+ * Ese era el bug de "entro desde la notificación y no se ve el stream": el
+ * detalle llegaba con sus cámaras y el render nunca las tomaba, así que el
+ * visor se quedaba con `emptyGameDetail` (`cameras: []`). Desde Inicio no se
+ * notaba porque ahí el `liveStreamUrl` viaja en `route.params` y ya está en ese
+ * primer render — tapaba la falla en lugar de arreglarla. Con fiber propio el
+ * `setState` re-renderiza normal. Ver la regla en `expo/CLAUDE.md`.
+ */
+function GameDetailContainer({ navigation, route }: { navigation: any; route: any }) {
+  const [following, setFollowing] = React.useState(false);
+  const isClip = !!route.params?.clipData;
+  // Trae el partido real (cámaras + stream HLS) y el recordingUrl para el editor.
+  const { game: apiGame, detail } = useGameDetail(route.params?.gameId);
+  const game: GameDetailData =
+    route.params?.clipData ?? detail ?? emptyGameDetail(route.params?.gameId ?? '');
+  const recordingUrl = apiGame?.recordingUrl ?? null;
+  const canCreateHighlight = !isClip && !!recordingUrl;
+  // Seguir al club del partido: hidrata el estado real y persiste el toggle
+  // (mismo contrato POST /follow | /follow/unfollow que los perfiles públicos).
+  const clubId = game.clubId;
+  React.useEffect(() => {
+    if (!clubId) return;
+    let cancelled = false;
+    fetchUserProfile(clubId)
+      .then((p) => { if (!cancelled) setFollowing(p.isFollowing ?? false); })
+      .catch(() => { /* sin dato → queda en "Seguir" */ });
+    return () => { cancelled = true; };
+  }, [clubId]);
+  return (
+    <GameDetailScreen
+      game={game}
+      fallbackStreamUrl={route.params?.liveStreamUrl}
+      isFollowing={following}
+      onToggleFollow={clubId ? () => {
+        const wasFollowing = following;
+        setFollowing(!wasFollowing);
+        (wasFollowing ? unfollowUser(clubId) : followUser(clubId))
+          .catch(() => setFollowing(wasFollowing)); // revertir en error
+      } : undefined}
+      onBack={() => navigation.goBack()}
+      onCreateHighlight={canCreateHighlight ? () => navigation.navigate('VideoEditor', {
+        gameId: apiGame!.id,
+        recordingUrl: recordingUrl!,
+        durationSeconds: apiGame!.durationSeconds ?? 0,
+      }) : undefined}
+    />
+  );
+}
+
 /* ─────────── App stack navigator ─────────── */
 
 function AppNavigator() {
@@ -1268,46 +1325,15 @@ function AppNavigator() {
 
       {/* Game detail */}
       <AppStack.Screen name="GameDetail">
-        {({ navigation, route }) => {
-          const [following, setFollowing] = React.useState(false);
-          const isClip = !!route.params?.clipData;
-          // Trae el partido real (cámaras + stream HLS) y el recordingUrl para el editor.
-          const { game: apiGame, detail } = useGameDetail(route.params?.gameId);
-          const game: GameDetailData =
-            route.params?.clipData ?? detail ?? emptyGameDetail(route.params?.gameId ?? '');
-          const recordingUrl = apiGame?.recordingUrl ?? null;
-          const canCreateHighlight = !isClip && !!recordingUrl;
-          // Seguir al club del partido: hidrata el estado real y persiste el toggle
-          // (mismo contrato POST /follow | /follow/unfollow que los perfiles públicos).
-          const clubId = game.clubId;
-          React.useEffect(() => {
-            if (!clubId) return;
-            let cancelled = false;
-            fetchUserProfile(clubId)
-              .then((p) => { if (!cancelled) setFollowing(p.isFollowing ?? false); })
-              .catch(() => { /* sin dato → queda en "Seguir" */ });
-            return () => { cancelled = true; };
-          }, [clubId]);
-          return (
-            <GameDetailScreen
-              game={game}
-              fallbackStreamUrl={route.params?.liveStreamUrl}
-              isFollowing={following}
-              onToggleFollow={clubId ? () => {
-                const wasFollowing = following;
-                setFollowing(!wasFollowing);
-                (wasFollowing ? unfollowUser(clubId) : followUser(clubId))
-                  .catch(() => setFollowing(wasFollowing)); // revertir en error
-              } : undefined}
-              onBack={() => navigation.goBack()}
-              onCreateHighlight={canCreateHighlight ? () => navigation.navigate('VideoEditor', {
-                gameId: apiGame!.id,
-                recordingUrl: recordingUrl!,
-                durationSeconds: apiGame!.durationSeconds ?? 0,
-              }) : undefined}
-            />
-          );
-        }}
+        {({ navigation, route }) => (
+          // key={gameId}: montaje fresco por partido (no arrastra la cámara activa
+          // ni el estado de pantalla completa del anterior).
+          <GameDetailContainer
+            key={route.params?.gameId ?? ''}
+            navigation={navigation}
+            route={route}
+          />
+        )}
       </AppStack.Screen>
 
       <AppStack.Screen name="GameChat">
