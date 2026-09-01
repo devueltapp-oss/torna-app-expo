@@ -16,7 +16,7 @@ import {
   View, Text, FlatList, Pressable, TextInput,
   KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
-import { X, Send } from 'lucide-react-native';
+import { X, Send, Minimize2 } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import type { GameComment } from '../api/games';
@@ -30,6 +30,17 @@ export interface GameCommentsPanelProps {
   onClose?: () => void;
   variant?: 'sheet' | 'overlay';
   title?: string;
+  /**
+   * Si se pasa, el panel **no deja escribir acá**: el campo se vuelve un botón que
+   * llama a esto. Es lo que usa el overlay en landscape — en horizontal el teclado
+   * ocupa toda la pantalla y tapa el partido y el hilo, así que comentar devuelve
+   * la app a vertical (ver `onComposePress` en `GameDetailScreen`).
+   */
+  onComposePress?: () => void;
+  /** Enfoca el input al montar/activarse (llega desde el compose en landscape). */
+  autoFocus?: boolean;
+  /** Se llama una vez aplicado el `autoFocus`, para que el padre baje la bandera. */
+  onAutoFocusHandled?: () => void;
 }
 
 /** ISO → etiqueta corta relativa ("Ahora", "5m", "3h", "2d", o fecha). */
@@ -50,11 +61,26 @@ export function GameCommentsPanel({
   comments, loading, sending, onSend, onClose,
   variant = 'sheet',
   title = 'Comentarios',
+  onComposePress,
+  autoFocus = false,
+  onAutoFocusHandled,
 }: GameCommentsPanelProps) {
   const { colors } = useTheme();
   const [text, setText] = React.useState('');
   const listRef = React.useRef<FlatList<GameComment>>(null);
+  const inputRef = React.useRef<TextInput>(null);
   const overlay = variant === 'overlay';
+
+  // El foco llega desde landscape: el panel se monta mientras el device todavía
+  // está rotando, y un focus() en ese momento se pierde. De ahí el respiro.
+  React.useEffect(() => {
+    if (!autoFocus) return;
+    const t = setTimeout(() => {
+      inputRef.current?.focus();
+      onAutoFocusHandled?.();
+    }, 350);
+    return () => clearTimeout(t);
+  }, [autoFocus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Paleta: en overlay el panel flota sobre el video, así que va en oscuro fijo.
   const C = overlay
@@ -169,7 +195,38 @@ export function GameCommentsPanel({
         />
       )}
 
-      {/* Input */}
+      {/* Input. En landscape no se escribe acá: el teclado tapa el partido y el
+          hilo, así que el campo es un botón que devuelve la app a vertical. */}
+      {onComposePress ? (
+        <Pressable
+          onPress={onComposePress}
+          accessibilityRole="button"
+          accessibilityLabel="Escribir un comentario en vertical"
+          testID="compose-in-portrait"
+          style={{
+            flexDirection: 'row', alignItems: 'center', gap: 10,
+            paddingHorizontal: 16, paddingVertical: 8,
+            borderTopWidth: 1, borderTopColor: C.line,
+          }}
+        >
+          <View style={{
+            flex: 1, backgroundColor: C.field, borderRadius: 12,
+            paddingHorizontal: 14, paddingVertical: 8,
+            borderWidth: 1, borderColor: C.line,
+          }}>
+            <Text style={{ color: C.muted, fontFamily: fonts.regular, fontSize: 13 }} numberOfLines={1}>
+              Escribe un comentario...
+            </Text>
+          </View>
+          <View style={{
+            width: 36, height: 36, borderRadius: 12, backgroundColor: C.field,
+            alignItems: 'center', justifyContent: 'center',
+            borderWidth: 1, borderColor: C.line,
+          }}>
+            <Minimize2 size={16} color={C.text} />
+          </View>
+        </Pressable>
+      ) : (
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={{
           flexDirection: 'row', alignItems: 'center', gap: 10,
@@ -177,6 +234,7 @@ export function GameCommentsPanel({
           borderTopWidth: 1, borderTopColor: C.line,
         }}>
           <TextInput
+            ref={inputRef}
             value={text}
             onChangeText={setText}
             placeholder="Escribe un comentario..."
@@ -210,6 +268,7 @@ export function GameCommentsPanel({
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+      )}
     </View>
   );
 }

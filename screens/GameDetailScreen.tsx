@@ -145,6 +145,20 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
   }, []);
 
+  /**
+   * Comentar desde pantalla completa (landscape): en horizontal el teclado ocupa
+   * prácticamente toda la pantalla — tapa el partido *y* el hilo que estás
+   * leyendo —, así que escribir vuelve la app a vertical, donde el video se
+   * encoge a 16:9 y el panel se queda con la mitad de abajo. El foco se pide en
+   * el panel de portrait (`autoFocus`), después de que termine la rotación.
+   */
+  const [composeIntent, setComposeIntent] = React.useState(false);
+  const composeFromFullscreen = React.useCallback(() => {
+    exitFullscreen();
+    setPortraitPanel('comments');
+    setComposeIntent(true);
+  }, [exitFullscreen]);
+
   // Siempre devolver el device a portrait al desmontar la pantalla.
   React.useEffect(() => () => {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
@@ -310,6 +324,7 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
             {hasStream && (
               <TouchableOpacity
                 onPress={fullscreen ? exitFullscreen : enterFullscreen}
+                testID="toggle-fullscreen"
                 style={circleBtn('rgba(0,0,0,0.55)')}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
@@ -359,6 +374,7 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
               sending={sending}
               onSend={send}
               onClose={() => setOverlayComments(false)}
+              onComposePress={composeFromFullscreen}
             />
           </View>
         )}
@@ -373,7 +389,9 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
             loading={loadingComments}
             sending={sending}
             onSend={send}
-            onClose={() => setPortraitPanel(null)}
+            onClose={() => { setPortraitPanel(null); setComposeIntent(false); }}
+            autoFocus={composeIntent}
+            onAutoFocusHandled={() => setComposeIntent(false)}
           />
         </View>
       )}

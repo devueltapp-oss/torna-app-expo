@@ -593,6 +593,13 @@ POST /game/:id/comments  { comment }  → comentario creado (máx 500 chars)
     `portraitPanel: null | 'comments' | 'players'` — **uno por vez**.
   - **landscape** (pantalla completa): los comentarios siguen siendo una columna
     superpuesta a la derecha (`variant="overlay"`), que arranca oculta.
+  - ⚠️ **En landscape NO se escribe** (2026-08-31): el teclado en horizontal ocupa casi
+    toda la pantalla y tapa el partido *y* el hilo que estás leyendo. Por eso el overlay
+    recibe **`onComposePress`** y su campo deja de ser un `TextInput`: es un botón que
+    sale de pantalla completa, rota a vertical y abre el panel de comentarios con el
+    input **enfocado** (`autoFocus` + `onAutoFocusHandled` para bajar la bandera). El
+    foco se pide con un respiro de 350 ms: pedido durante la rotación, se pierde.
+    Cubierto por `screens/__tests__/GameDetailScreen.test.tsx`.
 
   Antes en portrait el CTA "Comentarios · N" abría un `<Modal>` a pantalla completa: para
   leer un comentario había que tapar el partido.

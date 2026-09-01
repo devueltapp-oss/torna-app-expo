@@ -157,3 +157,33 @@ describe('GameDetailScreen — seguir al club', () => {
     expect(queryByText('Seguir')).toBeNull();
   });
 });
+
+describe('GameDetailScreen — comentar desde pantalla completa (landscape)', () => {
+  /** Entra a fullscreen y abre el overlay de comentarios. */
+  function openOverlayComments() {
+    const utils = renderScreen();
+    fireEvent.press(utils.getByTestId('toggle-fullscreen'));
+    fireEvent.press(utils.getByTestId('toggle-comments'));
+    return utils;
+  }
+
+  it('en landscape el campo NO escribe: es un botón para volver a vertical', () => {
+    const { getByTestId, queryByPlaceholderText } = openOverlayComments();
+    // No hay TextInput real: en horizontal el teclado taparía el partido y el hilo.
+    expect(queryByPlaceholderText('Escribe un comentario...')).toBeNull();
+    expect(getByTestId('compose-in-portrait')).toBeTruthy();
+  });
+
+  it('tocarlo sale de pantalla completa y deja el hilo escribible en vertical', () => {
+    const ScreenOrientation = require('expo-screen-orientation');
+    const { getByTestId, getByPlaceholderText, queryByTestId } = openOverlayComments();
+
+    fireEvent.press(getByTestId('compose-in-portrait'));
+
+    // Volvió a portrait…
+    expect(ScreenOrientation.lockAsync).toHaveBeenCalledWith('PORTRAIT_UP');
+    // …con el panel de comentarios abierto y un input de verdad.
+    expect(getByPlaceholderText('Escribe un comentario...')).toBeTruthy();
+    expect(queryByTestId('compose-in-portrait')).toBeNull();
+  });
+});
