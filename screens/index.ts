@@ -44,4 +44,4 @@ export {
   type BlockSelection,
 } from './ReserveBlocksScreen';
 export { ReserveStep3Screen } from './ReserveStep3Screen';
-export { ReserveSuccessScreen, MonoValue } from './ReserveSuccessScreen';
+export { ReserveSuccessScreen } from './ReserveSuccessScreen';

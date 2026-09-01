@@ -318,11 +318,9 @@ function ItemRow({ item, onToggleVisibility, onEdit, onOpen }: {
           <VisibilityPill isPublic={item.isPublic} onPress={onToggleVisibility}/>
         </View>
         <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text, lineHeight: 17 }}>{item.title}</Text>
-        {isHighlight && item.fromMatch ? (
-          <Text style={{ fontSize: 11, color: colors.muted2 }}>
-            del partido <Text style={{ fontFamily: 'Menlo', color: colors.text2, fontWeight: '700' }}>{item.fromMatch}</Text> · {item.date}
-          </Text>
-        ) : item.date ? (
+        {/* El UUID del partido NO se muestra (regla: ningún ID en pantalla).
+            `fromMatch` sigue en el modelo para navegar, no para leerse. */}
+        {item.date ? (
           <Text style={{ fontSize: 11, color: colors.muted2 }}>{item.date}</Text>
         ) : null}
 

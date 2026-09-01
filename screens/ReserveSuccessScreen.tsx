@@ -66,10 +66,5 @@ export function ReserveSuccessScreen({
   );
 }
 
-/** Helper for mono-styled reservation IDs in the KV grid. */
-export function MonoValue({ children }: { children: React.ReactNode }) {
-  const { colors } = useTheme();
-  return (
-    <Text style={{ fontFamily: fonts.mono, color: colors.text, fontWeight: '700', fontSize: 12 }}>{children}</Text>
-  );
-}
+/* `MonoValue` se eliminó el 2026-08-31: su único uso era pintar el UUID de la
+   reserva en la grilla de resumen, y en la app no se muestra ningún ID. */

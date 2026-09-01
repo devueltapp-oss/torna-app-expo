@@ -1215,15 +1215,26 @@ Es el mismo patrón que ya usan `ClubProfileScreen` y `PlayerProfileScreen`. El 
   NO hacer `require()` adentro de un componente reutilizable
   (sí está OK en pantallas concretas).
 
-### ⛔ No renderices IDs internos
+### ⛔ No renderices NINGÚN ID
 
-Los UUID de partida y de cancha (`game.id`, `court.id`) **no se muestran en pantalla**.
-Son identificadores internos: no le dicen nada al usuario y exponen la clave con la que se
-piden esos recursos en la API. Se quitaron el 2026-08-31 de `GameListItem` y `CourtCard`
-(`components/cards.tsx`), `UpcomingMatchSheet` y `PreviewStep` del editor.
+**Regla general: ningún identificador llega a la pantalla.** Ni UUID de partida, cancha,
+reserva o highlight, ni el UID de Firebase. No le dicen nada al usuario y exponen la clave
+con la que se piden esos recursos en la API.
 
-Para identificar una partida en la UI usá lo que el usuario reconoce: **hora · cancha ·
-club**. `fonts.mono` sigue estando para números de cámara y duraciones, no para IDs.
+Sitios que los mostraban, todos limpiados el 2026-08-31:
+
+| Dónde | Qué mostraba |
+|---|---|
+| `GameListItem` · `CourtCard` (`components/cards.tsx`) | chip mono con `game.id` / `#court.id` |
+| `UpcomingMatchSheet` | `game.id` en el header |
+| `PreviewStep` (editor de video) | `gameId` al lado de cancha · club |
+| `MyLibraryScreen` (highlights) | "del partido `<uuid>`" |
+| `ReserveSuccessScreen` vía `MonoValue` | fila **Código** = UUID de la reserva (helper eliminado) |
+
+Para identificar algo en la UI usá lo que el usuario reconoce: **hora · cancha · club**, o
+la fecha. `fonts.mono` queda para números de cámara, timecodes y duraciones — nunca IDs.
+Si alguna vez hace falta un código de reserva, tiene que ser **uno corto pensado para
+leerse**, no el identificador interno.
 
 ### Al usar colores
 

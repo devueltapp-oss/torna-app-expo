@@ -35,7 +35,7 @@ import {
   GamesScreen, GameChatScreen, GameDetailScreen, CourtsScreen, ProfileScreen,
   ClubProfilePlayerView, PlayerProfilePublicView, GlobalSearchScreen,
   ChatsInboxScreen, DirectChatScreen, NotificationsScreen,
-  ReserveClubPickerScreen, ReserveBlocksScreen, ReserveStep3Screen, ReserveSuccessScreen, MonoValue,
+  ReserveClubPickerScreen, ReserveBlocksScreen, ReserveStep3Screen, ReserveSuccessScreen,
   VideoEditorScreen,
   PlayerOwnProfileScreen, MyLibraryScreen, PlayerSettingsScreen,
   ReelViewScreen,
@@ -1432,14 +1432,16 @@ function AppNavigator() {
 
       <AppStack.Screen name="ReserveOk">
         {({ route, navigation }) => {
-          const { reservationId, courtLabel, whenLabel } = route.params || ({} as any);
+          const { courtLabel, whenLabel } = route.params || ({} as any);
           return (
+            // Sin fila "Código": era el UUID de la partida y ningún ID se muestra
+            // en la app. Si hiciera falta un código de reserva legible, tiene que
+            // ser uno corto pensado para leerse, no el identificador interno.
             <ReserveSuccessScreen
               summary={[
                 { label: 'Cancha',  value: courtLabel || '—' },
                 { label: 'Horario', value: whenLabel || '—' },
                 { label: 'Pago',    value: 'En el club' },
-                { label: 'Código',  value: <MonoValue>{reservationId}</MonoValue> },
               ]}
               heroLine="¡Reserva confirmada! Te esperamos en la cancha."
               onBackToClub={() => navigation.popToTop()}
