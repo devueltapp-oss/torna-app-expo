@@ -39,11 +39,8 @@ export function PreviewStep({
         autoPlay
       />
 
+      {/* Sin el UUID de la partida: es interno y no le dice nada al jugador. */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted2, fontFamily: 'Menlo' }}>
-          {gameId}
-        </Text>
-        <Text style={{ fontSize: 12, color: colors.muted2 }}>·</Text>
         <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text }}>
           {courtLabel} · {clubName}
         </Text>

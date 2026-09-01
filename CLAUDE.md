@@ -1208,6 +1208,16 @@ Es el mismo patrón que ya usan `ClubProfileScreen` y `PlayerProfileScreen`. El 
   NO hacer `require()` adentro de un componente reutilizable
   (sí está OK en pantallas concretas).
 
+### ⛔ No renderices IDs internos
+
+Los UUID de partida y de cancha (`game.id`, `court.id`) **no se muestran en pantalla**.
+Son identificadores internos: no le dicen nada al usuario y exponen la clave con la que se
+piden esos recursos en la API. Se quitaron el 2026-08-31 de `GameListItem` y `CourtCard`
+(`components/cards.tsx`), `UpcomingMatchSheet` y `PreviewStep` del editor.
+
+Para identificar una partida en la UI usá lo que el usuario reconoce: **hora · cancha ·
+club**. `fonts.mono` sigue estando para números de cámara y duraciones, no para IDs.
+
 ### Al usar colores
 
 - **Solo 3 colores**: `colors.ink` (`#2d4c75`), `colors.accent` (`#D6FF7E`),

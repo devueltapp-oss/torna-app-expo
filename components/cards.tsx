@@ -291,7 +291,8 @@ export function GameListItem({ game, onPress }: { game: GameListData; onPress?: 
         backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line,
         borderRadius: radii.xl, padding: 12, opacity: pressed ? 0.88 : 1,
       }]}>
-      <Text style={{ fontFamily: fonts.mono, fontSize: 11, fontWeight: '600', color: colors.text2, backgroundColor: colors.bg3, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>{game.id}</Text>
+      {/* El UUID de la partida NO se muestra: es un identificador interno y la
+          fila ya se identifica por cancha + horario. */}
       <View style={{ flex: 1 }}>
         <Text style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
           {game.court} · {game.cam} · {game.players} jug.
@@ -321,9 +322,7 @@ export function CourtCard({ court, onPress }: { court: CourtData; onPress?: (c: 
         backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line,
         borderRadius: radii['2xl'] + 2, padding: 14, gap: 8, opacity: pressed ? 0.92 : 1,
       }]}>
-      <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' }}>
-        <Text style={{ color: colors.muted2, fontSize: 11, fontFamily: fonts.mono }}>#{court.id}</Text>
-      </View>
+      {/* Sin el UUID de la cancha: es interno y el nombre ya la identifica. */}
       <Text style={{ color: colors.text, fontWeight: '800', fontSize: 18, letterSpacing: -0.2 }}>{court.name}</Text>
       {court.description ? (
         <Text style={{ color: colors.text2, fontSize: 12, lineHeight: 17 }} numberOfLines={2}>{court.description}</Text>
@@ -476,7 +475,6 @@ export function UpcomingGameTile({ game, onDoubleTap }: {
       }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <StatusBadge status="SCHEDULED"/>
-          <Text style={{ fontSize: 11, color: colors.muted2, fontFamily: fonts.mono }}>{game.id}</Text>
         </View>
         <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: 18, letterSpacing: -0.3 }}>
           {game.time} · {game.court}

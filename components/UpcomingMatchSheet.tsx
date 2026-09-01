@@ -218,7 +218,6 @@ function SheetContent({
       <View style={{ gap: 4 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <StatusBadge status="SCHEDULED" />
-          <Text style={{ fontSize: 11, color: colors.muted2, fontFamily: fonts.mono }}>{game.id}</Text>
         </View>
         <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: 22, letterSpacing: -0.4, marginTop: 6 }}>
           {game.time} · {game.court}
