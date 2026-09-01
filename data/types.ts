@@ -74,7 +74,7 @@ export interface ClubTodayReservation {
 /* ─────────── Club público (POV player) ─────────── */
 
 export interface LivePreview {
-  id: string; court: string; viewers: number;
+  id: string; court: string;
   players: MatchParticipant[];
   streamUrl?: string;
 }
@@ -160,7 +160,7 @@ export interface InvitablePlayer {
 /* ─────────── Perfil público de un player ─────────── */
 
 export interface PlayerLiveGame {
-  id: string; court: string; club: string; viewers: number;
+  id: string; court: string; club: string;
   players: MatchParticipant[];
   streamUrl?: string;
 }

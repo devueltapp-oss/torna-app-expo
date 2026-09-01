@@ -81,7 +81,6 @@ export function useClubGames(clubId?: string) {
           .map((g) => ({
             id: g.gameId,
             court: g.court ?? 'Cancha',
-            viewers: 0,
             players: g.players.map(toParticipant),
           })),
       );

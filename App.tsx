@@ -105,7 +105,7 @@ function buildDays(n = 6): DayOption[] {
 function emptyGameDetail(id: string): GameDetailData {
   return {
     id, court: '', category: null, club: '', clubId: '', clubHandle: '', clubFollowers: 0,
-    time: '', date: '', viewers: 0, isLive: false, players: [], cameras: [],
+    time: '', date: '', isLive: false, players: [], cameras: [],
   };
 }
 
@@ -219,7 +219,7 @@ function clipToGameDetailParams(
       category: null,
       club: '', clubId: '', clubHandle: '', clubFollowers: 0,
       time: '', date: '',
-      viewers: 0, isLive: false,
+      isLive: false,
       players: [],
       cameras: [{ id: 'c1', number: '01', label: 'Clip', state: 'available', streamUrl }],
     },

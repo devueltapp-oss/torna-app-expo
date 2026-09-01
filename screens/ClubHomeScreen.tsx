@@ -13,13 +13,6 @@ interface Props {
   clubName: string;
   liveGames: LiveGameData[];
   todayReservations: ClubTodayReservation[];
-  stats?: {
-    liveCount: number;
-    courtsTotal: number;
-    viewers: number;
-    viewersDelta: number;
-    pendingPayments: number;
-  };
   onOpenGame?: (id: string) => void;
   onChangeTab?: (id: TabId) => void;
   activeTab?: TabId;
@@ -27,10 +20,6 @@ interface Props {
   unreadNotifications?: number;
   onOpenNotifications?: () => void;
 }
-
-const DEFAULT_STATS: NonNullable<Props['stats']> = {
-  liveCount: 2, courtsTotal: 8, viewers: 65, viewersDelta: 18, pendingPayments: 3,
-};
 
 /**
  * Club admin home. Surfaces live activity on this club's courts, today's
@@ -46,7 +35,6 @@ export function ClubHomeScreen({
   clubName,
   liveGames,
   todayReservations,
-  stats = DEFAULT_STATS,
   onOpenGame,
   onChangeTab,
   activeTab = 'home',
@@ -78,12 +66,11 @@ export function ClubHomeScreen({
       </View>
 
       <ScrollView contentContainerStyle={{ paddingTop: 4, paddingBottom: 20, gap: 14 }}>
-        {/* Stat cards */}
-        <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16 }}>
-          <StatCard label="En vivo" value={stats.liveCount} sub={`de ${stats.courtsTotal} canchas`} accent/>
-          <StatCard label="Viewers" value={stats.viewers} sub={`+${stats.viewersDelta} vs ayer`}/>
-          <StatCard label="A cobrar" value={stats.pendingPayments} sub="reservas hoy" warn/>
-        </View>
+        {/* Sin fila de KPI: los tres números (en vivo, viewers, a cobrar) salían de
+            un DEFAULT_STATS inventado —2 / 65 / 3— porque la pantalla todavía no
+            está cableada a ningún endpoint. Cuando lo esté, "En vivo" sale de
+            liveGames.length y "A cobrar" de todayReservations; los espectadores no
+            se miden en ningún lado (ver "Espectadores" en CLAUDE.md). */}
 
         {/* Live now — horizontal carousel of tiles */}
         <View style={{ paddingHorizontal: 16 }}>
@@ -112,20 +99,8 @@ export function ClubHomeScreen({
   );
 }
 
-function StatCard({ label, value, sub, accent, warn }: { label: string; value: number; sub: string; accent?: boolean; warn?: boolean }) {
-  const { colors } = useTheme();
-  const valueColor = accent ? colors.accentText : warn ? colors.warnFg : colors.text;
-  return (
-    <View style={{
-      flex: 1, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line,
-      borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10,
-    }}>
-      <Text style={{ color: colors.muted2, fontSize: 9, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' }}>{label}</Text>
-      <Text style={{ color: valueColor, fontSize: 22, fontWeight: '800', marginTop: 4, lineHeight: 22 }}>{value}</Text>
-      <Text style={{ color: colors.muted2, fontSize: 11, marginTop: 4 }}>{sub}</Text>
-    </View>
-  );
-}
+/* `StatCard` se borró junto con la fila de KPI: su único uso eran los tres números
+   inventados. Si vuelven los KPI, van con datos reales o no van. */
 
 function ReservationRow({ r }: { r: ClubTodayReservation }) {
   const { colors } = useTheme();

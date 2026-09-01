@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, MoreHorizontal, MapPin, Eye, Play, Bell, MessageCircle } from 'lucide-react-native';
+import { ChevronLeft, MoreHorizontal, MapPin, Play, Bell, MessageCircle } from 'lucide-react-native';
 import { Svg, Rect, Line } from 'react-native-svg';
 import { Video, ResizeMode } from 'expo-av';
 import { useIsFocused } from '@react-navigation/native';
@@ -171,10 +171,6 @@ export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onTogg
                 )}
                 <View style={{ position: 'absolute', top: 8, left: 8 }}>
                   <StatusBadge status="LIVE"/>
-                </View>
-                <View style={{ position: 'absolute', bottom: 6, right: 8, flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                  <Eye size={12} color={colors.accent}/>
-                  <Text style={{ color: colors.accent, fontSize: 11, fontWeight: '700' }}>{player.liveGame.viewers}</Text>
                 </View>
               </View>
               <View style={{ paddingHorizontal: 10, paddingVertical: 8 }}>

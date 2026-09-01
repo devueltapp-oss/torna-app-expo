@@ -8,7 +8,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, Image, StyleSheet, Platform } from 'react-native';
 import { Svg, Rect, Line } from 'react-native-svg';
 import { Video, ResizeMode } from 'expo-av';
-import { Eye, Camera, Heart, MessageCircle, Play, WifiOff } from 'lucide-react-native';
+import { Camera, Heart, MessageCircle, Play, WifiOff } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { Avatar, AvatarStack, StatusBadge, ClubPill, GameStatus } from './ui';
@@ -29,7 +29,6 @@ export interface MatchParticipant {
 
 export interface LiveGameData {
   id: string;
-  viewers?: number;
   players: MatchParticipant[];
   club: string;
   court: string;
@@ -139,17 +138,6 @@ export function LiveGameCard({ game, onPress, tornaLogo, isActive }: {
           <View style={{ position: 'absolute', top: 10, left: 10 }}>
             <StatusBadge status="LIVE" />
           </View>
-          {typeof game.viewers === 'number' && (
-            <View style={{
-              position: 'absolute', left: 0, right: 0, bottom: 0,
-              backgroundColor: 'rgba(45,76,117,0.55)',
-              paddingHorizontal: 12, paddingVertical: 6,
-              flexDirection: 'row', alignItems: 'center', gap: 5,
-            }}>
-              <Eye size={13} color={colors.accent} />
-              <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '600' }}>{game.viewers} espectadores</Text>
-            </View>
-          )}
         </View>
         {/* Footer */}
         <View style={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 12, gap: 5 }}>
@@ -250,12 +238,6 @@ export function LiveGameTile({ game, onPress, onDoubleTap, tornaLogo, isActive }
           <View style={{ position: 'absolute', top: 6, left: 6 }}>
             <StatusBadge status="LIVE"/>
           </View>
-          {typeof game.viewers === 'number' && (
-            <View style={{ position: 'absolute', bottom: 6, right: 8, flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-              <Eye size={11} color={colors.accent}/>
-              <Text style={{ color: colors.accent, fontSize: 11, fontWeight: '700' }}>{game.viewers}</Text>
-            </View>
-          )}
           <View style={{
             position: 'absolute',
             bottom: 6, left: 6,
@@ -310,7 +292,7 @@ export interface CourtData {
   id: string; name: string;
   description?: string | null;
   cams?: number;
-  live?: { gameId: string; viewers: number } | null;
+  live?: { gameId: string } | null;
   next?: string | null;
 }
 
@@ -331,13 +313,7 @@ export function CourtCard({ court, onPress }: { court: CourtData; onPress?: (c: 
       )}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
         {court.live ? (
-          <>
-            <StatusBadge status="LIVE" />
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Eye size={13} color={colors.muted2} />
-              <Text style={{ color: colors.muted2, fontSize: 11 }}>{court.live.viewers}</Text>
-            </View>
-          </>
+          <StatusBadge status="LIVE" />
         ) : (
           <>
             <View style={{ backgroundColor: colors.bg3, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 9999 }}>

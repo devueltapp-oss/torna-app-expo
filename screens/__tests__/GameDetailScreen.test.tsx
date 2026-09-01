@@ -47,7 +47,6 @@ const game: GameDetailData = {
   clubFollowers: 12,
   time: '19:30',
   date: 'hoy',
-  viewers: 4,
   isLive: true,
   players: [
     { username: '@ana', name: 'Ana', team: 1, isHost: true },

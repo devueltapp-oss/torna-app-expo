@@ -3,7 +3,7 @@ import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Svg, Rect, Line } from 'react-native-svg';
 import { Video, ResizeMode } from 'expo-av';
-import { ChevronLeft, MoreHorizontal, MapPin, Eye, Play, Camera, MessageCircle } from 'lucide-react-native';
+import { ChevronLeft, MoreHorizontal, MapPin, Play, Camera, MessageCircle } from 'lucide-react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
@@ -139,10 +139,6 @@ export function ClubProfilePlayerView({
                     </Svg>
                   )}
                   <View style={{ position: 'absolute', top: 8, left: 8 }}><StatusBadge status="LIVE"/></View>
-                  <View style={{ position: 'absolute', bottom: 6, right: 8, flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                    <Eye size={12} color={colors.accent}/>
-                    <Text style={{ color: colors.accent, fontSize: 11, fontWeight: '700' }}>{g.viewers}</Text>
-                  </View>
                 </View>
                 <View style={{ paddingHorizontal: 10, paddingVertical: 8 }}>
                   <Text style={{ fontSize: 11, fontWeight: '700', color: colors.accent }}>{g.court}</Text>

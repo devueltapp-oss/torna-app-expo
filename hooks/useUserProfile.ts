@@ -104,7 +104,7 @@ export function useUserProfile(id: string | undefined) {
       // El backend solo da el id del partido LIVE; el visor (GameDetail) trae el
       // resto. Construimos un PlayerLiveGame mínimo para el tile + navegación.
       liveGame: p.isLiveNow && p.liveGameId
-        ? { id: p.liveGameId, court: '', club: '', viewers: 0, players: [] }
+        ? { id: p.liveGameId, court: '', club: '', players: [] }
         : null,
       clips: [],
       photos: [],

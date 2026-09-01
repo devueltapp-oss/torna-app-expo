@@ -31,7 +31,8 @@ interface BackendCamera {
 interface BackendGameDetail {
   id: string;
   status?: string;
-  viewers?: number;
+  // Sin `viewers`: el backend nunca lo devolvió (no existe la columna) y el mapper
+  // caía siempre en 0. Ver la nota "Espectadores" de CLAUDE.md.
   recordingUrl?: string | null;
   durationSeconds?: number | null;
   padelCourt?: { name?: string | null } | null;
@@ -62,7 +63,6 @@ function mapDetail(data: BackendGameDetail): GameDetailData {
     clubFollowers: 0,
     time: '',
     date: '',
-    viewers: data.viewers ?? 0,
     isLive: data.status === 'LIVE',
     // `team` y `profilePicture` ya venían en GET /game/:id y no se mapeaban: son lo
     // que le da al panel de jugadores las DOS parejas y las fotos reales.

@@ -217,6 +217,40 @@ ClubTodayReservation {
 }
 ```
 
+### ⛔ Espectadores: no se muestran (2026-09-01)
+
+**No hay forma de saber cuánta gente está mirando una partida, así que no se muestra
+ningún número.** El backend no tiene columna de viewers y nunca la tuvo: la app lo seteaba
+a `0` a mano en cada mapper y lo pintaba igual, así que el visor decía "· 0 viewers" con un
+ojo al lado. Peor: el home de club renderizaba un `DEFAULT_STATS` inventado (65 espectadores,
++18 vs ayer, 2 en vivo de 8 canchas, 3 a cobrar) porque `App.tsx` no le pasaba `stats`.
+
+Se quitó de las 9 superficies (`GameDetailScreen`, `LiveGameCard`/`LiveGameTile`/`CourtCard`
+en `components/cards.tsx`, `ReelViewScreen`, los dos perfiles públicos y la fila de KPI del
+club) **y del tipo**, para que nadie lo reponga con un cero. También se borraron `StatCard`
+y `DEFAULT_STATS`.
+
+⚠️ **`GameWatch` no es esto.** `watchGame`/`unwatchGame` es "avisame de este partido" y
+alimenta las notificaciones: gente **interesada**, no **conectada**. No la uses como
+contador de audiencia.
+
+**Si alguna vez se mide de verdad**, el diseño evaluado es un heartbeat, no un WebSocket:
+
+```
+visor abierto y en foreground ──POST /game/:id/heartbeat cada 40s──► backend
+                              ◄──── { viewers: N } en la MISMA respuesta
+```
+
+- Tabla `GameViewer(gameId, userId, lastSeenAt)` con `@@id([gameId, userId])`; el `userId`
+  sale del token. "En línea" = `lastSeenAt > now - 90s` (~2.25× el intervalo: tolera un
+  latido perdido sin parpadeo).
+- **El conteo viaja en la respuesta del propio heartbeat** — mostrarlo cuesta cero requests
+  extra. Con un poll aparte sería el doble de tráfico.
+- Gate `useIsFocused()` + `AppState === 'active'`, igual que `useGameComments`.
+- Sin scheduler en el backend (ver `prune:notifications`): la limpieza va por comando.
+- Mostrar **solo el conteo**, no avatares: exponer quién está mirando es un dato de
+  actividad personal y necesitaría opt-out explícito.
+
 **Reglas de negocio que el frontend respeta:**
 
 1. Partner es **siempre obligatorio** en reservas — debe existir en la app.

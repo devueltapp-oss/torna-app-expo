@@ -38,7 +38,7 @@ import { Svg, Rect, Line } from 'react-native-svg';
 import { Video, ResizeMode } from 'expo-av';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import {
-  ChevronLeft, MoreHorizontal, Eye, Scissors,
+  ChevronLeft, MoreHorizontal, Scissors,
   Maximize2, Minimize2, MessageCircle, X,
 } from 'lucide-react-native';
 import { useTheme } from '../theme';
@@ -65,7 +65,8 @@ export interface GameDetailData {
   clubHandle: string;
   clubFollowers: number;
   time: string; date: string;
-  viewers: number;
+  /* Sin `viewers`: no hay forma de saber quién está mirando (el backend no lo
+     mide) y el número que se mostraba era siempre 0. Ver la nota de CLAUDE.md. */
   isLive: boolean;
   players: MatchParticipant[];
   cameras: CameraAngleData[];
@@ -195,7 +196,7 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               {game.isLive && <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.live }} />}
               <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 }}>
-                {game.isLive ? 'EN VIVO' : ''} · {game.viewers} viewers
+                {game.isLive ? 'EN VIVO' : ''}
               </Text>
             </View>
             <Pressable style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' }}>
@@ -270,11 +271,6 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
           <Text style={{ position: 'absolute', bottom: 10, left: 12, fontSize: 11, color: colors.accent, fontWeight: '600' }}>
             HLS · 1080p · {activeCam?.label}
           </Text>
-          <View style={{ position: 'absolute', bottom: 10, right: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Eye size={14} color="#FFFFFF" />
-            <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '600' }}>{game.viewers}</Text>
-          </View>
-
           {/* Controles superpuestos: jugadores + comentarios + expandir/contraer */}
           <View style={{
             position: 'absolute', top: 10, right: 10, zIndex: 10,

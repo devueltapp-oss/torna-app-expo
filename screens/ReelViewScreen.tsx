@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Eye, Heart, MessageCircle, Maximize2 } from 'lucide-react-native';
+import { ChevronLeft, Heart, MessageCircle, Maximize2 } from 'lucide-react-native';
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
@@ -144,12 +144,6 @@ function LiveReelItem({
       <View style={{ gap: 12 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <StatusBadge status="LIVE" />
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-            <Eye size={14} color={colors.muted2} />
-            <Text style={{ color: colors.muted2, fontSize: 12, fontFamily: fonts.regular }}>
-              {game.viewers} espectadores
-            </Text>
-          </View>
         </View>
 
         <View style={{ gap: 3 }}>
