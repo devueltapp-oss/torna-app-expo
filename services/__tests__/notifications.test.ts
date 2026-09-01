@@ -10,6 +10,7 @@ import { OneSignal } from 'react-native-onesignal';
 import {
   resolvePushTarget,
   addPushReceivedListener,
+  addForegroundPushListener,
   initNotifications,
   __resetForTests,
 } from '../notifications';
@@ -151,5 +152,116 @@ describe('addPushReceivedListener', () => {
 
     expect(() => fireOneSignal('click', { type: 'GAME_SCHEDULED', gameId: 'g1' })).not.toThrow();
     expect(bueno).toHaveBeenCalled();
+  });
+});
+
+/**
+ * Mini notificación in-app. Con la app abierta el banner del sistema SIEMPRE se
+ * suprime; el aviso lo dibuja `InAppNotificationHost` a partir de este evento.
+ */
+describe('addForegroundPushListener', () => {
+  /** Ref del NavigationContainer con la ruta en la que está parado el usuario. */
+  function initWithRoute(route: { name: string; params?: Record<string, unknown> } | null) {
+    __resetForTests();
+    jest.clearAllMocks();
+    initNotifications({ current: { getCurrentRoute: () => route, navigate: jest.fn() } } as any);
+  }
+
+  /** Dispara el handler de OneSignal y devuelve el preventDefault del evento. */
+  function fire(
+    event: 'click' | 'foregroundWillDisplay',
+    notification: Record<string, unknown>,
+  ): jest.Mock {
+    const calls = (OneSignal.Notifications.addEventListener as jest.Mock).mock.calls;
+    const handler = calls.filter((c) => c[0] === event).pop()?.[1];
+    if (!handler) throw new Error(`initNotifications no registró '${event}'`);
+    const preventDefault = jest.fn();
+    handler({ notification, preventDefault });
+    return preventDefault;
+  }
+
+  afterEach(() => __resetForTests());
+
+  it('avisa con el texto y el destino del mensaje que llegó', () => {
+    initWithRoute({ name: 'MainPlayer' });
+    const cb = jest.fn();
+    addForegroundPushListener(cb);
+
+    fire('foregroundWillDisplay', {
+      title: 'Nico',
+      body: '¿Jugamos a las 20?',
+      additionalData: { type: 'NEW_DM_MESSAGE', fromUserId: 'u9' },
+    });
+
+    expect(cb).toHaveBeenCalledWith({
+      title: 'Nico',
+      body: '¿Jugamos a las 20?',
+      data: { type: 'NEW_DM_MESSAGE', fromUserId: 'u9' },
+      target: { name: 'DirectChat', params: { userId: 'u9' } },
+    });
+  });
+
+  it('el banner del sistema nunca se muestra con la app abierta', () => {
+    initWithRoute({ name: 'MainPlayer' });
+
+    const preventDefault = fire('foregroundWillDisplay', {
+      title: 'Nico',
+      body: 'hola',
+      additionalData: { type: 'NEW_DM_MESSAGE', fromUserId: 'u9' },
+    });
+
+    expect(preventDefault).toHaveBeenCalled();
+  });
+
+  it('no avisa si el usuario ya está leyendo ese chat', () => {
+    initWithRoute({ name: 'DirectChat', params: { userId: 'u9' } });
+    const cb = jest.fn();
+    addForegroundPushListener(cb);
+
+    fire('foregroundWillDisplay', {
+      title: 'Nico',
+      body: 'hola',
+      additionalData: { type: 'NEW_DM_MESSAGE', fromUserId: 'u9' },
+    });
+
+    expect(cb).not.toHaveBeenCalled();
+  });
+
+  it('no avisa en el tap de un banner del OS (eso ya navega solo)', () => {
+    initWithRoute({ name: 'MainPlayer' });
+    const cb = jest.fn();
+    addForegroundPushListener(cb);
+
+    fire('click', {
+      title: 'Nico',
+      body: 'hola',
+      additionalData: { type: 'NEW_DM_MESSAGE', fromUserId: 'u9' },
+    });
+
+    expect(cb).not.toHaveBeenCalled();
+  });
+
+  it('un push sin destino conocido igual se avisa (target null)', () => {
+    initWithRoute({ name: 'MainPlayer' });
+    const cb = jest.fn();
+    addForegroundPushListener(cb);
+
+    fire('foregroundWillDisplay', { title: 'Torna', body: 'algo', additionalData: { type: 'ALGO_NUEVO' } });
+
+    expect(cb).toHaveBeenCalledWith(expect.objectContaining({ target: null, title: 'Torna' }));
+  });
+
+  it('el unsubscribe corta la suscripción', () => {
+    initWithRoute({ name: 'MainPlayer' });
+    const cb = jest.fn();
+    addForegroundPushListener(cb)();
+
+    fire('foregroundWillDisplay', {
+      title: 'Nico',
+      body: 'hola',
+      additionalData: { type: 'NEW_DM_MESSAGE', fromUserId: 'u9' },
+    });
+
+    expect(cb).not.toHaveBeenCalled();
   });
 });

@@ -23,6 +23,7 @@ import {
 } from './services/notifications';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { InAppNotificationHost } from './components/InAppNotification';
 
 import { ThemeProvider, useTheme } from './theme';
 import { AuthProvider, useAuth, type LoginResult } from './contexts/AuthContext';
@@ -1476,6 +1477,9 @@ function Root({ navigationRef }: { navigationRef: React.RefObject<any> }) {
     <NavigationContainer ref={navigationRef} theme={navTheme} onReady={onNavigationReady}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       {user ? <AppNavigator /> : <AuthNavigator />}
+      {/* Mini notificación in-app. Va DESPUÉS del navigator (queda encima) y
+          fuera de él: por eso recibe el navigationRef en vez de useNavigation(). */}
+      {user && <InAppNotificationHost navigationRef={navigationRef} isClub={user.isClub} />}
     </NavigationContainer>
   );
 }

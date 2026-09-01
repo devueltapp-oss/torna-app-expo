@@ -750,8 +750,12 @@ tipos** que emite el backend (cubiertos por `services/__tests__/notifications.te
   para refrescar el contador con la app abierta, sin polling.
 - **Cold start**: si el tap llega antes de que monte el navigator, el destino se guarda
   y se aplica en `onNavigationReady()`. Sin eso el `navigate` se perdía en silencio.
-- **Primer plano**: `foregroundWillDisplay` suprime el banner si el usuario ya está
-  parado en esa misma pantalla (el chat que está leyendo).
+- **Primer plano: el banner del OS NUNCA se muestra** (desde 2026-08-30
+  `foregroundWillDisplay` llama siempre a `preventDefault()`). O el usuario ya está parado
+  en la pantalla de destino —y entonces no hay nada que avisar—, o lo avisa la **mini
+  notificación in-app** (ver abajo). Antes el banner del sistema se mostraba tal cual, que
+  en primer plano muchas veces ni aparece: un mensaje de chat mientras estabas en otra
+  pantalla no dejaba ninguna señal.
 - ⚠️ **El campo DEBE ser `notificationID` (con `ID` mayúscula)** para coincidir con el
   DTO del backend (`forbidNonWhitelisted`); un `notificationId` con `d` minúscula da
   **400** y el token nunca se registra → no llega ningún push.
@@ -788,6 +792,31 @@ tipos** que emite el backend (cubiertos por `services/__tests__/notifications.te
   setear `process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID` dentro de un test llega tarde (el
   módulo ya quedó compilado con el valor vacío y `initNotifications` corta al toque). Por
   eso se define en **`jest.config.js`**, antes de que jest transforme nada.
+
+#### Mini notificación in-app (banner propio) — `components/InAppNotification.tsx`
+
+Tarjeta que aparece arriba cuando llega un push **con la app abierta**. Reemplaza al banner
+del sistema en primer plano. El caso que la motivó es el chat, pero sirve para los 11 tipos.
+
+```
+OneSignal 'foregroundWillDisplay'
+  → services/notifications.ts: preventDefault() + emitForeground({ title, body, data, target })
+  → addForegroundPushListener  →  <InAppNotificationHost/>
+  → tap → navigate(target)   (misma tabla que el push y la campanita)
+```
+
+- **`addForegroundPushListener(cb)`** es un pub-sub aparte de `addPushReceivedListener`: ese
+  avisa "hubo actividad" (para el contador de la campanita) y **no** cambió de firma; el
+  nuevo trae además el **texto** (`title`/`body` de la notificación) y el `target` ya resuelto.
+  Solo dispara desde `foregroundWillDisplay` — nunca desde `click`, que ya navega solo.
+- **No dispara si el usuario ya está parado en la pantalla de destino** (`isAlreadyOnTarget`).
+- **`<InAppNotificationHost/>` se monta en `Root` (`App.tsx`), DESPUÉS del navigator y dentro
+  del `NavigationContainer`** (queda encima). Vive fuera de los navigators, así que recibe el
+  **`navigationRef` por prop** — `useNavigation()` ahí adentro tira. Aplica el mismo ajuste
+  que la campanita: `MainPlayer` → `MainClub` si la cuenta es de club.
+- Uno por vez (el nuevo reemplaza al anterior y reinicia el temporizador), se va sola a los
+  4.5 s, con la X, al tocarla o deslizándola hacia arriba.
+- Cubierto por `services/__tests__/notifications.test.ts` (`addForegroundPushListener`).
 
 ### Notificaciones in-app (campanita) — `api/notifications.ts`
 

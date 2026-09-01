@@ -10,8 +10,10 @@
  *
  *   backend (torna-api) --OneSignal--> dispositivo
  *     · el usuario toca      → 'click'                → navegación (routing table)
- *     · la app está abierta  → 'foregroundWillDisplay'→ se muestra, salvo que ya
- *                                                       esté mirando esa pantalla
+ *     · la app está abierta  → 'foregroundWillDisplay'→ banner del OS suprimido +
+ *                                                       mini notificación in-app,
+ *                                                       salvo que ya esté mirando
+ *                                                       esa pantalla
  *
  * Tres reglas que el código viejo no cumplía y por las que se perdían pushes:
  *
@@ -43,6 +45,18 @@ export interface PushData {
 export interface PushTarget {
   name: string;
   params?: Record<string, unknown>;
+}
+
+/**
+ * Push que llegó con la app **abierta**, ya con el texto que hay que mostrar.
+ * Es lo que consume el aviso in-app (`InAppNotificationHost`), que reemplaza al
+ * banner del sistema en primer plano.
+ */
+export interface ForegroundPush {
+  title: string;
+  body: string;
+  data: PushData;
+  target: PushTarget | null;
 }
 
 /**
@@ -142,6 +156,38 @@ function emitPush(data: PushData | null | undefined): void {
   });
 }
 
+/* ─────────── aviso in-app (banner propio en primer plano) ─────────── */
+
+type ForegroundListener = (push: ForegroundPush) => void;
+const foregroundListeners = new Set<ForegroundListener>();
+
+/**
+ * Se dispara SOLO cuando llega un push con la app en primer plano (nunca en el
+ * tap de un banner del sistema, que ya navega solo). Lo consume
+ * `InAppNotificationHost`, que dibuja la mini notificación dentro de la app.
+ *
+ * Va aparte de `addPushReceivedListener` a propósito: ese avisa "hubo actividad"
+ * (para el contador de la campanita) y este trae además el **texto** a mostrar.
+ *
+ * Devuelve la función para desuscribirse.
+ */
+export function addForegroundPushListener(cb: ForegroundListener): () => void {
+  foregroundListeners.add(cb);
+  return () => {
+    foregroundListeners.delete(cb);
+  };
+}
+
+function emitForeground(push: ForegroundPush): void {
+  foregroundListeners.forEach((cb) => {
+    try {
+      cb(push);
+    } catch {
+      // Un listener roto no puede romper la cadena de push.
+    }
+  });
+}
+
 function navigateTo(target: PushTarget): void {
   if (!navigationReady || !navigationRef?.current) {
     // Cold start: el árbol de navegación todavía no existe. Se aplica en onNavigationReady().
@@ -205,13 +251,25 @@ export function initNotifications(ref: React.RefObject<any>): void {
       if (target) navigateTo(target);
     });
 
-    // App en primer plano: no tiene sentido tapar con un banner el chat que el
-    // usuario está leyendo en ese mismo momento.
+    // App en primer plano: el banner del sistema NUNCA se muestra. O bien el
+    // usuario ya está parado en esa pantalla (no hay nada que avisar), o bien lo
+    // avisamos nosotros con la mini notificación in-app, que es tocable, sigue el
+    // tema de la app y no depende del permiso del OS.
     OneSignal.Notifications.addEventListener('foregroundWillDisplay', (event: any) => {
-      const data = event?.notification?.additionalData;
-      emitPush(data);
+      const notification = event?.notification;
+      const data: PushData = notification?.additionalData ?? {};
+      emitPush(notification?.additionalData);
+      event.preventDefault?.();
+
       const target = resolvePushTarget(data);
-      if (isAlreadyOnTarget(target)) event.preventDefault?.();
+      if (isAlreadyOnTarget(target)) return; // ya lo está viendo
+
+      emitForeground({
+        title: notification?.title ?? 'Torna',
+        body: notification?.body ?? '',
+        data,
+        target,
+      });
     });
   } catch (err) {
     console.error('[push] initialize falló:', err);
@@ -307,4 +365,5 @@ export function __resetForTests(): void {
   pendingTarget = null;
   initialized = false;
   pushListeners.clear();
+  foregroundListeners.clear();
 }
