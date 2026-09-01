@@ -1,7 +1,9 @@
 /**
  * MyLibraryScreen — sección PRIVADA del player. Solo el dueño la ve.
  *
- *   Header con badge PRIVADO + nota de privacidad.
+ *   Header limpio + nota de privacidad ("Solo tú puedes ingresar a esta sección").
+ *   El badge PRIVADO del header se quitó: la nota de abajo ya dice lo mismo y con
+ *   más claridad, así que el chip solo repetía.
  *   2 secciones STACKED y COLAPSABLES (tap en el chevron del header):
  *     1. Mis partidos completos   — cada uno con chip Privado/Público + "Crear highlight →"
  *     2. Mis highlights           — clips recortados con chip
@@ -76,7 +78,6 @@ export function MyLibraryScreen({
       <AppHeader
         title="Mi biblioteca"
         left={<Pressable onPress={onBack}><ChevronLeft size={22} color={colors.text}/></Pressable>}
-        right={<PrivateBadge colors={colors}/>}
       />
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: onChangeTab ? 160 : 96 }}>
@@ -94,10 +95,10 @@ export function MyLibraryScreen({
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text }}>
-              Solo vos ves esta sección
+              Solo tú puedes ingresar a esta sección
             </Text>
             <Text style={{ fontSize: 11, color: colors.muted2, lineHeight: 15 }}>
-              Tocá el chip de visibilidad para hacer público un item. {totalPublic} público{totalPublic === 1 ? '' : 's'} ahora.
+              Toca el chip de visibilidad para hacer público un ítem. {totalPublic} público{totalPublic === 1 ? '' : 's'} ahora.
             </Text>
           </View>
         </View>
@@ -192,18 +193,6 @@ export function MyLibraryScreen({
 }
 
 /* ───────────── Sub-components ───────────── */
-
-function PrivateBadge({ colors }: { colors: ReturnType<typeof useTheme>['colors'] }) {
-  return (
-    <View style={{
-      backgroundColor: colors.bg2, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6,
-    }}>
-      <Text style={{ fontSize: 10, fontWeight: '800', color: colors.muted2, letterSpacing: 0.6 }}>
-        PRIVADO
-      </Text>
-    </View>
-  );
-}
 
 function SectionHeader({ title, count, collapsed, onToggle }: {
   title: string; count: number; collapsed: boolean; onToggle: () => void;
