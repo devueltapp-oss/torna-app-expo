@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Send, Lock } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
-import { AppHeader, Avatar, MessageLikeButton } from '../components/ui';
+import { AppHeader, Avatar, MessageLikeButton, JumpToLatestButton } from '../components/ui';
 import { useAuth } from '../contexts/AuthContext';
 import { useGameChat } from '../hooks/useGameChat';
 import type { GameChatMessage } from '../api/games';
@@ -30,6 +30,12 @@ function timeLabel(iso: string): string {
  * Chat grupal de una partida, restringido a sus participantes. Historial por REST
  * (`useGameChat`) + polling corto mientras la pantalla está enfocada. Burbujas
  * alineadas: propias a la derecha (lima), ajenas a la izquierda (con avatar+nombre).
+ *
+ * ⚠️ La lista va **`inverted`** y recibe los mensajes al revés. No la cambies por una
+ * FlatList normal + `scrollToEnd`: sin `getItemLayout` (las burbujas son de alto
+ * variable) el scroll se calcula con alturas estimadas y termina **en el medio** del
+ * hilo, obligando a bajar a mano con cada mensaje. Invertida el último queda abajo
+ * por layout, sin scrollear.
  */
 export function GameChatScreen({ gameId, title, readOnly = false, onBack }: GameChatScreenProps) {
   const { colors } = useTheme();
@@ -41,18 +47,22 @@ export function GameChatScreen({ gameId, title, readOnly = false, onBack }: Game
   const { messages, loading, sending, send, toggleLike } = useGameChat(gameId, sender);
   const [text, setText] = React.useState('');
   const listRef = React.useRef<FlatList<GameChatMessage>>(null);
+  const [scrolledUp, setScrolledUp] = React.useState(false);
 
-  // Auto-scroll al final con cada mensaje nuevo.
-  React.useEffect(() => {
-    if (messages.length === 0) return;
-    const t = setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
-    return () => clearTimeout(t);
-  }, [messages.length]);
+  // La lista se dibuja `inverted`: el índice 0 es el mensaje MÁS NUEVO y queda
+  // abajo. El hook los entrega ascendentes, así que hay que darlos al revés.
+  const ordered = React.useMemo(() => [...messages].reverse(), [messages]);
+
+  /** En una lista invertida, "el final" (lo más nuevo) es el offset 0. */
+  const scrollToLatest = React.useCallback(() => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, []);
 
   async function handleSend() {
     const value = text.trim();
     if (!value || sending) return;
     setText('');
+    scrollToLatest(); // si estabas leyendo hacia arriba, tu propio mensaje te baja
     const ok = await send(value);
     if (!ok) setText(value); // restaurar si falló, para no perderlo
   }
@@ -73,29 +83,38 @@ export function GameChatScreen({ gameId, title, readOnly = false, onBack }: Game
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
             <ActivityIndicator size="large" color={colors.primary} />
           </View>
+        ) : messages.length === 0 ? (
+          // Estado vacío aparte de la lista: dentro de una `inverted` saldría
+          // dado vuelta (el contenedor lleva un scaleY(-1)).
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
+            <Text style={{ color: colors.muted2, fontSize: 13, textAlign: 'center', lineHeight: 19 }}>
+              Todavía no hay mensajes.{'\n'}Coordiná con tus compañeros de partido.
+            </Text>
+          </View>
         ) : (
-          <FlatList
-            ref={listRef}
-            data={messages}
-            keyExtractor={(m) => m.id}
-            contentContainerStyle={{ padding: 16, gap: 10, flexGrow: 1 }}
-            onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
-            ListEmptyComponent={
-              <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60, paddingHorizontal: 32 }}>
-                <Text style={{ color: colors.muted2, fontSize: 13, textAlign: 'center', lineHeight: 19 }}>
-                  Todavía no hay mensajes.{'\n'}Coordiná con tus compañeros de partido.
-                </Text>
-              </View>
-            }
-            renderItem={({ item }) => (
-              <MessageBubble
-                message={item}
-                isMine={item.senderId === user?.id}
-                colors={colors}
-                onToggleLike={toggleLike}
-              />
-            )}
-          />
+          <View style={{ flex: 1 }}>
+            <FlatList
+              ref={listRef}
+              data={ordered}
+              inverted
+              keyExtractor={(m) => m.id}
+              contentContainerStyle={{ padding: 16, gap: 10 }}
+              keyboardShouldPersistTaps="handled"
+              // Android recicla celdas con transform y las deja en blanco.
+              removeClippedSubviews={false}
+              scrollEventThrottle={32}
+              onScroll={(e) => setScrolledUp(e.nativeEvent.contentOffset.y > 240)}
+              renderItem={({ item }) => (
+                <MessageBubble
+                  message={item}
+                  isMine={item.senderId === user?.id}
+                  colors={colors}
+                  onToggleLike={toggleLike}
+                />
+              )}
+            />
+            {scrolledUp && <JumpToLatestButton onPress={scrollToLatest} />}
+          </View>
         )}
 
         {readOnly ? (

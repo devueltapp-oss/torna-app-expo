@@ -77,17 +77,17 @@ export function GameCommentsPanel({
         avatarFg: colors.accent,
       };
 
-  // Auto-scroll al final cuando entra un comentario nuevo (es un hilo tipo chat).
-  React.useEffect(() => {
-    if (comments.length === 0) return;
-    const t = setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
-    return () => clearTimeout(t);
-  }, [comments.length]);
+  // La lista va `inverted`: el más nuevo es el índice 0 y se dibuja abajo, así
+  // que el hilo queda pegado al último comentario sin scrollear a mano. El hook
+  // los entrega ascendentes → hay que darlos al revés.
+  const ordered = React.useMemo(() => [...comments].reverse(), [comments]);
 
   async function submit() {
     const value = text.trim();
     if (!value || sending) return;
     setText('');
+    // En una lista invertida "el final" (lo más nuevo) es el offset 0.
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
     const ok = await onSend(value);
     if (!ok) setText(value); // restaurar si falló, para no perderlo
   }
@@ -117,19 +117,25 @@ export function GameCommentsPanel({
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={colors.accent} />
         </View>
+      ) : comments.length === 0 ? (
+        // Fuera de la lista: dentro de una `inverted` el vacío saldría dado
+        // vuelta (el contenedor lleva un scaleY(-1)).
+        <View style={{ flex: 1, paddingTop: 16, paddingHorizontal: 16 }}>
+          <Text style={{ color: C.muted, fontSize: 13, textAlign: 'center', fontFamily: fonts.regular }}>
+            Sé el primero en comentar.
+          </Text>
+        </View>
       ) : (
         <FlatList
           ref={listRef}
-          data={comments}
+          data={ordered}
+          inverted
           keyExtractor={(c) => c.id}
-          contentContainerStyle={{ padding: 16, gap: overlay ? 12 : 20, flexGrow: 1 }}
+          contentContainerStyle={{ padding: 16, gap: overlay ? 12 : 20 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <Text style={{ color: C.muted, fontSize: 13, paddingTop: 16, textAlign: 'center', fontFamily: fonts.regular }}>
-              Sé el primero en comentar.
-            </Text>
-          }
+          // Android recicla celdas con transform y las deja en blanco.
+          removeClippedSubviews={false}
           renderItem={({ item }) => {
             const who = item.name || item.username || 'Anónimo';
             const size = overlay ? 28 : 34;

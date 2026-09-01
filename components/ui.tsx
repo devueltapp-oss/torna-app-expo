@@ -11,7 +11,7 @@ import {
   ViewStyle, StyleProp, Image,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { Heart, Bell } from 'lucide-react-native';
+import { Heart, Bell, ChevronDown } from 'lucide-react-native';
 import { useTheme } from '../theme';
 
 /* ─────────────────────────────  Button  ───────────────────────────── */
@@ -220,6 +220,35 @@ export function MessageLikeButton({
           {count}
         </Text>
       )}
+    </Pressable>
+  );
+}
+
+/* ─────────────────────────  Jump to latest  ─────────────────────────
+ * Botón flotante "bajar al último mensaje" de los chats. Las listas de chat
+ * están `inverted`, así que al abrirlas ya estás abajo; esto solo aparece si
+ * subiste a leer y querés volver (offset 0 en una invertida = lo más nuevo).
+ */
+
+export function JumpToLatestButton({ onPress }: { onPress: () => void }) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Ir al último mensaje"
+      testID="jump-to-latest"
+      style={{
+        position: 'absolute', right: 16, bottom: 12,
+        width: 38, height: 38, borderRadius: 19,
+        alignItems: 'center', justifyContent: 'center',
+        backgroundColor: colors.accent,
+        shadowColor: '#2d4c75', shadowOpacity: 0.24,
+        shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
+        elevation: 5,
+      }}
+    >
+      <ChevronDown size={20} color={colors.ink} strokeWidth={2.4} />
     </Pressable>
   );
 }

@@ -663,6 +663,32 @@ POST /chat/dm/:userId/read   → marcar el hilo como leído (limpia el badge del
   Desde el 2026-08-30 **cada mensaje deja además una fila en la campanita**, colapsada por
   conversación (una sola sin leer por chat) — ver abajo.
 
+#### Las listas de mensajes van `inverted` (2026-08-30)
+
+`GameChatScreen`, `DirectChatScreen` y `GameCommentsPanel` renderizan su `FlatList`
+con **`inverted`** y los datos **al revés** (`[...messages].reverse()`), de modo que el
+índice 0 —el más nuevo— se dibuja abajo.
+
+⚠️ **No las devuelvas a una FlatList normal con `scrollToEnd`.** Era lo que había y estaba
+roto: las burbujas son de alto variable y no hay `getItemLayout`, así que `scrollToEnd`
+(tanto el del `useEffect` por `messages.length` como el de `onContentSizeChange`) saltaba a
+un offset calculado con **alturas estimadas** y caía **en el medio** del hilo. Resultado: con
+cada mensaje propio o entrante había que bajar a mano. Invertida, el último mensaje queda
+abajo **por layout** y no hay ningún scroll que pueda fallar.
+
+Consecuencias a respetar si tocás estas pantallas:
+
+- **"El final" es `scrollToOffset({ offset: 0 })`**, no `scrollToEnd`. Se llama al enviar,
+  para bajar si estabas leyendo hacia arriba.
+- **El estado vacío va fuera de la lista**, no como `ListEmptyComponent`: el contenedor de
+  una invertida lleva un `scaleY(-1)` y saldría dado vuelta. Por eso `messages.length === 0`
+  es una rama aparte del render.
+- **`removeClippedSubviews={false}`** — Android recicla celdas con transform y las deja en
+  blanco.
+- Nada de `flexGrow: 1` en el `contentContainerStyle` (con pocos mensajes ya quedan abajo).
+- Si subís a leer, aparece **`<JumpToLatestButton/>`** (`components/ui.tsx`, flotante lima)
+  a partir de 240 px de scroll.
+
 #### Likes de mensajes (corazón)
 
 Los mensajes de **ambos** chats (grupal de partida y DM) se pueden likear.
