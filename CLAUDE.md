@@ -61,20 +61,33 @@ con flujo `Register → Pending → MainClub`.
   `@torna/theme-mode`.
 
 **Solo Player:**
-- Feed personal (`HomeScreen`) — **lo que hacen los demás**, en dos secciones:
-  - En vivo · de quienes seguís
-  - Highlights · de tus seguidos
-  > ⛔ **"Próximos" (partidas propias agendadas) se eliminó el 2026-09-02 y no se repone.**
-  > Quedaba al final del feed, así que para ver tu propia partida de esta tarde había que
-  > scrollear los highlights de otros; y era una copia de Juegos → "Mis partidas"
-  > (`GET /game/mine`), que además deja gestionarlas. El Inicio es el feed de los demás;
-  > tus partidas son un hub aparte. Con la sección se fueron sus props y el
-  > `UpcomingMatchSheet` local de `HomeScreen`.
+- `HomeScreen`, **en este orden**:
+  1. **"Tus próximas partidas"** — strip compacto (tiles de 132 px), **arriba de todo**
+  2. En vivo · de quienes seguís
+  3. Highlights · de tus seguidos
+
+  > ⚠️ **El orden es la feature.** Las partidas propias estaban al FINAL, en tiles de 220 px:
+  > había que bajar todo el Inicio —pasando por los highlights de otros— para saber cuándo
+  > jugabas, que es el dato que más se consulta. Arriba y chico. **No lo devuelvas abajo.**
   >
-  > ⚠️ Efecto colateral: **`ReelViewScreen` quedó inalcanzable** — su único punto de entrada
-  > era el "Ver todos" de esa sección (`setReelSection` ahora solo se llama con `null`). El
-  > componente sigue en el repo sin usarse: o se le da entrada desde En vivo/Highlights, o se
-  > borra.
+  > - Sale de **`myGames`** (`GET /game/mine`), la misma fuente que la pestaña Juegos, con las
+  >   `LIVE` filtradas (ya aparecen en "En vivo"). Antes había un `useUpcomingGames`
+  >   (`GET /game/:id/upcoming`) aparte: **se eliminó** — era un request extra en cada carga y
+  >   cada pull-to-refresh para pintar lo mismo, y dos fuentes que podían discrepar.
+  > - La tile muestra solo **cuándo y dónde**; el resto está a **un toque** (antes era doble
+  >   toque, un gesto que nadie descubre), en la misma hoja de Juegos → Mis partidas.
+  > - Sin partidas **no renderiza nada**: un hueco fijo arriba le cobraría espacio a quien no
+  >   tiene ninguna. Y queda **fuera** del `if` del feed vacío — ese estado habla del feed.
+  > - `HomeScreen` **no tiene `UpcomingMatchSheet` propio**: delega en `onOpenUpcoming`. La
+  >   copia local que había arrastraba media docena de props (`invitablePlayers`,
+  >   `suggestedPartners`, `onSearchPartner`, `onAccept/RejectApplication`…) que el Inicio no
+  >   usa para nada más.
+  > - Cubierto por `screens/__tests__/HomeUpcomingStrip.test.tsx`, que fija **la posición**
+  >   además del contenido.
+  >
+  > ⚠️ **`ReelViewScreen` quedó inalcanzable**: su único punto de entrada era el "Ver todos"
+  > de la sección vieja (`setReelSection` hoy solo se llama con `null`). Sigue en el repo sin
+  > usarse — o se le da entrada desde En vivo/Highlights, o se borra.
 - `ClubProfilePlayerView` — perfil público del club: highlights (live +
   clips), canchas grid 2×2 con CTA Reservar, próximos partidos públicos,
   members, fotos, info + mini-mapa.

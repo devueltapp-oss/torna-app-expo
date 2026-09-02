@@ -50,7 +50,7 @@ import { UpcomingMatchSheet } from './components/UpcomingMatchSheet';
 import { useLiveGames } from './hooks/useLiveGames';
 import { useOpenGames } from './hooks/useOpenGames';
 import { useMyGames } from './hooks/useMyGames';
-import { useUpcomingGames } from './hooks/useUpcomingGames';
+
 import { useClubGames } from './hooks/useClubGames';
 import { useFeed } from './hooks/useFeed';
 import { usePlayerMatches } from './hooks/usePlayerMatches';
@@ -841,6 +841,20 @@ function MainPlayer({ navigation, route }: any) {
   const [myGameSheet, setMyGameSheet] = React.useState<UpcomingGameData | null>(null);
 
   /**
+   * Lo que muestra el strip "Tus próximas partidas" del Inicio.
+   *
+   * Derivado de `myGames` y no de un hook aparte: es la misma lista que la
+   * pestaña Juegos, así que las dos pantallas no pueden mostrar cosas distintas
+   * y no hay un segundo request. Se sacan las **LIVE** porque una partida en
+   * curso no es "próxima" y además ya aparece en "En vivo" (el endpoint de lives
+   * incluye las propias).
+   */
+  const proximas = React.useMemo(
+    () => myGames.filter((g) => g.status !== 'LIVE'),
+    [myGames],
+  );
+
+  /**
    * Invitar gente a una partida ya creada. El id se guarda aparte del sheet
    * porque la hoja de la partida se cierra al abrir la de invitar (dos Modals
    * apilados son frágiles en iOS).
@@ -864,8 +878,11 @@ function MainPlayer({ navigation, route }: any) {
   // Directorio de jugadores reales (GET /user/players).
   const { players: playerList, refresh: refreshPlayers } = usePlayers();
 
-  // Próximas partidas propias (GET /game/:id/upcoming) → carrusel "Próximos".
-  const { upcomingGames, refresh: refreshUpcoming } = useUpcomingGames(user?.id);
+  // ⚠️ Acá estaba `useUpcomingGames` (GET /game/:id/upcoming). Se eliminó: el
+  // strip "Tus próximas partidas" sale de `myGames` (ver `proximas` abajo), que
+  // es la misma lista de la pestaña Juegos y trae más datos. Mantener las dos
+  // fuentes significaba un request extra en cada carga y en cada pull-to-refresh
+  // para pintar lo mismo — y dos pantallas que podían discrepar.
 
   // Feed social: highlights de seguidos (GET /highlights/feed) → "Highlights · de tus seguidos".
   const { feed: feedPosts, refresh: refreshFeed } = useFeed(user?.id);
@@ -927,7 +944,6 @@ function MainPlayer({ navigation, route }: any) {
       refreshLive(),
       refreshOpen(),
       refreshMyGames(),
-      refreshUpcoming(),
       refreshFeed(),
       refreshMatches(),
       refreshPlayers(),
@@ -938,7 +954,7 @@ function MainPlayer({ navigation, route }: any) {
       new Promise<void>((r) => setTimeout(r, 800)),
     ]);
     setRefreshing(false);
-  }, [refreshLive, refreshOpen, refreshMyGames, refreshUpcoming, refreshFeed, refreshMatches, refreshPlayers, refreshOwnProfile, refreshHighlights, refreshInbox, refreshNotificationBadge]);
+  }, [refreshLive, refreshOpen, refreshMyGames, refreshFeed, refreshMatches, refreshPlayers, refreshOwnProfile, refreshHighlights, refreshInbox, refreshNotificationBadge]);
 
   // Acciones de gestión de "Mis partidas" (cierran el sheet y refrescan la lista).
   // Si el backend rechaza (p. ej. estado inválido), avisamos en vez de fallar en silencio.
@@ -1047,7 +1063,7 @@ function MainPlayer({ navigation, route }: any) {
             <ReelViewScreen
               section={reelSection}
               liveGames={liveGames}
-              upcomingGames={upcomingGames}
+              upcomingGames={proximas}
               feedPosts={feedPosts}
               onBack={() => setReelSection(null)}
               onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id, liveStreamUrl: liveGames.find(g => g.id === id)?.streamUrl })}
@@ -1061,6 +1077,12 @@ function MainPlayer({ navigation, route }: any) {
           <HomeScreen
             greeting={user?.name ?? user?.username ?? ''}
             liveGames={liveGames}
+            /* Sale de `myGames` (GET /game/mine), la MISMA fuente que la pestaña
+               Juegos: así el Inicio y "Mis partidas" nunca discrepan y no cuesta
+               un request extra. Se filtran las LIVE porque esas ya aparecen en
+               "En vivo" (el endpoint de lives incluye las propias). */
+            upcomingGames={proximas}
+            onOpenUpcoming={(g) => setMyGameSheet(g)}
             feedPosts={feedPosts}
             activeTab="home" onChangeTab={handleTab}
             onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id, liveStreamUrl: liveGames.find(g => g.id === id)?.streamUrl })}
