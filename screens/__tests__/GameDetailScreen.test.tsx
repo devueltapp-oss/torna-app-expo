@@ -12,7 +12,7 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme';
-import { GameDetailScreen, GameDetailData } from '../GameDetailScreen';
+import { GameDetailScreen, GameDetailData, MIN_VIEWERS_TO_SHOW } from '../GameDetailScreen';
 
 jest.mock('expo-screen-orientation', () => ({
   lockAsync: jest.fn(async () => undefined),
@@ -25,6 +25,13 @@ jest.mock('../../contexts/AuthContext', () => ({
 
 // ⚠️ El prefijo `mock` es lo que deja usarla dentro del factory: `jest.mock` se hoistea
 // arriba de todo y una variable sin ese prefijo da "out-of-scope variable".
+// Espectadores conectados: el hook real pinguea al backend cada 30s. Acá se controla
+// el valor a mano — `null` = el backend no puede saberlo (sin Redis).
+let mockViewers: number | null = null;
+jest.mock('../../hooks/useViewerPing', () => ({
+  useViewerPing: () => mockViewers,
+}));
+
 const mockSend = jest.fn(async () => true);
 jest.mock('../../hooks/useGameComments', () => ({
   useGameComments: () => ({
@@ -184,5 +191,39 @@ describe('GameDetailScreen — comentar desde pantalla completa (landscape)', ()
     // …con el panel de comentarios abierto y un input de verdad.
     expect(getByPlaceholderText('Escribe un comentario...')).toBeTruthy();
     expect(queryByTestId('compose-in-portrait')).toBeNull();
+  });
+});
+
+/**
+ * Contador de espectadores. La regla que se fija acá es la que evita repetir el
+ * problema anterior: **no se inventa un número**. Si el backend no puede saberlo
+ * (sin Redis → null) o hay muy poca gente, no se muestra nada.
+ */
+describe('GameDetailScreen — espectadores conectados', () => {
+  afterEach(() => { mockViewers = null; });
+
+  it('no muestra nada si el backend no puede saberlo (null)', () => {
+    mockViewers = null;
+    const { queryByTestId } = renderScreen();
+    expect(queryByTestId('viewer-count')).toBeNull();
+  });
+
+  it('no muestra el número por debajo del umbral', () => {
+    mockViewers = MIN_VIEWERS_TO_SHOW - 1;
+    const { queryByTestId } = renderScreen();
+    expect(queryByTestId('viewer-count')).toBeNull();
+  });
+
+  it('lo muestra a partir del umbral', () => {
+    mockViewers = MIN_VIEWERS_TO_SHOW;
+    const { getByTestId, getByText } = renderScreen();
+    expect(getByTestId('viewer-count')).toBeTruthy();
+    expect(getByText(String(MIN_VIEWERS_TO_SHOW))).toBeTruthy();
+  });
+
+  it('cero no se muestra (es el caso que más engañaba antes)', () => {
+    mockViewers = 0;
+    const { queryByTestId } = renderScreen();
+    expect(queryByTestId('viewer-count')).toBeNull();
   });
 });

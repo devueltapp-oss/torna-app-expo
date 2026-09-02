@@ -276,6 +276,17 @@ export function markGameChatRead(gameId: string): Promise<void> {
 }
 
 /**
+ * Latido del espectador (POST /game/:id/viewer-ping): "sigo mirando".
+ *
+ * Devuelve el conteo en la MISMA respuesta, así mostrarlo no cuesta un request
+ * extra. `viewers: null` = el backend no puede saberlo (sin Redis o Redis caído);
+ * en ese caso la app no muestra nada — un 0 inventado sería peor.
+ */
+export function pingViewer(gameId: string): Promise<{ viewers: number | null }> {
+  return authedSend('POST', `/game/${encodeURIComponent(gameId)}/viewer-ping`);
+}
+
+/**
  * Borra el chat de la partida **solo para mí** (DELETE /game/:id/chat).
  *
  * No borra ningún mensaje: el resto de los participantes siguen viendo el hilo

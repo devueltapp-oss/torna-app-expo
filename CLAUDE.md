@@ -217,39 +217,44 @@ ClubTodayReservation {
 }
 ```
 
-### ⛔ Espectadores: no se muestran (2026-09-01)
+### Espectadores conectados (`useViewerPing`, 2026-09-01)
 
-**No hay forma de saber cuánta gente está mirando una partida, así que no se muestra
-ningún número.** El backend no tiene columna de viewers y nunca la tuvo: la app lo seteaba
-a `0` a mano en cada mapper y lo pintaba igual, así que el visor decía "· 0 viewers" con un
-ojo al lado. Peor: el home de club renderizaba un `DEFAULT_STATS` inventado (65 espectadores,
-+18 vs ayer, 2 en vivo de 8 canchas, 3 a cobrar) porque `App.tsx` no le pasaba `stats`.
+El contador vive **solo en el visor** (`GameDetailScreen`) y solo con la partida **EN
+VIVO**. Sale de un latido cada 30 s contra `POST /game/:id/viewer-ping`, que guarda la
+presencia en Redis y **devuelve el conteo en la misma respuesta** — mostrarlo no cuesta un
+request extra.
 
-Se quitó de las 9 superficies (`GameDetailScreen`, `LiveGameCard`/`LiveGameTile`/`CourtCard`
-en `components/cards.tsx`, `ReelViewScreen`, los dos perfiles públicos y la fila de KPI del
-club) **y del tipo**, para que nadie lo reponga con un cero. También se borraron `StatCard`
-y `DEFAULT_STATS`.
+- **Cuenta personas, no conexiones**: el backend usa el UID como miembro del sorted set,
+  así que la misma cuenta en dos dispositivos cuenta 1.
+- `useViewerPing(gameId, enabled)` late con la pantalla **enfocada** y la app en **primer
+  plano**, y late **al montar** (si no, entrar y salir a los 20 s no contaría nunca). Al
+  cerrar la app dejás de latir y salís del conteo solo a los 90 s.
+- ⚠️ `PING_MS` (30 s) está atado a la ventana del backend (`PresenceService.WINDOW_MS`,
+  90 s = 3×). Si lo subís acá sin subirla allá, la gente se cae del conteo entre latidos.
+- **`viewers === null` = no se puede saber** (sin Redis o Redis caído) → no se muestra
+  nada. Nunca un `0`: un cero inventado es exactamente el problema que había antes.
+- **`MIN_VIEWERS_TO_SHOW = 3`** (exportado de `GameDetailScreen`): por debajo del umbral
+  el badge no aparece. "1 espectador" comunica peor que no decir nada. Bajarlo a 1 es
+  cambiar ese número y nada más.
+
+#### De dónde viene esto (por qué NO está en las otras 8 superficies)
+
+Hasta el 2026-09-01 la app mostraba "N espectadores" en nueve lugares y **el número no
+existía**: el backend no tenía columna de viewers, así que cada mapper lo seteaba a `0` a
+mano y la UI lo pintaba igual. El home de club era peor: renderizaba un `DEFAULT_STATS`
+inventado (65 espectadores, +18 vs ayer, 2 en vivo de 8 canchas, 3 a cobrar) porque
+`App.tsx` nunca le pasó `stats`.
+
+Se sacó de todas y del tipo; después volvió **solo al visor**, con dato real detrás. No lo
+repongas en cards, reel ni perfiles: ahí no hay latido y volvería a ser un cero.
 
 ⚠️ **`GameWatch` no es esto.** `watchGame`/`unwatchGame` es "avisame de este partido" y
-alimenta las notificaciones: gente **interesada**, no **conectada**. No la uses como
-contador de audiencia.
+alimenta las notificaciones: gente **interesada**, no **conectada**.
 
-**Si alguna vez se mide de verdad**, el diseño evaluado es un heartbeat, no un WebSocket:
-
-```
-visor abierto y en foreground ──POST /game/:id/heartbeat cada 40s──► backend
-                              ◄──── { viewers: N } en la MISMA respuesta
-```
-
-- Tabla `GameViewer(gameId, userId, lastSeenAt)` con `@@id([gameId, userId])`; el `userId`
-  sale del token. "En línea" = `lastSeenAt > now - 90s` (~2.25× el intervalo: tolera un
-  latido perdido sin parpadeo).
-- **El conteo viaja en la respuesta del propio heartbeat** — mostrarlo cuesta cero requests
-  extra. Con un poll aparte sería el doble de tráfico.
-- Gate `useIsFocused()` + `AppState === 'active'`, igual que `useGameComments`.
-- Sin scheduler en el backend (ver `prune:notifications`): la limpieza va por comando.
-- Mostrar **solo el conteo**, no avatares: exponer quién está mirando es un dato de
-  actividad personal y necesitaría opt-out explícito.
+⚠️ **El contador de Wowza tampoco sirve.** El panel expone `connections` en
+`POST /controller/MediaService/serviceInfo/<id>`, pero cuenta **conexiones HTTP**: medido el
+2026-09-01, seis clientes marcaban **76**, con un piso de 2-4 sin nadie mirando. Además la
+auth es una cookie de sesión de navegador, no una API key.
 
 **Reglas de negocio que el frontend respeta:**
 

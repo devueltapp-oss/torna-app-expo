@@ -38,7 +38,7 @@ import { Svg, Rect, Line } from 'react-native-svg';
 import { Video, ResizeMode } from 'expo-av';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import {
-  ChevronLeft, MoreHorizontal, Scissors,
+  ChevronLeft, MoreHorizontal, Scissors, Eye,
   Maximize2, Minimize2, MessageCircle, X,
 } from 'lucide-react-native';
 import { useTheme } from '../theme';
@@ -47,7 +47,17 @@ import { Avatar, AvatarStack, Button, StatusBadge, HostBadge, CategoryBadge } fr
 import { MatchParticipant, CameraAngleData } from '../components/cards';
 import { GameCommentsPanel } from '../components/GameCommentsPanel';
 import { useGameComments } from '../hooks/useGameComments';
+import { useViewerPing } from '../hooks/useViewerPing';
 import { useAuth } from '../contexts/AuthContext';
+
+/**
+ * A partir de cuántos espectadores se muestra el número.
+ *
+ * No es un detalle estético: "1 espectador" comunica peor que no decir nada, tanto al
+ * jugador como al club. Por debajo del umbral el badge no aparece — no se miente, se
+ * calla. Bajarlo a 1 es cambiar este número y nada más.
+ */
+export const MIN_VIEWERS_TO_SHOW = 3;
 
 const tornaLogo = require('../assets/torna-icon.png');
 
@@ -109,6 +119,11 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
     enabled: !!game.id,
     author,
   });
+
+  // Espectadores conectados. Solo tiene sentido con la partida EN VIVO: en una
+  // grabación no hay "gente mirando ahora" que contar.
+  const viewers = useViewerPing(game.id, !!game.id && game.isLive);
+  const showViewers = viewers !== null && viewers >= MIN_VIEWERS_TO_SHOW;
 
   // Reutiliza la URL ya validada por la preview del Home (GET /game/live) si la cámara
   // activa del detalle (GET /game/:id) todavía no trae stream o el fetch falló.
@@ -271,6 +286,22 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
           <Text style={{ position: 'absolute', bottom: 10, left: 12, fontSize: 11, color: colors.accent, fontWeight: '600' }}>
             HLS · 1080p · {activeCam?.label}
           </Text>
+
+          {/* Espectadores conectados. Solo aparece si hay Redis (viewers !== null) y
+              si el número llega al umbral: por debajo se calla, no se inventa. */}
+          {showViewers && (
+            <View
+              testID="viewer-count"
+              style={{
+                position: 'absolute', bottom: 10, right: 12,
+                flexDirection: 'row', alignItems: 'center', gap: 4,
+              }}
+            >
+              <Eye size={14} color="#FFFFFF" />
+              <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '600' }}>{viewers}</Text>
+            </View>
+          )}
+
           {/* Controles superpuestos: jugadores + comentarios + expandir/contraer */}
           <View style={{
             position: 'absolute', top: 10, right: 10, zIndex: 10,
