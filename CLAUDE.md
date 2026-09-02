@@ -670,6 +670,13 @@ porque el admin puede entrar por cualquiera de los dos y el dato tiene que queda
 La lista vive en `UpcomingMatchSheet` → sección **"Postulados"**, y **solo la ve el
 organizador** (`game.isCreator`).
 
+- **Badge en la card de "Mis partidas"** (`MyGameCard`, testID `pending-applications-badge`):
+  "N postulados" en lima sólida. Sin él había que abrir las partidas **una por una** para
+  descubrir quién esperaba — y el organizador es justo el que tiene que contestar rápido,
+  porque el rival sin respuesta se va a otra partida. **No cuesta un request**: `applications`
+  ya viaja en `GET /game/mine`. Solo al organizador (nadie más puede aceptar/rechazar) y solo
+  con `status === 'PENDING'`. Cubierto por `screens/__tests__/GamesScreenPendingBadge.test.tsx`.
+
 - Cada postulante —y el compañero, si se postuló en pareja— es **tocable y abre su perfil**
   (`onOpenPlayerProfile`), y muestra su **nivel** (`CategoryBadge`). Decidir a quién metés
   en tu partida mirando un nombre y un avatar de 36px no es decidir; por eso

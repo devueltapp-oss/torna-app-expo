@@ -197,6 +197,19 @@ function MyGameCard({
     ? `${count}/${max} · busca jugadores`
     : `${count}/${max} jugadores`;
 
+  /**
+   * Postulados esperando respuesta. **Solo se muestra al organizador**: es el
+   * único que puede aceptar o rechazar, así que a los demás sería ruido.
+   *
+   * El dato ya viaja en `GET /game/mine` — no cuesta un request. Sin este badge
+   * había que abrir las partidas una por una para descubrir quién esperaba, y el
+   * organizador es justo el que tiene que responder rápido: el rival que no
+   * recibe respuesta se va a otra partida.
+   */
+  const pending = game.isCreator
+    ? (game.applications ?? []).filter((a) => a.status === 'PENDING').length
+    : 0;
+
   return (
     <Pressable
       onPress={onPress}
@@ -227,9 +240,28 @@ function MyGameCard({
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 }}>
           <Users size={12} color={colors.muted2} />
-          <Text style={{ color: colors.muted2, fontSize: 12 }} numberOfLines={1}>
+          {/* `flexShrink: 1` por el mismo motivo que el título de arriba: sin esto
+              el texto conserva su ancho medido y empuja el badge fuera de la fila. */}
+          <Text style={{ color: colors.muted2, fontSize: 12, flexShrink: 1 }} numberOfLines={1}>
             {[game.date, subtitle].filter(Boolean).join(' · ')}
           </Text>
+          {pending > 0 && (
+            <View
+              testID="pending-applications-badge"
+              style={{
+                // Lima SÓLIDA con texto `ink`, no el par translúcido de
+                // `ORGANIZÁS`: esto no es una etiqueta descriptiva, es algo que
+                // hay que responder. El lima es el color de acción de la marca.
+                flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0,
+                backgroundColor: colors.accent, borderRadius: 8,
+                paddingHorizontal: 7, paddingVertical: 2,
+              }}
+            >
+              <Text style={{ fontSize: 10, fontWeight: '800', color: colors.ink }}>
+                {pending} {pending === 1 ? 'postulado' : 'postulados'}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
       <StatusBadge status={game.status === 'LIVE' ? 'LIVE' : 'SCHEDULED'} />
