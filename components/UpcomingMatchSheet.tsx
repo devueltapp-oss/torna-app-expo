@@ -1,6 +1,6 @@
 import React from 'react';
 import { Modal, View, Text, Pressable, Image, ScrollView, Alert } from 'react-native';
-import { Bell, Check, ChevronRight, MessageCircle, X } from 'lucide-react-native';
+import { Bell, Check, ChevronRight, MessageCircle, UserPlus, X } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { Avatar, Button, CategoryBadge, HostBadge, StatusBadge } from './ui';
@@ -26,6 +26,12 @@ export interface UpcomingMatchSheetProps {
   onCancelGame?: (gameId: string) => void;
   /** (Miembro no owner) Darse de baja. */
   onLeaveGame?: (gameId: string) => void;
+  /**
+   * Invitar gente a esta partida. Disponible para **cualquier participante**, no
+   * solo el host: la partida es de los cuatro, y esperar a que el organizador
+   * invite es lo que deja lugares vacíos.
+   */
+  onInvite?: (gameId: string) => void;
   /** (Pareja retadora — equipo 2) Cancelar la pareja. */
   onCancelPair?: (gameId: string) => void;
 }
@@ -44,6 +50,7 @@ export function UpcomingMatchSheet({
   onCancelGame,
   onLeaveGame,
   onCancelPair,
+  onInvite,
 }: UpcomingMatchSheetProps) {
   const { colors } = useTheme();
   const [watching, setWatching] = React.useState(false);
@@ -165,6 +172,7 @@ export function UpcomingMatchSheet({
               onCancelGame={handleCancelGame}
               onLeaveGame={handleLeaveGame}
               onCancelPair={handleCancelPair}
+              onInvite={onInvite}
             />
           )}
         </Pressable>
@@ -201,13 +209,14 @@ interface SheetContentProps {
   onCancelGame?: () => void;
   onLeaveGame?: () => void;
   onCancelPair?: () => void;
+  onInvite?: (gameId: string) => void;
 }
 
 function SheetContent({
   game, colors, hasApplied, isWatching, watching, pendingApplications,
   onOpenApply, onWatch, onOpenChat, onOpenPlayerProfile,
   onAcceptApplication, onRejectApplication,
-  onCancelGame, onLeaveGame, onCancelPair,
+  onCancelGame, onLeaveGame, onCancelPair, onInvite,
 }: SheetContentProps) {
   const emptySlots = (game.maxPlayers ?? 4) - game.players.length;
   const isParticipant = !!game.viewerIsParticipant;
@@ -349,6 +358,35 @@ function SheetContent({
           <Button variant="primary" fullWidth onPress={onOpenApply}>
             Postularme
           </Button>
+        )}
+
+        {/*
+          Invitar gente a una partida YA creada.
+          **Cualquier participante, no solo el host**: la partida es de los
+          cuatro, y esperar a que el organizador invite es lo que deja lugares
+          vacíos. Mientras más gente la reciba, más postulaciones llegan — que es
+          justamente el punto de una partida abierta.
+
+          No se muestra en partidas terminadas ni canceladas: invitar a algo que
+          ya pasó no tiene sentido.
+        */}
+        {isParticipant && onInvite &&
+          game.status !== 'FINISHED' && game.status !== 'CANCELLED' && (
+          <Pressable
+            onPress={() => onInvite(game.id)}
+            testID="invite-to-game"
+            style={({ pressed }) => ({
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+              paddingVertical: 12, borderRadius: 12,
+              backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line,
+              opacity: pressed ? 0.85 : 1,
+            })}
+          >
+            <UserPlus size={18} color={colors.text} />
+            <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: colors.text }}>
+              Invitar jugadores
+            </Text>
+          </Pressable>
         )}
 
         {/* Chat de la partida: solo participantes. Solo-lectura si ya finalizó/canceló. */}

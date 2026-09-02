@@ -61,10 +61,20 @@ con flujo `Register → Pending → MainClub`.
   `@torna/theme-mode`.
 
 **Solo Player:**
-- Feed personal (`HomeScreen`) con 3 carouseles horizontales:
-  - En vivo · de quienes seguís (tiles compactos 180px)
-  - Próximos · de tus seguidos (tiles 220px con badge "Sigues a @x")
-  - Highlights · de tus seguidos (tiles 200px con FeedPost: foto o clip)
+- Feed personal (`HomeScreen`) — **lo que hacen los demás**, en dos secciones:
+  - En vivo · de quienes seguís
+  - Highlights · de tus seguidos
+  > ⛔ **"Próximos" (partidas propias agendadas) se eliminó el 2026-09-02 y no se repone.**
+  > Quedaba al final del feed, así que para ver tu propia partida de esta tarde había que
+  > scrollear los highlights de otros; y era una copia de Juegos → "Mis partidas"
+  > (`GET /game/mine`), que además deja gestionarlas. El Inicio es el feed de los demás;
+  > tus partidas son un hub aparte. Con la sección se fueron sus props y el
+  > `UpcomingMatchSheet` local de `HomeScreen`.
+  >
+  > ⚠️ Efecto colateral: **`ReelViewScreen` quedó inalcanzable** — su único punto de entrada
+  > era el "Ver todos" de esa sección (`setReelSection` ahora solo se llama con `null`). El
+  > componente sigue en el repo sin usarse: o se le da entrada desde En vivo/Highlights, o se
+  > borra.
 - `ClubProfilePlayerView` — perfil público del club: highlights (live +
   clips), canchas grid 2×2 con CTA Reservar, próximos partidos públicos,
   members, fotos, info + mini-mapa.
@@ -828,6 +838,19 @@ video) y un botón de **tres puntos que no hacía nada**.
 - El contador de espectadores va **pegado a los avatares**: "quiénes" y "cuántos" son la
   misma pregunta.
 - Se quitó el texto `HLS · 1080p · CAM`: era ruido técnico y duplicaba el chip de cámara.
+
+#### Invitar a una partida YA creada — cualquier participante
+
+`UpcomingMatchSheet` → botón **"Invitar jugadores"** (`onInvite`, testID `invite-to-game`),
+cableado en `MainPlayer` a un `ShareGameSheet` con búsqueda.
+
+- ⚠️ **Lo ve cualquier participante, no solo el host.** La partida es de los cuatro, y
+  esperar a que el organizador invite es lo que deja lugares vacíos: cuanta más gente
+  reciba la invitación, más postulaciones llegan.
+- No aparece en partidas `FINISHED`/`CANCELLED`: invitar a algo que ya pasó no tiene sentido.
+- **La hoja de la partida se cierra antes de abrir la de invitar**: dos `Modal` apilados son
+  frágiles en iOS.
+- Cubierto por `components/__tests__/UpcomingMatchSheet.test.tsx`.
 
 #### Invitar a jugar desde la reserva confirmada (2026-09-02)
 

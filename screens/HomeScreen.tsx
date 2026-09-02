@@ -5,12 +5,10 @@ import { useIsFocused } from '@react-navigation/native';
 import { Search } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { SectionHeader, NotificationBell } from '../components/ui';
-import { LiveGameCard, FeedPost, LiveGameData, UpcomingGameTile } from '../components/cards';
+import { LiveGameCard, FeedPost, LiveGameData } from '../components/cards';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import { VideoPreviewModal } from '../components/VideoPreviewModal';
-import { UpcomingMatchSheet } from '../components/UpcomingMatchSheet';
-import type { FeedPost as FeedPostData, InvitablePlayer, UpcomingGameData, UpcomingGamePlayer } from '../data/types';
-import type { ReelSection } from './ReelViewScreen';
+import type { FeedPost as FeedPostData, UpcomingGamePlayer, UpcomingGameData } from '../data/types';
 
 const tornaLogo = require('../assets/torna-icon.png');
 
@@ -19,64 +17,52 @@ export type { UpcomingGamePlayer, UpcomingGameData } from '../data/types';
 interface Props {
   greeting?: string;
   liveGames: LiveGameData[];
-  upcomingGames?: UpcomingGameData[];
   feedPosts?: FeedPostData[];
   onOpenGame?: (id: string) => void;
   onOpenSearch?: () => void;
   onChangeTab?: (id: TabId) => void;
   activeTab?: TabId;
-  onVerMas?: (section: ReelSection, initialIndex?: number) => void;
   refreshing: boolean;
   onRefresh: () => void;
-  onOpenPlayerProfile?: (playerId: string) => void;
-  invitablePlayers?: InvitablePlayer[];
-  /** Sugerencias por defecto al buscar compañero: gente que seguís / te sigue. */
-  suggestedPartners?: InvitablePlayer[];
-  /** Búsqueda real de compañero (GET /user/search) rankeada con conexiones primero. */
-  onSearchPartner?: (q: string) => Promise<InvitablePlayer[]>;
-  /** Abre el chat de la partida (solo participantes). */
-  onOpenChat?: (gameId: string, title?: string, readOnly?: boolean) => void;
-  onAcceptApplication?: (gameId: string, appId: string) => void;
-  onRejectApplication?: (gameId: string, appId: string) => void;
   /** No leídos de la campanita (GET /notification/unread-count). */
   unreadNotifications?: number;
   onOpenNotifications?: () => void;
 }
 
 /**
- * Player feed home. Shows:
- *   1. "En vivo · de quienes seguís" — horizontal carousel of LiveGameTile.
- *   2. "Próximos · de tus seguidos" — horizontal carousel of upcoming game tiles.
- *   3. "Highlights · de tus seguidos" — horizontal carousel of FeedPost.
+ * Player feed home — **lo que hacen los demás**:
+ *   1. "En vivo · de quienes seguís"
+ *   2. "Highlights · de tus seguidos"
+ *
+ * ⚠️ **Las partidas propias NO van acá** (2026-09-02). Había una sección
+ * "Próximos" al final del feed: para ver tu propia partida de esta tarde había
+ * que scrollear los highlights de otros primero, y era una copia de
+ * Juegos → "Mis partidas", que además deja gestionarlas. Tus partidas son un hub
+ * aparte; mezclarlas con el feed era lo que las enterraba.
+ *
+ * Con esa sección se fueron sus props (`upcomingGames`, `invitablePlayers`,
+ * `suggestedPartners`, `onSearchPartner`, `onOpenChat`, `onAccept/RejectApplication`,
+ * `onOpenPlayerProfile`, `onVerMas`) y el `UpcomingMatchSheet` local: solo
+ * alimentaban ese carrusel y la hoja que abría su doble tap.
  *
  * The Club admin home is NOT here — it lives in `ClubHomeScreen`.
  */
 export function HomeScreen({
   greeting = 'Maxi',
   liveGames,
-  upcomingGames = [],
   feedPosts = [],
   onOpenGame,
   onOpenSearch,
   onChangeTab,
   activeTab = 'home',
-  onVerMas,
   refreshing,
   onRefresh,
-  onOpenPlayerProfile,
-  invitablePlayers = [],
-  suggestedPartners,
-  onSearchPartner,
-  onOpenChat,
-  onAcceptApplication,
-  onRejectApplication,
   unreadNotifications = 0,
   onOpenNotifications,
 }: Props) {
   const { colors } = useTheme();
   const isFocused = useIsFocused();
   const [highlightModal, setHighlightModal] = React.useState<{ url: string; title: string; id: string } | null>(null);
-  const [upcomingSheet, setUpcomingSheet] = React.useState<UpcomingGameData | null>(null);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
@@ -110,7 +96,10 @@ export function HomeScreen({
       >
         {/* Feed vertical (scroll hacia abajo): transmisiones en vivo + highlights
             de quienes seguís, como cards a lo ancho. */}
-        {liveGames.length === 0 && feedPosts.length === 0 && upcomingGames.length === 0 ? (
+        {/* ⚠️ Sin `upcomingGames` en la condición: al sacar esa sección, dejarlo
+            acá haría que alguien con partidas agendadas y sin live ni highlights
+            no viera **ni el contenido ni el estado vacío** — una pantalla en blanco. */}
+        {liveGames.length === 0 && feedPosts.length === 0 ? (
           <View style={{ alignItems: 'center', paddingHorizontal: 32, paddingVertical: 56, gap: 8 }}>
             <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text }}>Tu feed está vacío</Text>
             <Text style={{ fontSize: 13, color: colors.muted2, textAlign: 'center', lineHeight: 19 }}>
@@ -133,25 +122,20 @@ export function HomeScreen({
               </>
             )}
 
-            {/* Próximos · de tus seguidos — strip horizontal (secundario) */}
-            {upcomingGames.length > 0 && (
-              <>
-                <View style={{ paddingHorizontal: 16 }}>
-                  <SectionHeader title="Próximos · de tus seguidos"
-                    action={
-                      <Pressable onPress={() => onVerMas?.('upcoming')} hitSlop={10}>
-                        <Text style={{ fontSize: 11, fontWeight: '700', color: colors.accentText }}>Ver todos</Text>
-                      </Pressable>
-                    }/>
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}>
-                  {upcomingGames.map(g => (
-                    <UpcomingGameTile key={g.id} game={g} onDoubleTap={() => setUpcomingSheet(g)} />
-                  ))}
-                </ScrollView>
-              </>
-            )}
+            {/*
+              ⚠️ Acá vivía "Próximos", un carrusel con las partidas propias
+              agendadas. **Se eliminó el 2026-09-02 y no hay que reponerlo.**
+
+              Quedaba al final del feed, así que solo aparecía después de bajar
+              todo el Inicio — o sea que para ver tu propia partida de esta tarde
+              tenías que scrollear los highlights de otros. Y era una copia: las
+              mismas partidas ya están en **Juegos → "Mis partidas"**
+              (`GET /game/mine` devuelve SCHEDULED/WAITING/LIVE del usuario),
+              que además deja gestionarlas y ver los postulados.
+
+              El Inicio es el feed de lo que hacen los demás; tus partidas son un
+              hub aparte. Mezclarlos era lo que enterraba lo tuyo.
+            */}
 
             {/* Highlights · de tus seguidos — cards a lo ancho, apiladas */}
             {feedPosts.length > 0 && (
@@ -179,18 +163,9 @@ export function HomeScreen({
 
       {onChangeTab && <BottomTabBar active={activeTab} onChange={onChangeTab} role="player"/>}
 
-      <UpcomingMatchSheet
-        visible={upcomingSheet !== null}
-        game={upcomingSheet}
-        invitablePlayers={invitablePlayers}
-        suggestedPartners={suggestedPartners}
-        onSearchPartner={onSearchPartner}
-        onOpenChat={onOpenChat}
-        onClose={() => setUpcomingSheet(null)}
-        onOpenPlayerProfile={onOpenPlayerProfile}
-        onAcceptApplication={onAcceptApplication}
-        onRejectApplication={onRejectApplication}
-      />
+      {/* El `UpcomingMatchSheet` de acá se eliminó junto con la sección "Próximos":
+          solo lo abría el doble tap de aquellas tiles, así que quedó inalcanzable.
+          El que se usa vive en `MainPlayer`, y se abre desde Juegos → Mis partidas. */}
 
       <VideoPreviewModal
         visible={highlightModal !== null}

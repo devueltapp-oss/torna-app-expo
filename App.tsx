@@ -839,6 +839,26 @@ function MainPlayer({ navigation, route }: any) {
   // vive en `PlayerSettingsScreen`, y el ofrecimiento en la pestaña Juegos.
   const nearby = useNearbyLocation(!!user?.id);
   const [myGameSheet, setMyGameSheet] = React.useState<UpcomingGameData | null>(null);
+
+  /**
+   * Invitar gente a una partida ya creada. El id se guarda aparte del sheet
+   * porque la hoja de la partida se cierra al abrir la de invitar (dos Modals
+   * apilados son frágiles en iOS).
+   */
+  const [inviteGame, setInviteGame] = React.useState<string | null>(null);
+  const inviteToGame = React.useCallback(async (userIds: string[]) => {
+    if (!inviteGame) return false;
+    const g = myGames.find((x) => x.id === inviteGame);
+    const cuando = g ? [g.date, g.time, g.court].filter(Boolean).join(' · ') : '';
+    const texto = cuando ? `Te invito a jugar: ${cuando}` : 'Te invito a jugar';
+    try {
+      // En serie: son pocos y así un fallo no deja la mitad mandada sin saber cuál.
+      for (const uid of userIds) await sendDirectMessage(uid, texto, inviteGame);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [inviteGame, myGames]);
   const { matches: apiMatches, refresh: refreshMatches } = usePlayerMatches(user?.id);
 
   // Directorio de jugadores reales (GET /user/players).
@@ -1041,19 +1061,12 @@ function MainPlayer({ navigation, route }: any) {
           <HomeScreen
             greeting={user?.name ?? user?.username ?? ''}
             liveGames={liveGames}
-            upcomingGames={upcomingGames}
             feedPosts={feedPosts}
             activeTab="home" onChangeTab={handleTab}
             onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id, liveStreamUrl: liveGames.find(g => g.id === id)?.streamUrl })}
             onOpenSearch={() => navigation.navigate('GlobalSearch')}
-            onVerMas={(section, idx) => { setReelInitialIndex(idx ?? 0); setReelSection(section); }}
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            onOpenPlayerProfile={(playerId) => navigation.navigate('PlayerProfile', { playerId })}
-            invitablePlayers={invitablePlayers}
-            suggestedPartners={partnerSuggestions}
-            onSearchPartner={searchPartners}
-            onOpenChat={(gameId, title, readOnly) => navigation.navigate('GameChat', { gameId, title, readOnly })}
             unreadNotifications={unreadNotifications}
             onOpenNotifications={() => navigation.navigate('Notifications')}
           />
@@ -1200,6 +1213,29 @@ function MainPlayer({ navigation, route }: any) {
         onCancelGame={handleCancelGame}
         onLeaveGame={handleLeaveGame}
         onCancelPair={handleCancelPair}
+        /* Se cierra la hoja antes de abrir la de invitar: dos Modals apilados
+           son frágiles en iOS y el usuario vuelve acá igual al terminar. */
+        onInvite={(gameId) => { setMyGameSheet(null); setInviteGame(gameId); }}
+      />
+
+      {/* Invitar a una partida YA creada, desde cualquier participante. */}
+      <ShareGameSheet
+        visible={inviteGame !== null}
+        items={inbox}
+        loading={inboxLoading}
+        onClose={() => setInviteGame(null)}
+        onSend={inviteToGame}
+        onSearch={async (q) => {
+          const res = await searchUsers(q);
+          return res.map((u) => ({
+            id: u.id,
+            name: u.name ?? u.username,
+            avatar: u.profilePicture ?? undefined,
+          }));
+        }}
+        title="Invitar a la partida"
+        subtitle="Se envía por chat, con la partida adjunta para que se postulen de una."
+        sendLabel="Invitar"
       />
     </>
   );

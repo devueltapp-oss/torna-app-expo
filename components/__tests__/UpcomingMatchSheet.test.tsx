@@ -121,3 +121,54 @@ describe('UpcomingMatchSheet — postulados', () => {
     expect(queryByText('Carla')).toBeNull();
   });
 });
+
+/**
+ * Invitar a una partida ya creada.
+ *
+ * La regla que fija: **cualquier participante puede invitar, no solo el host**.
+ * La partida es de los cuatro, y esperar a que el organizador invite es lo que
+ * deja lugares vacíos — cuanta más gente reciba la invitación, más
+ * postulaciones llegan.
+ */
+describe('UpcomingMatchSheet — invitar', () => {
+  it('el organizador puede invitar', () => {
+    const onInvite = jest.fn();
+    const { getByTestId } = renderSheet(
+      { isCreator: true, viewerIsParticipant: true },
+      { onInvite },
+    );
+
+    fireEvent.press(getByTestId('invite-to-game'));
+    expect(onInvite).toHaveBeenCalledWith('g1');
+  });
+
+  it('un jugador que NO organiza también puede invitar', () => {
+    const onInvite = jest.fn();
+    const { getByTestId } = renderSheet(
+      { isCreator: false, viewerIsParticipant: true },
+      { onInvite },
+    );
+
+    fireEvent.press(getByTestId('invite-to-game'));
+    expect(onInvite).toHaveBeenCalledWith('g1');
+  });
+
+  it('quien no juega la partida no puede invitar', () => {
+    const { queryByTestId } = renderSheet(
+      { isCreator: false, viewerIsParticipant: false },
+      { onInvite: jest.fn() },
+    );
+
+    expect(queryByTestId('invite-to-game')).toBeNull();
+  });
+
+  /** Invitar a algo que ya pasó no tiene sentido. */
+  it.each(['FINISHED', 'CANCELLED'])('no se puede invitar a una partida %s', (status) => {
+    const { queryByTestId } = renderSheet(
+      { viewerIsParticipant: true, status },
+      { onInvite: jest.fn() },
+    );
+
+    expect(queryByTestId('invite-to-game')).toBeNull();
+  });
+});
