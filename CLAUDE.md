@@ -633,12 +633,23 @@ No hay barra de header: **el video es el fondo y todo flota encima**, como un li
 ┌───────────────────────────────────────────────┐
 │ [foto] Club            [avatares +N]  [X]     │  ← identidad · quién mira · salir
 │        ● EN VIVO  [Seguir]                    │
-│                                               │
 │                   (video)                     │
+│  🙂 Ana  Buen punto                           │  ← comentarios SIN caja, sobre el video
+│  🙂 Beto  vamos!                              │
 │                                    [CAM 01…]  │
-│ [ Escribe algo... ]      [💬] [➤] [⛶]        │  ← escribir · comentarios · compartir · full
+│ [ Escribe algo... ]      [💬] [➤] [⛶]        │  ← escribir · ocultar · compartir · full
 └───────────────────────────────────────────────┘
 ```
+
+⚠️ **Los comentarios NO vuelven a un panel** (2026-09-01). Flotan sobre la imagen —solo
+texto con `textShadow`, sin fondo— y se escriben en la barra de abajo. Antes abrían un
+panel que encogía el video a 16:9: leer o escribir te sacaba de lo que estabas mirando.
+El `TextInput` vive en la barra; con `adjustResize` (ya en el manifest) el teclado la
+empuja y el partido sigue a la vista. El botón 💬 **solo muestra/oculta** la capa.
+
+El único panel que queda es el de **jugadores**, y el club **no está ahí**: se nombra una
+sola vez, en el chip de arriba. Hay tests que fijan las tres cosas (comentarios visibles
+sin abrir nada, el club una sola vez, el 💬 como toggle).
 
 Nació de dos cosas rotas: había **dos "EN VIVO"** (la barra oscura y el badge sobre el
 video) y un botón de **tres puntos que no hacía nada**.

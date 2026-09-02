@@ -1,13 +1,14 @@
 /**
- * Pantalla del stream (POV espectador). Fija el rediseño del 2026-08-29, que nació de
- * un problema de uso: para leer los comentarios había que abrir un modal a pantalla
- * completa, o sea **dejar de ver el partido**.
+ * Pantalla del stream (POV espectador). Lo que fijan estos tests es una sola idea,
+ * a la que se llegó en dos pasos: **mirar el partido no se interrumpe nunca**.
  *
- *  - En vertical el video ocupa toda la pantalla; al abrir comentarios o jugadores
- *    se encoge y el panel toma la mitad de abajo (modelo Instagram). Nunca lo tapa.
- *  - Un panel por vez.
- *  - Los jugadores salen del video (botón de avatares) y traen las dos parejas + el
- *    club; si ya seguís al club, "Seguir" no se ofrece.
+ *  - Los comentarios **flotan sobre el video** y se escriben en la barra de abajo
+ *    (2026-09-01). Antes abrían un panel que encogía el partido; antes de eso, un
+ *    modal a pantalla completa. El botón 💬 hoy solo los oculta.
+ *  - El **club** se nombra una sola vez, en el chip de arriba (con EN VIVO y
+ *    Seguir). No se repite en el panel.
+ *  - El panel de **jugadores** es lo único que todavía encoge el video: trae las dos
+ *    parejas, o una sola sección "Jugadores" si la partida no declaró equipos.
  */
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
@@ -72,46 +73,64 @@ function renderScreen(props: Partial<React.ComponentProps<typeof GameDetailScree
   );
 }
 
-describe('GameDetailScreen — paneles que encogen el video (portrait)', () => {
-  it('arranca con el video solo: ningún panel abierto', () => {
+describe('GameDetailScreen — comentarios sobre el video (portrait)', () => {
+  it('se ven SIEMPRE, sin abrir nada: el partido no se interrumpe', () => {
+    const { getByText, getByTestId } = renderScreen();
+    expect(getByText(/Buen punto/)).toBeTruthy();
+    expect(getByTestId('comments-overlay')).toBeTruthy();
+  });
+
+  it('se escribe en la barra de abajo, no en un panel', () => {
+    const { getByPlaceholderText, queryByTestId } = renderScreen();
+    expect(getByPlaceholderText('Escribe algo...')).toBeTruthy();
+    // No hay panel que encoja el video para escribir.
+    expect(queryByTestId('comments-panel')).toBeNull();
+  });
+
+  it('el botón 💬 solo los oculta y los vuelve a mostrar', () => {
+    const { getByTestId, getByText, queryByText } = renderScreen();
+
+    fireEvent.press(getByTestId('toggle-comments'));
+    expect(queryByText(/Buen punto/)).toBeNull();
+
+    fireEvent.press(getByTestId('toggle-comments'));
+    expect(getByText(/Buen punto/)).toBeTruthy();
+  });
+
+  it('enviar limpia el campo y llama al hook', async () => {
+    const { getByTestId, getByPlaceholderText } = renderScreen();
+    const input = getByPlaceholderText('Escribe algo...');
+
+    fireEvent.changeText(input, 'vamos!');
+    fireEvent.press(getByTestId('send-comment'));
+
+    expect(mockSend).toHaveBeenCalledWith('vamos!');
+  });
+});
+
+describe('GameDetailScreen — panel de jugadores (portrait)', () => {
+  it('arranca cerrado', () => {
     const { queryByText } = renderScreen();
-    expect(queryByText('Buen punto')).toBeNull();
     expect(queryByText('EQUIPO 1')).toBeNull();
   });
 
-  it('el botón de comentarios los abre abajo y vuelve a cerrarlos', () => {
-    const { getByTestId, getByText, getByPlaceholderText, queryByText } = renderScreen();
-
-    fireEvent.press(getByTestId('toggle-comments'));
-    expect(getByText('Buen punto')).toBeTruthy();
-    // Se puede escribir sin salir de la pantalla del partido.
-    expect(getByPlaceholderText('Escribe un comentario...')).toBeTruthy();
-
-    fireEvent.press(getByTestId('toggle-comments'));
-    expect(queryByText('Buen punto')).toBeNull();
-  });
-
-  it('los avatares abren el panel con LAS DOS parejas y el club', () => {
+  it('los avatares abren el panel con LAS DOS parejas', () => {
     const { getByTestId, getByText } = renderScreen();
     fireEvent.press(getByTestId('toggle-players'));
 
     expect(getByText('EQUIPO 1')).toBeTruthy();
     expect(getByText('EQUIPO 2')).toBeTruthy();
-    expect(getByText('Ana')).toBeTruthy();
+    expect(getByText('Beto')).toBeTruthy();
     expect(getByText('Dani')).toBeTruthy();
-    // El club va en el mismo cuadro que los jugadores.
-    expect(getByTestId('open-club')).toBeTruthy();
   });
 
-  it('abrir un panel cierra el otro (uno por vez)', () => {
-    const { getByTestId, getByText, queryByText } = renderScreen();
-
-    fireEvent.press(getByTestId('toggle-comments'));
-    expect(getByText('Buen punto')).toBeTruthy();
-
+  it('el club NO está en el panel: vive en el chip de arriba', () => {
+    const { getByTestId, queryByTestId, queryByText } = renderScreen();
     fireEvent.press(getByTestId('toggle-players'));
-    expect(queryByText('Buen punto')).toBeNull();
-    expect(getByText('EQUIPO 1')).toBeTruthy();
+
+    expect(queryByTestId('open-club')).toBeNull();
+    expect(queryByText('CLUB')).toBeNull();
+    expect(getByTestId('header-club')).toBeTruthy();
   });
 
   it('muestra el NIVEL de la partida (reemplazo del chip de superficie)', () => {
@@ -132,8 +151,9 @@ describe('GameDetailScreen — paneles que encogen el video (portrait)', () => {
     fireEvent.press(getByTestId('toggle-players'));
     expect(getByText('JUGADORES')).toBeTruthy();
     expect(queryByText('EQUIPO 1')).toBeNull();
-    // Nadie se pierde: los cuatro siguen listados.
-    expect(getByText('Ana')).toBeTruthy();
+    // Nadie se pierde: los cuatro siguen listados. (Se chequea con Beto y Dani:
+    // "Ana" también firma un comentario del overlay y sería ambiguo.)
+    expect(getByText('Beto')).toBeTruthy();
     expect(getByText('Dani')).toBeTruthy();
   });
 });
@@ -150,8 +170,8 @@ describe('GameDetailScreen — seguir al club', () => {
     const { queryByText, getByTestId } = openPlayers({ isFollowing: true, onToggleFollow: jest.fn() });
     expect(queryByText('Seguir')).toBeNull();
     expect(queryByText('Siguiendo')).toBeNull();
-    // El club se sigue mostrando, solo desaparece la acción.
-    expect(getByTestId('open-club')).toBeTruthy();
+    // El club se sigue mostrando (en el chip), solo desaparece la acción.
+    expect(getByTestId('header-club')).toBeTruthy();
   });
 
   it('ofrece "Seguir" si todavía no lo seguís', () => {
@@ -191,8 +211,8 @@ describe('GameDetailScreen — comentar desde pantalla completa (landscape)', ()
 
     // Volvió a portrait…
     expect(ScreenOrientation.lockAsync).toHaveBeenCalledWith('PORTRAIT_UP');
-    // …con el panel de comentarios abierto y un input de verdad.
-    expect(getByPlaceholderText('Escribe un comentario...')).toBeTruthy();
+    // …donde se escribe en la barra de abajo, sobre el video.
+    expect(getByPlaceholderText('Escribe algo...')).toBeTruthy();
     expect(queryByTestId('compose-in-portrait')).toBeNull();
   });
 });
@@ -243,23 +263,14 @@ describe('GameDetailScreen — club y navegación a perfiles', () => {
     return utils;
   }
 
-  it('el club va arriba, con su etiqueta', () => {
-    const { getByText, getAllByText } = openPanel();
-    expect(getByText('CLUB')).toBeTruthy();
-    // Dos veces a propósito: el chip sobre el video y la fila del panel.
-    expect(getAllByText('CasaPadel').length).toBe(2);
+  it('el club se nombra UNA sola vez, en el chip sobre el video', () => {
+    const { getAllByText } = openPanel();
+    expect(getAllByText('CasaPadel')).toHaveLength(1);
   });
 
   it('ya no muestra los seguidores del club', () => {
     const { queryByText } = openPanel();
     expect(queryByText(/seguidores/i)).toBeNull();
-  });
-
-  it('tocar el club abre su perfil', () => {
-    const onOpenClub = jest.fn();
-    const { getByTestId } = openPanel({ onOpenClub });
-    fireEvent.press(getByTestId('open-club'));
-    expect(onOpenClub).toHaveBeenCalledWith('club-1');
   });
 
   it('tocar un jugador abre el suyo, con su UID', () => {
@@ -301,10 +312,10 @@ describe('GameDetailScreen — chrome del live', () => {
     expect(onOpenClub).toHaveBeenCalledWith('club-1');
   });
 
-  it('la barra de abajo abre los comentarios listos para escribir', () => {
-    const { getByTestId, getByPlaceholderText } = renderScreen();
-    fireEvent.press(getByTestId('compose-bar'));
-    expect(getByPlaceholderText('Escribe un comentario...')).toBeTruthy();
+  it('la barra de abajo es el campo real, no un botón que abre otra cosa', () => {
+    const { getByTestId } = renderScreen();
+    // Mismo nodo: escribir no navega ni abre paneles.
+    expect(getByTestId('compose-bar').props.placeholder).toBe('Escribe algo...');
   });
 
   it('compartir llama al handler; sin handler no se pinta el botón', () => {
