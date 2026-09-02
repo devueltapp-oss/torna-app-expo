@@ -101,6 +101,11 @@ export interface DirectMessage {
   name: string | null;
   profilePicture: string | null;
   content: string;
+  /**
+   * Partido compartido en el mensaje. Con esto el chat lo dibuja como una tarjeta
+   * que abre el visor; sin esto, "te paso el partido" sería texto muerto.
+   */
+  gameId?: string | null;
   createdAt: string;
   /** Cuántas personas likearon el mensaje (una por persona, máx. 1 cada una). */
   likesCount?: number;
@@ -117,8 +122,17 @@ export function fetchDirectChat(userId: string, since?: string): Promise<DirectM
   return authedGet<DirectMessage[]>(`/chat/dm/${encodeURIComponent(userId)}${q}`);
 }
 
-export function sendDirectMessage(userId: string, content: string): Promise<DirectMessage> {
-  return authedSend<DirectMessage>(`/chat/dm/${encodeURIComponent(userId)}`, { content });
+export function sendDirectMessage(
+  userId: string,
+  content: string,
+  gameId?: string,
+): Promise<DirectMessage> {
+  // El body va sin `gameId` cuando no hay: el backend usa forbidNonWhitelisted y
+  // un `undefined` explícito no molesta, pero mandar la clave vacía sí ensucia.
+  return authedSend<DirectMessage>(
+    `/chat/dm/${encodeURIComponent(userId)}`,
+    gameId ? { content, gameId } : { content },
+  );
 }
 
 export function markDmRead(userId: string): Promise<void> {

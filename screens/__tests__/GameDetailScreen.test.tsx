@@ -99,8 +99,8 @@ describe('GameDetailScreen — paneles que encogen el video (portrait)', () => {
     expect(getByText('EQUIPO 2')).toBeTruthy();
     expect(getByText('Ana')).toBeTruthy();
     expect(getByText('Dani')).toBeTruthy();
-    // El club va en el mismo panel.
-    expect(getByText('CasaPadel')).toBeTruthy();
+    // El club va en el mismo cuadro que los jugadores.
+    expect(getByTestId('open-club')).toBeTruthy();
   });
 
   it('abrir un panel cierra el otro (uno por vez)', () => {
@@ -147,17 +147,17 @@ describe('GameDetailScreen — seguir al club', () => {
   }
 
   it('NO ofrece "Seguir" si ya seguís al club', () => {
-    const { queryByText } = openPlayers({ isFollowing: true, onToggleFollow: jest.fn() });
+    const { queryByText, getByTestId } = openPlayers({ isFollowing: true, onToggleFollow: jest.fn() });
     expect(queryByText('Seguir')).toBeNull();
     expect(queryByText('Siguiendo')).toBeNull();
     // El club se sigue mostrando, solo desaparece la acción.
-    expect(queryByText('CasaPadel')).toBeTruthy();
+    expect(getByTestId('open-club')).toBeTruthy();
   });
 
   it('ofrece "Seguir" si todavía no lo seguís', () => {
     const onToggleFollow = jest.fn();
-    const { getByText } = openPlayers({ isFollowing: false, onToggleFollow });
-    fireEvent.press(getByText('Seguir'));
+    const { getByTestId } = openPlayers({ isFollowing: false, onToggleFollow });
+    fireEvent.press(getByTestId('header-follow'));
     expect(onToggleFollow).toHaveBeenCalledTimes(1);
   });
 
@@ -244,9 +244,10 @@ describe('GameDetailScreen — club y navegación a perfiles', () => {
   }
 
   it('el club va arriba, con su etiqueta', () => {
-    const { getByText } = openPanel();
+    const { getByText, getAllByText } = openPanel();
     expect(getByText('CLUB')).toBeTruthy();
-    expect(getByText('CasaPadel')).toBeTruthy();
+    // Dos veces a propósito: el chip sobre el video y la fila del panel.
+    expect(getAllByText('CasaPadel').length).toBe(2);
   });
 
   it('ya no muestra los seguidores del club', () => {
@@ -274,5 +275,52 @@ describe('GameDetailScreen — club y navegación a perfiles', () => {
     const { getByTestId } = openPanel({ game: sinId, onOpenPlayer });
     fireEvent.press(getByTestId('open-player-@viejo'));
     expect(onOpenPlayer).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Chrome del visor. El rediseño nació de dos problemas concretos: había DOS
+ * "EN VIVO" (la barra de arriba y el badge sobre el video) y un botón de tres
+ * puntos que no hacía nada.
+ */
+describe('GameDetailScreen — chrome del live', () => {
+  it('el estado EN VIVO se dice UNA sola vez', () => {
+    const { getAllByText } = renderScreen();
+    expect(getAllByText('EN VIVO')).toHaveLength(1);
+  });
+
+  it('una partida que no está en vivo no lo anuncia', () => {
+    const { queryByText } = renderScreen({ game: { ...game, isLive: false } });
+    expect(queryByText('EN VIVO')).toBeNull();
+  });
+
+  it('el club es tocable desde el chip de arriba, sin abrir el panel', () => {
+    const onOpenClub = jest.fn();
+    const { getByTestId } = renderScreen({ onOpenClub });
+    fireEvent.press(getByTestId('header-club'));
+    expect(onOpenClub).toHaveBeenCalledWith('club-1');
+  });
+
+  it('la barra de abajo abre los comentarios listos para escribir', () => {
+    const { getByTestId, getByPlaceholderText } = renderScreen();
+    fireEvent.press(getByTestId('compose-bar'));
+    expect(getByPlaceholderText('Escribe un comentario...')).toBeTruthy();
+  });
+
+  it('compartir llama al handler; sin handler no se pinta el botón', () => {
+    const onShare = jest.fn();
+    const { getByTestId } = renderScreen({ onShare });
+    fireEvent.press(getByTestId('share-game'));
+    expect(onShare).toHaveBeenCalledTimes(1);
+
+    const { queryByTestId } = renderScreen();
+    expect(queryByTestId('share-game')).toBeNull();
+  });
+
+  it('salir del partido usa la X (ya no hay barra con flecha)', () => {
+    const onBack = jest.fn();
+    const { getByTestId } = renderScreen({ onBack });
+    fireEvent.press(getByTestId('close-stream'));
+    expect(onBack).toHaveBeenCalledTimes(1);
   });
 });

@@ -625,6 +625,49 @@ POST /game/:id/comments  { comment }  → comentario creado (máx 500 chars)
 - **`components/GameCommentsPanel.tsx`** — panel presentacional compartido, dos variantes:
   `sheet` (colores del tema) y `overlay` (translúcido oscuro, para ir sobre el video).
 - Lo consumen `GameDetailScreen` y `LiveReelItem` de `ReelViewScreen`.
+#### El chrome del visor (2026-09-01)
+
+No hay barra de header: **el video es el fondo y todo flota encima**, como un live.
+
+```
+┌───────────────────────────────────────────────┐
+│ [foto] Club            [avatares +N]  [X]     │  ← identidad · quién mira · salir
+│        ● EN VIVO  [Seguir]                    │
+│                                               │
+│                   (video)                     │
+│                                    [CAM 01…]  │
+│ [ Escribe algo... ]      [💬] [➤] [⛶]        │  ← escribir · comentarios · compartir · full
+└───────────────────────────────────────────────┘
+```
+
+Nació de dos cosas rotas: había **dos "EN VIVO"** (la barra oscura y el badge sobre el
+video) y un botón de **tres puntos que no hacía nada**.
+
+- **`EN VIVO` se dice una sola vez**, dentro del chip del club. Hay un test que lo fija
+  (`getAllByText('EN VIVO')` con longitud 1) — si volvés a agregar un badge, falla.
+- **`Seguir` también vive una sola vez**, en el chip. Se sacó del panel de jugadores por
+  el mismo motivo: dos botones para la misma acción en la misma pantalla.
+- El lugar del menú muerto lo ocupa **Compartir** (ver abajo). Salir es la **X** de arriba
+  a la derecha, no una flecha en una barra.
+- El contador de espectadores va **pegado a los avatares**: "quiénes" y "cuántos" son la
+  misma pregunta.
+- Se quitó el texto `HLS · 1080p · CAM`: era ruido técnico y duplicaba el chip de cámara.
+
+#### Compartir un partido — `ShareGameSheet`
+
+El botón ➤ abre una hoja con tus **chats 1-a-1** (del inbox, sin endpoint nuevo) y manda
+un DM con el partido adjunto. Se pueden elegir **varias personas**.
+
+- Lo que hace que sea "enviar el partido" y no un texto suelto es **`DirectMessage.gameId`**
+  (columna nueva, migración `20260901230000_direct_message_game`): el receptor ve una
+  **tarjeta "Ver el partido"** en la burbuja, que abre el visor. Sin eso, compartir sería
+  un mensaje que no lleva a ningún lado.
+- Los envíos van **en serie**, no en paralelo: son pocos y así un fallo no deja la mitad
+  mandada sin saber cuál.
+- ⚠️ **Fuera de la app (WhatsApp) todavía NO.** Haría falta una URL pública del partido,
+  que no existe: compartir un link que no abre nada es peor que no ofrecerlo. Cuando exista
+  esa URL, el botón nativo (`Share.share`) se suma en esta misma hoja.
+
 - **En `GameDetailScreen` (2026-08-29) el video manda y todo lo demás se abre desde él.**
   - **portrait**: sin panel abierto el video ocupa **toda** la pantalla bajo el header.
     Tocar comentarios o jugadores **encoge el video a su 16:9** y el panel toma la mitad

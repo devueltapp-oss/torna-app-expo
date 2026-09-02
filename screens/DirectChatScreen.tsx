@@ -3,7 +3,7 @@ import {
   View, Text, FlatList, TextInput, Pressable, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Send } from 'lucide-react-native';
+import { ChevronLeft, Send, PlayCircle } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { AppHeader, Avatar, MessageLikeButton, JumpToLatestButton } from '../components/ui';
@@ -16,6 +16,8 @@ export interface DirectChatScreenProps {
   userId: string;
   title?: string;
   onBack?: () => void;
+  /** Abre un partido compartido en el chat. Sin handler, la tarjeta no navega. */
+  onOpenGame?: (gameId: string) => void;
 }
 
 /** ISO → etiqueta corta de hora ("14:32"). */
@@ -30,7 +32,7 @@ function timeLabel(iso: string): string {
  * `useDirectChat` y sin modo solo-lectura (los DMs siempre se pueden escribir).
  * La lista va **`inverted`** por el mismo motivo — ver la nota en `GameChatScreen`.
  */
-export function DirectChatScreen({ userId, title, onBack }: DirectChatScreenProps) {
+export function DirectChatScreen({ userId, title, onBack, onOpenGame }: DirectChatScreenProps) {
   const { colors } = useTheme();
   const { user } = useAuth();
   const sender = React.useMemo(
@@ -103,6 +105,7 @@ export function DirectChatScreen({ userId, title, onBack }: DirectChatScreenProp
                   isMine={item.senderId === user?.id}
                   colors={colors}
                   onToggleLike={toggleLike}
+                  onOpenGame={onOpenGame}
                 />
               )}
             />
@@ -145,12 +148,13 @@ export function DirectChatScreen({ userId, title, onBack }: DirectChatScreenProp
 }
 
 function MessageBubble({
-  message, isMine, colors, onToggleLike,
+  message, isMine, colors, onToggleLike, onOpenGame,
 }: {
   message: DirectMessage;
   isMine: boolean;
   colors: ReturnType<typeof useTheme>['colors'];
   onToggleLike: (messageId: string) => void;
+  onOpenGame?: (gameId: string) => void;
 }) {
   const displayName = message.name ?? message.username;
   return (
@@ -172,6 +176,33 @@ function MessageBubble({
         <Text style={{ fontSize: 14, color: isMine ? colors.ink : colors.text, lineHeight: 19 }}>
           {message.content}
         </Text>
+
+        {/* Partido compartido: la tarjeta es lo que hace que "te paso el partido"
+            se pueda abrir. Sin `onOpenGame` no es tocable, pero igual se ve. */}
+        {!!message.gameId && (
+          <Pressable
+            onPress={onOpenGame ? () => onOpenGame(message.gameId!) : undefined}
+            disabled={!onOpenGame}
+            accessibilityRole="button"
+            accessibilityLabel="Ver el partido"
+            testID={`shared-game-${message.id}`}
+            style={({ pressed }) => ({
+              flexDirection: 'row', alignItems: 'center', gap: 8,
+              marginTop: 8, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 12,
+              backgroundColor: isMine ? 'rgba(45,76,117,0.12)' : colors.bg2,
+              opacity: pressed ? 0.8 : 1,
+            })}
+          >
+            <PlayCircle size={18} color={isMine ? colors.ink : colors.accentText} />
+            <Text style={{
+              flex: 1, fontSize: 13, fontFamily: fonts.bold,
+              color: isMine ? colors.ink : colors.text,
+            }}>
+              Ver el partido
+            </Text>
+          </Pressable>
+        )}
+
         <Text style={{
           fontSize: 10, marginTop: 3, alignSelf: 'flex-end',
           color: isMine ? 'rgba(45,76,117,0.6)' : colors.muted2,

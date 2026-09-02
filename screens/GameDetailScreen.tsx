@@ -45,12 +45,12 @@ import { Svg, Rect, Line } from 'react-native-svg';
 import { Video, ResizeMode } from 'expo-av';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import {
-  ChevronLeft, MoreHorizontal, Scissors, Eye,
+  Scissors, Send,
   Maximize2, Minimize2, MessageCircle, X,
 } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
-import { Avatar, AvatarStack, Button, StatusBadge, HostBadge, CategoryBadge } from '../components/ui';
+import { Avatar, AvatarStack, Button, HostBadge, CategoryBadge } from '../components/ui';
 import { MatchParticipant, CameraAngleData } from '../components/cards';
 import { GameCommentsPanel } from '../components/GameCommentsPanel';
 import { useGameComments } from '../hooks/useGameComments';
@@ -93,7 +93,7 @@ export interface GameDetailData {
 
 export function GameDetailScreen({
   game, fallbackStreamUrl, onBack, isFollowing = false, onToggleFollow, onCreateHighlight,
-  onOpenPlayer, onOpenClub,
+  onOpenPlayer, onOpenClub, onShare,
 }: {
   game: GameDetailData; fallbackStreamUrl?: string; onBack?: () => void; isFollowing?: boolean; onToggleFollow?: () => void;
   onCreateHighlight?: () => void;
@@ -101,6 +101,8 @@ export function GameDetailScreen({
   onOpenPlayer?: (playerId: string) => void;
   /** Abre el perfil del club dueño de la cancha. */
   onOpenClub?: (clubId: string) => void;
+  /** Compartir el partido. Sin handler, el botón no se pinta. */
+  onShare?: () => void;
 }) {
   const { colors, radii } = useTheme();
   const { width } = useWindowDimensions();
@@ -233,26 +235,10 @@ export function GameDetailScreen({
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={fullscreen ? [] : ['top']}>
       <StatusBar hidden={fullscreen} />
 
-      {/* Dark header — top bar */}
-      {!fullscreen && (
-        <View style={{ backgroundColor: colors.ink }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 }}>
-            <Pressable onPress={onBack} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' }}>
-              <ChevronLeft size={20} color="#FFFFFF" />
-            </Pressable>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              {game.isLive && <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.live }} />}
-              <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 }}>
-                {game.isLive ? 'EN VIVO' : ''}
-              </Text>
-            </View>
-            <Pressable style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' }}>
-              <MoreHorizontal size={20} color="#FFFFFF" />
-            </Pressable>
-          </View>
-        </View>
-      )}
-
+      {/* Sin barra oscura arriba: el video es el fondo y todo flota encima. La barra
+          traía un segundo "EN VIVO" (el otro era el badge sobre el video) y un botón
+          de tres puntos que no hacía nada. Ahora el estado LIVE se dice UNA vez, en
+          el chip del club, y el lugar del menú lo ocupa Compartir, que sí funciona. */}
       {/* HLS player — la MISMA instancia de <Video> en los tres tamaños: solo cambia
           el estilo del contenedor, así el stream no se reinicia al expandir/encoger. */}
       <View
@@ -310,31 +296,64 @@ export function GameDetailScreen({
             </>
           )}
 
-          {game.isLive && (
-            <View style={{ position: 'absolute', top: 10, left: 10 }}>
-              <StatusBadge status="LIVE" />
+          {/* Identidad, arriba a la izquierda: club + estado. Es el equivalente al
+              chip del anfitrión en un live: quién transmite, y el "Seguir" al lado.
+              Acá vive el ÚNICO "EN VIVO" de la pantalla. */}
+          {!fullscreen && !!game.club && (
+            <View style={{
+              position: 'absolute', top: 10, left: 10, zIndex: 10,
+              flexDirection: 'row', alignItems: 'center', gap: 8,
+              maxWidth: '62%',
+            }}>
+              <Pressable
+                onPress={game.clubId && onOpenClub ? () => onOpenClub(game.clubId) : undefined}
+                disabled={!game.clubId || !onOpenClub}
+                accessibilityRole="button"
+                accessibilityLabel={`Ver perfil de ${game.club}`}
+                testID="header-club"
+                style={({ pressed }) => ({
+                  flexDirection: 'row', alignItems: 'center', gap: 8,
+                  paddingLeft: 4, paddingRight: 12, paddingVertical: 4,
+                  borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.55)',
+                  opacity: pressed ? 0.75 : 1, flexShrink: 1,
+                })}
+              >
+                <Avatar name={game.club} size={28} imageUri={game.clubAvatar} />
+                <View style={{ flexShrink: 1 }}>
+                  <Text
+                    style={{ color: '#FFFFFF', fontSize: 13, fontFamily: fonts.bold }}
+                    numberOfLines={1}
+                  >
+                    {game.club}
+                  </Text>
+                  {game.isLive && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.live }} />
+                      <Text style={{ color: colors.live, fontSize: 10, fontFamily: fonts.bold, letterSpacing: 0.6 }}>
+                        EN VIVO
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </Pressable>
+
+              {!isFollowing && onToggleFollow && (
+                <Pressable
+                  onPress={onToggleFollow}
+                  accessibilityRole="button"
+                  testID="header-follow"
+                  style={({ pressed }) => ({
+                    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
+                    backgroundColor: colors.accent, opacity: pressed ? 0.85 : 1,
+                  })}
+                >
+                  <Text style={{ color: colors.ink, fontSize: 12, fontFamily: fonts.bold }}>Seguir</Text>
+                </Pressable>
+              )}
             </View>
           )}
-          <Text style={{ position: 'absolute', bottom: 10, left: 12, fontSize: 11, color: colors.accent, fontWeight: '600' }}>
-            HLS · 1080p · {activeCam?.label}
-          </Text>
 
-          {/* Espectadores conectados. Solo aparece si hay Redis (viewers !== null) y
-              si el número llega al umbral: por debajo se calla, no se inventa. */}
-          {showViewers && (
-            <View
-              testID="viewer-count"
-              style={{
-                position: 'absolute', bottom: 10, right: 12,
-                flexDirection: 'row', alignItems: 'center', gap: 4,
-              }}
-            >
-              <Eye size={14} color="#FFFFFF" />
-              <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '600' }}>{viewers}</Text>
-            </View>
-          )}
-
-          {/* Controles superpuestos: jugadores + comentarios + expandir/contraer */}
+          {/* Arriba a la derecha: quién está (avatares + espectadores) y salir. */}
           <View style={{
             position: 'absolute', top: 10, right: 10, zIndex: 10,
             flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -356,11 +375,90 @@ export function GameDetailScreen({
                   alignItems: 'center', justifyContent: 'center',
                 }}
               >
-                <AvatarStack users={stackUsers} size={24} max={4} />
+                <AvatarStack users={stackUsers} size={24} max={3} />
+                {/* Espectadores conectados, pegado a los avatares: "quiénes" y
+                    "cuántos" son la misma pregunta. Solo si hay Redis y llega al
+                    umbral — por debajo se calla, no se inventa. */}
+                {showViewers && (
+                  <Text
+                    testID="viewer-count"
+                    style={{
+                      marginLeft: 6, color: portraitPanel === 'players' ? colors.ink : '#FFFFFF',
+                      fontSize: 12, fontFamily: fonts.bold,
+                    }}
+                  >
+                    {viewers}
+                  </Text>
+                )}
               </TouchableOpacity>
             )}
-            <TouchableOpacity
-                onPress={() => (fullscreen ? setOverlayComments((v) => !v) : togglePanel('comments'))}
+            {/* Salir del partido. Reemplaza a la flecha de la barra que se eliminó. */}
+            {!fullscreen && (
+              <TouchableOpacity
+                onPress={onBack}
+                testID="close-stream"
+                style={circleBtn('rgba(0,0,0,0.55)')}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Salir del partido"
+              >
+                <X size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
+            {fullscreen && (
+              <>
+                <TouchableOpacity
+                  onPress={() => setOverlayComments((v) => !v)}
+                  style={circleBtn(commentsOpen ? 'rgba(214,255,126,0.9)' : 'rgba(0,0,0,0.55)')}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={commentsOpen ? 'Ocultar comentarios' : 'Ver comentarios'}
+                  testID="toggle-comments"
+                >
+                  <MessageCircle size={18} color={commentsOpen ? colors.ink : '#FFFFFF'} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={exitFullscreen}
+                  testID="toggle-fullscreen"
+                  style={circleBtn('rgba(0,0,0,0.55)')}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Minimize2 size={18} color="#FFFFFF" />
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+
+          {/* Barra de abajo: escribir + acciones. Es lo que hace que el visor se
+              parezca a un live y no a un reproductor: el comentario se escribe
+              desde acá, sin salir del partido, y las acciones quedan a mano
+              derecha (pulgar). */}
+          {!fullscreen && (
+            <View style={{
+              position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 10,
+              flexDirection: 'row', alignItems: 'center', gap: 8,
+              paddingHorizontal: 12, paddingBottom: 12, paddingTop: 10,
+            }}>
+              <Pressable
+                onPress={() => { setPortraitPanel('comments'); setComposeIntent(true); }}
+                accessibilityRole="button"
+                accessibilityLabel="Escribir un comentario"
+                testID="compose-bar"
+                style={({ pressed }) => ({
+                  flex: 1, height: 38, borderRadius: 999,
+                  paddingHorizontal: 14, justifyContent: 'center',
+                  backgroundColor: 'rgba(0,0,0,0.55)',
+                  borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
+                  opacity: pressed ? 0.8 : 1,
+                })}
+              >
+                <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, fontFamily: fonts.regular }}>
+                  Escribe algo...
+                </Text>
+              </Pressable>
+
+              <TouchableOpacity
+                onPress={() => togglePanel('comments')}
                 style={circleBtn(commentsOpen ? 'rgba(214,255,126,0.9)' : 'rgba(0,0,0,0.55)')}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 accessibilityRole="button"
@@ -380,24 +478,38 @@ export function GameDetailScreen({
                   </View>
                 )}
               </TouchableOpacity>
-            {hasStream && (
-              <TouchableOpacity
-                onPress={fullscreen ? exitFullscreen : enterFullscreen}
-                testID="toggle-fullscreen"
-                style={circleBtn('rgba(0,0,0,0.55)')}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                {fullscreen
-                  ? <Minimize2 size={18} color="#FFFFFF" />
-                  : <Maximize2 size={18} color="#FFFFFF" />}
-              </TouchableOpacity>
-            )}
-          </View>
 
-          {/* Cámaras: chips superpuestos abajo a la izquierda. Antes eran una barra
-              aparte debajo del video; con el video a pantalla completa no hay "debajo". */}
+              {onShare && (
+                <TouchableOpacity
+                  onPress={onShare}
+                  style={circleBtn('rgba(0,0,0,0.55)')}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Compartir el partido"
+                  testID="share-game"
+                >
+                  <Send size={18} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
+
+              {hasStream && (
+                <TouchableOpacity
+                  onPress={enterFullscreen}
+                  testID="toggle-fullscreen"
+                  style={circleBtn('rgba(0,0,0,0.55)')}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Pantalla completa"
+                >
+                  <Maximize2 size={18} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          {/* Cámaras: chips superpuestos, justo encima de la barra de abajo. */}
           {!fullscreen && game.cameras.length > 1 && (
-            <View style={{ position: 'absolute', left: 0, right: 0, bottom: 34, zIndex: 10 }}>
+            <View style={{ position: 'absolute', left: 0, right: 0, bottom: 62, zIndex: 10 }}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ gap: 8, paddingHorizontal: 12 }}>
                 {game.cameras.map((cam, i) => {
@@ -511,11 +623,9 @@ export function GameDetailScreen({
                       </Text>
                     </View>
                   </Pressable>
-                  {!isFollowing && onToggleFollow && (
-                    <Button size="sm" variant="primary" onPress={onToggleFollow}>
-                      Seguir
-                    </Button>
-                  )}
+                  {/* Sin botón de seguir acá: vive UNA sola vez, en el chip del club
+                      sobre el video. Tenerlo en los dos lados era el mismo problema
+                      que el "EN VIVO" duplicado. */}
                 </View>
                 <View style={{ height: 1, backgroundColor: colors.line }} />
               </>

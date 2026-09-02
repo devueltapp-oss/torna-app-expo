@@ -63,6 +63,8 @@ import { usePartnerSearch } from './hooks/usePartnerSearch';
 import { useMyHighlights } from './hooks/useMyHighlights';
 import { useHighlightVisibility } from './hooks/useHighlightVisibility';
 import { useInbox } from './hooks/useInbox';
+import { ShareGameSheet } from './components/ShareGameSheet';
+import { sendDirectMessage } from './api/chat';
 import { useNotifications } from './hooks/useNotifications';
 import { useNotificationBadge } from './hooks/useNotificationBadge';
 import type { AppNotification } from './api/notifications';
@@ -1289,7 +1291,30 @@ function GameDetailContainer({ navigation, route }: { navigation: any; route: an
       .catch(() => { /* sin dato → queda en "Seguir" */ });
     return () => { cancelled = true; };
   }, [clubId]);
+
+  /**
+   * Compartir el partido por chat. Las conversaciones salen del inbox que ya
+   * existe (`useInbox`), así que no hace falta ningún endpoint nuevo para elegir
+   * a quién mandárselo; el mensaje lleva el `gameId` y llega como tarjeta abrible.
+   */
+  const [shareOpen, setShareOpen] = React.useState(false);
+  const { items: shareTargets, loading: loadingTargets } = useInbox();
+  const shareTo = React.useCallback(async (userIds: string[]) => {
+    const gameId = route.params?.gameId;
+    if (!gameId) return false;
+    const texto = game.club ? `Mirá este partido en ${game.club}` : 'Mirá este partido';
+    try {
+      // En serie y no en paralelo: son pocos destinatarios y así un fallo no deja
+      // la mitad enviada sin que se sepa cuál.
+      for (const uid of userIds) await sendDirectMessage(uid, texto, gameId);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [route.params?.gameId, game.club]);
+
   return (
+    <>
     <GameDetailScreen
       game={game}
       fallbackStreamUrl={route.params?.liveStreamUrl}
@@ -1305,12 +1330,21 @@ function GameDetailContainer({ navigation, route }: { navigation: any; route: an
       // por su UID y el club por el suyo (un club es un User con isClub=true).
       onOpenPlayer={(playerId) => navigation.navigate('PlayerProfile', { playerId })}
       onOpenClub={(id) => navigation.navigate('ClubProfile', { clubId: id })}
+      onShare={route.params?.gameId ? () => setShareOpen(true) : undefined}
       onCreateHighlight={canCreateHighlight ? () => navigation.navigate('VideoEditor', {
         gameId: apiGame!.id,
         recordingUrl: recordingUrl!,
         durationSeconds: apiGame!.durationSeconds ?? 0,
       }) : undefined}
     />
+    <ShareGameSheet
+      visible={shareOpen}
+      items={shareTargets}
+      loading={loadingTargets}
+      onClose={() => setShareOpen(false)}
+      onSend={shareTo}
+    />
+    </>
   );
 }
 
@@ -1363,6 +1397,7 @@ function AppNavigator() {
             userId={route.params?.userId ?? ''}
             title={route.params?.title}
             onBack={() => navigation.goBack()}
+            onOpenGame={(gameId) => navigation.navigate('GameDetail', { gameId })}
           />
         )}
       </AppStack.Screen>
