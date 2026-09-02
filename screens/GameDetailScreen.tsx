@@ -25,8 +25,10 @@
  * se escribe en la barra, con `adjustResize` el teclado empuja la barra y el video
  * sigue a la vista. El botón 💬 solo los muestra/oculta.
  *
- * El panel `players` (la pila de avatares) es lo único que todavía encoge el video.
- * Dos reglas suyas:
+ * El panel `players` (la pila de avatares) es lo único que todavía le quita alto al
+ * video, y **solo el que ocupa su contenido** (`flexGrow: 0` + `maxHeight: 55%`): con
+ * `flex: 1` se estiraba hasta el borde y dejaba un hueco vacío enorme después del
+ * último jugador. Tres reglas suyas:
  *  - **Equipos solo si el dato existe** (`hasTeams`: alguien con `team === 2`). Sin eso
  *    va una sola sección "Jugadores": rotular "EQUIPO 1" a los cuatro sería inventar
  *    una división que la partida no declara.
@@ -278,16 +280,16 @@ export function GameDetailScreen({
       <View
         style={fullscreen
           ? { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 50 }
-          // Sin panel abierto el video se queda con TODO el alto libre; con panel,
-          // se encoge a su 16:9 y le cede el resto de la pantalla.
-          : portraitPanel ? { backgroundColor: '#000' } : { flex: 1, backgroundColor: '#000' }}
+          // El video se queda con TODO el alto libre, haya panel o no: el panel de
+          // jugadores mide lo que ocupa su contenido, así que lo que sobra es video.
+          // Antes el video se encogía a 16:9 fijo y el panel se quedaba con el
+          // resto, dejando un hueco vacío enorme abajo del último jugador.
+          : { flex: 1, backgroundColor: '#000' }}
       >
         <View
           style={fullscreen
             ? { flex: 1, backgroundColor: '#000', position: 'relative', alignItems: 'center', justifyContent: 'center' }
-            : portraitPanel
-              ? { aspectRatio: 16 / 9, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', position: 'relative' }
-              : { flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
+            : { flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
         >
           {hasStream ? (
             <Video
@@ -658,7 +660,11 @@ export function GameDetailScreen({
           para leer o escribir, que era justo lo que había que evitar. */}
       {!fullscreen && portraitPanel === 'players' && (
         <ScrollView
-          style={{ flex: 1, backgroundColor: colors.bg }}
+          // `flexGrow: 0` + `maxHeight`: la hoja mide lo que ocupan los jugadores y
+          // no más. Con `flex: 1` se estiraba hasta el borde inferior y quedaba un
+          // hueco vacío después del último. El tope evita que con muchos jugadores
+          // se coma la pantalla; a partir de ahí, scrollea.
+          style={{ flexGrow: 0, maxHeight: '55%', backgroundColor: colors.bg }}
           contentContainerStyle={{ padding: 16, gap: 14 }}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
