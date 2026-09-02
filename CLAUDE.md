@@ -614,6 +614,20 @@ reserva con mode='search-opponents'  →  backend busca jugadores con el aviso a
 - ⚠️ **Nada pide el permiso al iniciar sesión, y es a propósito.** Si alguien reporta "hice
   login y no me pidió la ubicación", eso es el comportamiento correcto: el único que abre el
   diálogo del sistema es `enable()`, o sea la tarjeta o el toggle.
+- ⚠️ **El aviso de "sin permiso" NO se puede condicionar a que el toggle esté encendido.**
+  Cuando el permiso se niega, `enable()` sale **sin** activar el flag, así que
+  `settings.enabled` queda en `false`. Un `{on && problem === 'denied'}` no se cumple nunca:
+  el switch vuelve solo, sin una palabra, y como el sistema ya no vuelve a preguntar el
+  usuario queda **sin ninguna salida**. El mensaje con `Linking.openSettings()` se muestra
+  con `problem === 'denied'` a secas — es el único camino de vuelta.
+- ⚠️ **Contraste: `accentSoft` y `accentText` no son intercambiables.** `accentSoft` es lima
+  al **18 %** (fondo, nunca texto) y `accentText` es lima **sólida en tema oscuro**. Pintar
+  copy con `accentText` sobre `accentSoft` deja lima sobre lima y no se lee; usar
+  `accentSoft` como color de texto lo hace invisible. Los pares seguros son texto sobre
+  `bg2`/`surface`, o `colors.ink` sobre lima sólida — que es lo que ya da
+  `<Button variant="accent"/>`. Por eso `NearbyPromptCard` usa el `Button` del design system
+  en vez de un `Pressable` a mano. Cubierto por `components/__tests__/NearbyPromptCard.test.tsx`,
+  que falla si algún texto de la tarjeta usa un color translúcido o lima.
 - **`hooks/useNearbyLocation.ts`** es a la vez el latido y el toggle. El latido vive en
   `MainPlayer` (`useNearbyLocation(!!user?.id)`), reporta al montar y al volver del segundo
   plano, con un piso de 15 min entre escrituras.

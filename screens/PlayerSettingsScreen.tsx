@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronRight, Lock, Sun, Moon, MonitorSmartphone, MapPin } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme, ThemeMode } from '../theme';
+import { fonts } from '../theme/tokens';
 import { useNearbyLocation } from '../hooks/useNearbyLocation';
 import { Avatar, Button, Input, AppHeader, SectionHeader } from '../components/ui';
 import { ImageViewerModal } from '../components/ImageViewerModal';
@@ -316,17 +317,29 @@ function NearbyRow({ colors, nearby }: {
           : <Switch value={on} onValueChange={toggle}/>}
       </View>
 
-      {/* El permiso se niega en el sistema, así que el arreglo también está ahí. */}
-      {on && nearby.problem === 'denied' && (
+      {/*
+        ⚠️ **Sin `on` en la condición, y es el punto entero.**
+        Antes decía `{on && problem === 'denied'}`, que **nunca se cumple**: si el
+        permiso se niega, `enable()` sale sin activar el flag, así que `on` queda
+        en false. Resultado: el switch volvía solo, sin una palabra que lo
+        explique y sin forma de recuperarse — el permiso se niega en el sistema y
+        el sistema ya no vuelve a preguntar, así que este enlace es la ÚNICA
+        salida.
+      */}
+      {nearby.problem === 'denied' && (
         <Pressable onPress={() => Linking.openSettings()}>
-          <Text style={{ fontSize: 11, color: colors.accent }}>
-            Torna no tiene permiso de ubicación. Tocá para abrir Ajustes.
+          <Text style={{ fontSize: 12, color: colors.text }}>
+            Torna no tiene permiso de ubicación, así que no podemos activarlo.{' '}
+            <Text style={{ fontFamily: fonts.bold, textDecorationLine: 'underline' }}>
+              Tocá para abrir Ajustes
+            </Text>{' '}
+            y permitir la ubicación.
           </Text>
         </Pressable>
       )}
-      {on && nearby.problem === 'unavailable' && (
-        <Text style={{ fontSize: 11, color: colors.muted2 }}>
-          No pudimos ubicarte todavía. Vamos a reintentar la próxima vez que abras la app.
+      {nearby.problem === 'unavailable' && (
+        <Text style={{ fontSize: 12, color: colors.text }}>
+          No pudimos ubicarte. Probá al aire libre e intentá de nuevo.
         </Text>
       )}
 

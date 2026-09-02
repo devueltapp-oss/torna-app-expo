@@ -22,10 +22,11 @@
  * es cómo una app se gana que la silencien.
  */
 import React from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { MapPin, X } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
+import { Button } from './ui';
 
 export interface NearbyPromptCardProps {
   /** Km del radio, para que el copy no invente un número. Lo manda el backend. */
@@ -47,20 +48,29 @@ export function NearbyPromptCard({
     <View
       testID="nearby-prompt"
       style={{
-        backgroundColor: colors.accentSoft,
+        // Superficie NEUTRA (`bg2`), no `accentSoft`.
+        //
+        // ⚠️ `accentSoft` es lima al 18 % y `accentText` es lima **sólida** en
+        // tema oscuro: eso deja texto lima sobre un fondo lima y no se lee. Los
+        // pares seguros del design system son texto sobre `bg2`/`surface`, o
+        // `colors.ink` sobre lima sólida — que es justo lo que hace `Button`.
+        backgroundColor: colors.bg2,
+        borderWidth: 1,
+        borderColor: colors.line,
         borderRadius: 14,
         padding: 14,
-        gap: 10,
+        gap: 12,
         marginBottom: 4,
       }}
     >
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-        <MapPin size={18} color={colors.accentText} />
+        {/* El lima queda para el ícono, que no tiene que leerse: tiene que verse. */}
+        <MapPin size={18} color={colors.accent} />
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={{ fontSize: 14, fontFamily: fonts.bold, color: colors.accentText }}>
+          <Text style={{ fontSize: 14, fontFamily: fonts.bold, color: colors.text }}>
             ¿Te avisamos cuando publiquen una partida cerca tuyo?
           </Text>
-          <Text style={{ fontSize: 12, color: colors.accentText, opacity: 0.85, marginTop: 3 }}>
+          <Text style={{ fontSize: 12, color: colors.muted2, marginTop: 3, lineHeight: 17 }}>
             Te llega una notificación si alguien busca rivales a menos de {radiusKm} km.
             Tu ubicación no se muestra a nadie.
           </Text>
@@ -73,32 +83,20 @@ export function NearbyPromptCard({
           accessibilityLabel="Descartar"
           style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
         >
-          <X size={16} color={colors.accentText} />
+          <X size={16} color={colors.muted2} />
         </Pressable>
       </View>
 
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <Pressable
-          onPress={loading ? undefined : onEnable}
-          style={({ pressed }) => ({
-            backgroundColor: colors.accentText,
-            borderRadius: 10,
-            paddingVertical: 9,
-            paddingHorizontal: 18,
-            opacity: pressed ? 0.85 : 1,
-          })}
-        >
-          {loading ? (
-            <ActivityIndicator size="small" color={colors.accentSoft} />
-          ) : (
-            <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: colors.accentSoft }}>
-              Activar
-            </Text>
-          )}
-        </Pressable>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        {/* `Button variant="accent"` = lima sólida + texto `colors.ink` (azul).
+            Es el par de contraste que ya usa toda la app; escribirlo a mano fue
+            lo que produjo letras casi transparentes sobre el botón. */}
+        <Button variant="accent" size="sm" loading={loading} onPress={onEnable}>
+          Activar
+        </Button>
 
         <Pressable onPress={onDismiss} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
-          <Text style={{ fontSize: 13, color: colors.accentText, opacity: 0.9 }}>No, gracias</Text>
+          <Text style={{ fontSize: 13, color: colors.muted2 }}>No, gracias</Text>
         </Pressable>
       </View>
     </View>
