@@ -76,36 +76,24 @@ describe('ChatsInboxScreen — bandejas Partidas / Amigos', () => {
 });
 
 describe('ChatsInboxScreen — borrar un chat (solo para mí)', () => {
-  /** Alert.alert es nativo: se intercepta para poder "tocar" el botón Borrar. */
-  function pressDestructive() {
-    const Alert = require('react-native').Alert;
-    const [, , buttons] = Alert.alert.mock.calls[Alert.alert.mock.calls.length - 1];
-    buttons.find((b: any) => b.style === 'destructive').onPress();
-  }
+  it('la papelera del swipe abre la confirmación, sin Alert nativo', () => {
+    const { getByTestId, getByText } = renderScreen({ onDeleteChat: jest.fn() });
 
-  beforeEach(() => {
-    jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => {});
-  });
-  afterEach(() => jest.restoreAllMocks());
+    fireEvent.press(getByTestId('chat-delete-game-g1'));
 
-  it('mantener presionado pide confirmación y aclara que es solo para vos', () => {
-    const Alert = require('react-native').Alert;
-    const { getByTestId } = renderScreen({ onDeleteChat: jest.fn() });
-
-    fireEvent(getByTestId('chat-row-game-g1'), 'longPress');
-
-    const [title, body] = Alert.alert.mock.calls[0];
-    expect(title).toBe('Borrar chat');
-    expect(body).toMatch(/solo para ti/i);
-    expect(body).toMatch(/sigue viendo/i);
+    expect(getByText('¿Eliminar este chat?')).toBeTruthy();
+    // La pregunta NO nombra al chat: ya elegiste la fila.
+    expect(getByTestId('confirm-sheet-title').props.children).not.toMatch(/Cancha 1/);
+    // Y aclara el alcance, que es lo que sí importa.
+    expect(getByText(/solo para ti/i)).toBeTruthy();
   });
 
-  it('confirmar borra ESE chat (grupal) y no toca los demás', () => {
+  it('confirmar borra ESE chat (grupal)', () => {
     const onDeleteChat = jest.fn();
     const { getByTestId } = renderScreen({ onDeleteChat });
 
-    fireEvent(getByTestId('chat-row-game-g1'), 'longPress');
-    pressDestructive();
+    fireEvent.press(getByTestId('chat-delete-game-g1'));
+    fireEvent.press(getByTestId('confirm-sheet-confirm'));
 
     expect(onDeleteChat).toHaveBeenCalledTimes(1);
     expect(onDeleteChat.mock.calls[0][0]).toMatchObject({ kind: 'game', id: 'g1' });
@@ -116,18 +104,25 @@ describe('ChatsInboxScreen — borrar un chat (solo para mí)', () => {
     const { getByText, getByTestId } = renderScreen({ onDeleteChat });
     fireEvent.press(getByText('Amigos'));
 
-    fireEvent(getByTestId('chat-row-dm-d1'), 'longPress');
-    pressDestructive();
+    fireEvent.press(getByTestId('chat-delete-dm-d1'));
+    fireEvent.press(getByTestId('confirm-sheet-confirm'));
 
     expect(onDeleteChat.mock.calls[0][0]).toMatchObject({ kind: 'dm', otherUserId: 'u9' });
   });
 
-  it('sin handler de borrado el long-press no abre ningún diálogo', () => {
-    const Alert = require('react-native').Alert;
-    const { getByTestId } = renderScreen();
+  it('cancelar no borra nada y cierra la hoja', () => {
+    const onDeleteChat = jest.fn();
+    const { getByTestId, queryByText } = renderScreen({ onDeleteChat });
 
-    fireEvent(getByTestId('chat-row-game-g1'), 'longPress');
+    fireEvent.press(getByTestId('chat-delete-game-g1'));
+    fireEvent.press(getByTestId('confirm-sheet-cancel'));
 
-    expect(Alert.alert).not.toHaveBeenCalled();
+    expect(onDeleteChat).not.toHaveBeenCalled();
+    expect(queryByText('¿Eliminar este chat?')).toBeNull();
+  });
+
+  it('sin handler de borrado no hay papelera que deslizar', () => {
+    const { queryByTestId } = renderScreen();
+    expect(queryByTestId('chat-delete-game-g1')).toBeNull();
   });
 });

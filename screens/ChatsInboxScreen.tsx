@@ -1,10 +1,12 @@
 import React from 'react';
-import { View, Text, FlatList, Pressable, RefreshControl, Alert } from 'react-native';
+import { View, Text, FlatList, Pressable, RefreshControl, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PenSquare, Users, MessageCircle } from 'lucide-react-native';
+import { Swipeable } from 'react-native-gesture-handler';
+import { PenSquare, Users, MessageCircle, Trash2 } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { AppHeader, Avatar } from '../components/ui';
+import { ConfirmSheet } from '../components/ConfirmSheet';
 import { BottomTabBar, TabId, Role } from '../components/BottomTabBar';
 import type { InboxItem } from '../api/chat';
 
@@ -55,22 +57,10 @@ export function ChatsInboxScreen({
   const [filter, setFilter] = React.useState<InboxFilter>('game');
 
   /**
-   * Borrar un chat es **solo para vos**: el otro (o el resto de la partida) sigue
-   * viendo el hilo entero. Se avisa en el propio diálogo para que nadie crea que
-   * borró la conversación para todos.
+   * Chat que el usuario mandó a borrar y espera confirmación. La hoja se renderiza
+   * UNA vez para toda la lista (no una por fila) y se le pasa el ítem pendiente.
    */
-  const confirmDelete = React.useCallback((item: InboxItem) => {
-    if (!onDeleteChat) return;
-    Alert.alert(
-      'Borrar chat',
-      `Se borra "${item.title}" solo para ti. La otra persona sigue viendo la conversación completa. ` +
-        'Si te vuelven a escribir, el chat reaparece con los mensajes nuevos.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Borrar', style: 'destructive', onPress: () => onDeleteChat(item) },
-      ],
-    );
-  }, [onDeleteChat]);
+  const [pendingDelete, setPendingDelete] = React.useState<InboxItem | null>(null);
 
   const visible = React.useMemo(() => items.filter((it) => it.kind === filter), [items, filter]);
   // No leídos por bandeja (los grupos de partida hoy siempre traen 0 — no hay cursor
@@ -117,7 +107,7 @@ export function ChatsInboxScreen({
                 ? item.otherUserId && onOpenDm(item.otherUserId, item.title)
                 : onOpenGame(item.id, item.title, item.readOnly)
             }
-            onDelete={() => confirmDelete(item)}
+            onDelete={onDeleteChat ? () => setPendingDelete(item) : undefined}
           />
         )}
         ListEmptyComponent={
@@ -139,6 +129,22 @@ export function ChatsInboxScreen({
             </View>
           ) : null
         }
+      />
+
+      {/* Confirmación del borrado. No nombra al chat a propósito: ya elegiste la
+          fila, repetir el nombre no agrega información y alarga la pregunta. */}
+      <ConfirmSheet
+        visible={!!pendingDelete}
+        title="¿Eliminar este chat?"
+        message="Se elimina solo para ti. La otra persona sigue viendo la conversación completa."
+        confirmLabel="Eliminar"
+        destructive
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => {
+          const item = pendingDelete;
+          setPendingDelete(null);
+          if (item) onDeleteChat?.(item);
+        }}
       />
 
       {onChangeTab && <BottomTabBar role={role} active={activeTab} onChange={onChangeTab} />}
@@ -188,23 +194,56 @@ function FilterTab({
   );
 }
 
+/**
+ * Fila del inbox. Si hay `onDelete`, se puede **deslizar hacia la izquierda** para
+ * descubrir la papelera (patrón de Mail/WhatsApp). El gesto horizontal no pelea con
+ * el scroll vertical de la lista: `Swipeable` (gesture-handler) los distingue por
+ * dirección, que es justo lo que un `onLongPress` no podía darnos.
+ */
 function ChatRow({
   item, colors, onPress, onDelete,
 }: {
   item: InboxItem;
   colors: ReturnType<typeof useTheme>['colors'];
   onPress: () => void;
-  onDelete: () => void;
+  onDelete?: () => void;
 }) {
   const isGame = item.kind === 'game';
-  return (
+  const swipeRef = React.useRef<Swipeable>(null);
+
+  /** Papelera que aparece al deslizar. Crece con el gesto, sin saltar de golpe. */
+  const renderDelete = (progress: Animated.AnimatedInterpolation<number>) => {
+    const scale = progress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.6, 1],
+      extrapolate: 'clamp',
+    });
+    return (
+      <Pressable
+        onPress={() => {
+          // Se cierra sola: si el usuario cancela, la fila no queda abierta.
+          swipeRef.current?.close();
+          onDelete?.();
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Eliminar chat"
+        testID={`chat-delete-${item.kind}-${item.id}`}
+        style={{
+          width: 76, marginLeft: 8, borderRadius: 14,
+          backgroundColor: colors.destructive,
+          alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        <Animated.View style={{ transform: [{ scale }] }}>
+          <Trash2 size={22} color={colors.destructiveFg} />
+        </Animated.View>
+      </Pressable>
+    );
+  };
+
+  const row = (
     <Pressable
       onPress={onPress}
-      // Mantener presionado = borrar. Sin swipe: la fila ya vive dentro de un
-      // FlatList vertical y un gesto horizontal acá pelea con el scroll.
-      onLongPress={onDelete}
-      delayLongPress={350}
-      accessibilityHint="Mantené presionado para borrar el chat"
       testID={`chat-row-${item.kind}-${item.id}`}
       style={({ pressed }) => ({
         flexDirection: 'row', alignItems: 'center', gap: 12,
@@ -243,5 +282,22 @@ function ChatRow({
         </View>
       </View>
     </Pressable>
+  );
+
+  // Sin handler de borrado no se envuelve: no tiene sentido un swipe que no hace nada.
+  if (!onDelete) return row;
+
+  return (
+    <Swipeable
+      ref={swipeRef}
+      renderRightActions={renderDelete}
+      overshootRight={false}
+      // Umbral alto: un swipe corto vuelve solo. Abrir la papelera tiene que ser
+      // deliberado, no algo que pasa mientras scrolleás.
+      rightThreshold={40}
+      friction={2}
+    >
+      {row}
+    </Swipeable>
   );
 }

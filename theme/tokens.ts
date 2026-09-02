@@ -35,6 +35,21 @@ const brand = {
   info:    '#D6FF7E',
   infoFg:  '#2d4c75',
   danger:  '#2d4c75',
+
+  /**
+   * ⚠️ ÚNICA excepción al "solo 3 colores" del manual: el rojo de **acciones
+   * destructivas** (borrar un chat, y lo que venga después).
+   *
+   * El manual colapsa todos los status al lima porque son decorativos. Borrar no
+   * lo es: si el botón que destruye algo se ve igual que el resto, la gente lo
+   * toca sin registrar qué hace. El rojo acá no es estética, es la señal.
+   *
+   * **Solo para el affordance destructivo** (fondo del swipe, botón de confirmar
+   * borrado). No lo uses para errores de formulario, badges ni texto común: para
+   * eso está `danger`, que sigue siendo azul de marca.
+   */
+  destructive:   '#D94A3D',
+  destructiveFg: '#FFFFFF',
 };
 
 // ── LIGHT ──────────────────────────────────────────────────────────────

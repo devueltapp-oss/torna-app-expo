@@ -735,6 +735,31 @@ Consecuencias a respetar si tocás estas pantallas:
 - Si subís a leer, aparece **`<JumpToLatestButton/>`** (`components/ui.tsx`, flotante lima)
   a partir de 240 px de scroll.
 
+#### Borrar un chat — swipe + `ConfirmSheet` (2026-09-01)
+
+**Deslizar la fila del inbox hacia la izquierda** descubre una **papelera roja**; tocarla
+abre la confirmación. Borra **solo para vos**: no se toca ningún mensaje y el otro sigue
+viendo el hilo entero (`DELETE /chat/dm/:userId` · `DELETE /game/:id/chat`).
+
+- **`Swipeable` de gesture-handler**, no `onLongPress`. El long-press que había primero
+  obligaba a descubrir un gesto invisible; el swipe es el patrón que la gente ya conoce de
+  Mail/WhatsApp. Y no pelea con el scroll de la lista: el handler separa los gestos por
+  dirección. `rightThreshold={40}` + `overshootRight={false}` para que un swipe corto
+  vuelva solo y abrir la papelera sea deliberado.
+- La fila se **cierra sola** al tocar la papelera (`swipeRef.current.close()`): si después
+  cancelás, no queda una fila abierta a medias.
+- **Sin `onDeleteChat` no se envuelve en `Swipeable`**: un swipe que no hace nada es peor
+  que no tenerlo.
+- La confirmación **no nombra el chat**: ya elegiste la fila, repetir el nombre solo alarga
+  la pregunta. Lo que sí dice es el alcance ("solo para ti").
+
+⚠️ **`Alert.alert` no se usa para decisiones de producto.** El Alert nativo se ve distinto
+en cada OS, ignora el tema claro/oscuro, no usa la tipografía de la marca y en Android pinta
+los botones en azul de sistema — lo contrario de lo que necesita una acción destructiva. Para
+eso está **`components/ConfirmSheet.tsx`**: mismo patrón que `FollowListSheet` (Modal
+transparente, velo azul, hoja con drag handle), con `destructive` para el botón rojo y
+`loading` para el spinner. Reusalo en la próxima confirmación en vez de traer un Alert.
+
 #### Likes de mensajes (corazón)
 
 Los mensajes de **ambos** chats (grupal de partida y DM) se pueden likear.
@@ -968,6 +993,16 @@ invisible. `accentText` flippea según modo:
 | LIVE | `T.live` (lima) | `T.ink` (azul) + dot azul |
 | WARN / OK / INFO | `T.warnBg/okBg/infoBg` (lima 18–22%) | `T.warnFg/okFg/infoFg` (azul) |
 | SCHEDULED / PENDING / STOPPED | outline blue (sin bg) | `T.text` / `T.muted2` |
+
+#### La única excepción: el rojo destructivo
+
+`colors.destructive` (`#D94A3D`) + `colors.destructiveFg` existen **solo** para el
+affordance de destruir: el fondo del swipe de borrar y el botón de confirmar de
+`ConfirmSheet`. Borrar no es un status decorativo — si el botón que destruye algo se ve
+igual que el resto, la gente lo toca sin registrar qué hace.
+
+⚠️ No lo uses para errores de formulario, badges ni texto: para eso está `danger`, que
+sigue siendo el azul de marca.
 
 #### Gradients están prohibidos
 
