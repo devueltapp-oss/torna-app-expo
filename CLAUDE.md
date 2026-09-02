@@ -651,6 +651,31 @@ El único panel que queda es el de **jugadores**, y el club **no está ahí**: s
 sola vez, en el chip de arriba. Hay tests que fijan las tres cosas (comentarios visibles
 sin abrir nada, el club una sola vez, el 💬 como toggle).
 
+##### ⚠️ El teclado NO se cierra al comentar
+
+En un vivo se comenta seguido: tener que reabrir el teclado en cada mensaje hace la
+pantalla inusable. Se cerraba por **dos causas sumadas**, y hay que mantener las dos
+corregidas o vuelve:
+
+1. **`blurOnSubmit={false}` en el `TextInput`.** En un input de una línea el default es
+   `true`, así que "enviar" quita el foco.
+2. **El botón de enviar va SIEMPRE montado**, deshabilitado cuando no hay texto. Cuando
+   aparecía y desaparecía según el borrador, ese desmontaje también robaba el foco (y
+   movía la barra justo mientras escribías).
+
+Además `submitComment` devuelve el foco explícitamente (`composerRef.current?.focus()`):
+tocar el botón se lo saca al campo. Dos tests fijan (1) y (2).
+
+##### Alturas: el partido gana
+
+- **Capa de comentarios: `maxHeight: 25%`.** Estuvo en 42% y ocupaba casi media pantalla:
+  distrae del partido. Lo que importa es lo último que se dijo; el historial está en el
+  scroll de la propia capa.
+- **Panel de jugadores: `flexGrow: 0` + `maxHeight: 55%`.** Mide lo que ocupa su contenido.
+  Con `flex: 1` se estiraba hasta el borde inferior hubiera 1 jugador o 4, dejando un hueco
+  vacío enorme, y para cederle ese espacio el video se encogía a un 16:9 fijo. Ahora el
+  video se queda con `flex: 1` siempre: **lo que el panel no necesita, es partido**.
+
 Nació de dos cosas rotas: había **dos "EN VIVO"** (la barra oscura y el badge sobre el
 video) y un botón de **tres puntos que no hacía nada**.
 
