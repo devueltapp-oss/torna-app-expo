@@ -59,6 +59,7 @@ import { MatchParticipant, CameraAngleData } from '../components/cards';
 import { GameCommentsPanel } from '../components/GameCommentsPanel';
 import { useGameComments } from '../hooks/useGameComments';
 import { useViewerPing } from '../hooks/useViewerPing';
+import { useLiveStreamRecovery } from '../hooks/useLiveStreamRecovery';
 import { useAuth } from '../contexts/AuthContext';
 import type { GameComment } from '../api/games';
 
@@ -118,6 +119,12 @@ export function GameDetailScreen({
   const [camIdx, setCamIdx] = React.useState(0);
   const activeCam = game.cameras[camIdx];
   const [streamError, setStreamError] = React.useState(false);
+  /**
+   * Reenganche automático de la transmisión en vivo. Solo se arma con la partida
+   * EN VIVO: en un grabado, la posición detenida significa "pausado" o
+   * "terminado", y remontar por eso lo reiniciaría en bucle.
+   */
+  const recovery = useLiveStreamRecovery(game.isLive);
   const videoRef = React.useRef<Video>(null);
 
   // Pantalla completa in-app (landscape) + paneles de comentarios.
@@ -294,7 +301,19 @@ export function GameDetailScreen({
           {hasStream ? (
             <Video
               ref={videoRef}
-              key={activeCam?.id ?? game.id}
+              /*
+               * ⚠️ `reloadNonce` en la `key` es lo que reengancha una transmisión
+               * trabada: al cambiar, React REMONTA el `<Video>` y la instancia
+               * nueva vuelve a pedir la playlist entrando por el borde en vivo.
+               *
+               * Un HLS en vivo casi nunca "falla": se traba. Un microcorte deja
+               * al reproductor atrás de la ventana en vivo, los segmentos que
+               * pide ya no existen y se queda esperando para siempre — con la
+               * imagen congelada y sin disparar `onError`. Es la razón por la que
+               * la misma URL anda en un tester web (hls.js recupera solo) y no
+               * acá. Ver `useLiveStreamRecovery`.
+               */
+              key={`${activeCam?.id ?? game.id}:${recovery.reloadNonce}`}
               source={{ uri: streamSrc! }}
               style={StyleSheet.absoluteFill}
               // CONTAIN siempre: la fuente es 16:9 (cancha apaisada) y las cajas ya
@@ -304,7 +323,18 @@ export function GameDetailScreen({
               shouldPlay
               isLooping={false}
               isMuted={false}
-              onError={() => setStreamError(true)}
+              progressUpdateIntervalMillis={1000}
+              onPlaybackStatusUpdate={recovery.onPlaybackStatusUpdate}
+              /*
+               * En un VIVO, un error es casi siempre transitorio (segmento que
+               * caducó, corte de red): se reintenta remontando. El cartel de
+               * "no se pudo cargar" queda para los grabados, donde un error sí
+               * es definitivo y reintentar en bucle no arregla nada.
+               */
+              onError={() => {
+                if (game.isLive) recovery.onError();
+                else setStreamError(true);
+              }}
             />
           ) : (
             <>

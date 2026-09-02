@@ -788,6 +788,38 @@ PATCH /user/me { profilePicture | frontPage } → persiste la URL pública
 > Highlights: la app **NO** recorta ni sube el clip. Llama `POST /highlights/from-recording`
 > y el backend hace el recorte (FFmpeg byte-range) + subida a B2 + creación del highlight.
 
+### ⚠️ La transmisión en vivo se traba: hay que reengancharla a mano
+
+**Un HLS en vivo casi nunca "falla": se traba.** Un microcorte de red deja al
+reproductor atrás de la ventana en vivo; los segmentos que pide ya se borraron del
+servidor y se queda esperando indefinidamente. La imagen queda congelada y **`onError`
+NO dispara** — es un stall, no un error.
+
+Por eso la misma URL se reproduce perfecto en un tester web y se congela en la app:
+**hls.js recupera solo** (recarga la playlist y salta al borde en vivo) y
+ExoPlayer/AVPlayer no.
+
+**`hooks/useLiveStreamRecovery.ts`** lo detecta y reengancha:
+
+- **`onPlaybackStatusUpdate` es obligatorio.** Sin él la app no tiene forma de saber que
+  se trabó. Un `<Video>` de un vivo sin ese handler es el bug de vuelta.
+- Dos señales: posición que **no avanza** mientras `isPlaying` (6 s) y **buffering
+  continuo** (12 s). El umbral de buffering es mayor porque bufferear es legítimo al
+  arrancar o al cambiar de cámara.
+- ⚠️ Se mira **`isPlaying`, no `shouldPlay`**: si el usuario pausó, la posición quieta es
+  lo correcto y remontar le arrancaría el video solo.
+- **Se recupera remontando** (`reloadNonce` en la `key` del `<Video>`), no con
+  `playAsync()`: un reproductor apuntando a segmentos que ya no existen no se desatasca
+  reanudando, y encadenar `unloadAsync`/`loadAsync` tiene carreras con el status.
+- **Piso de 4 s entre intentos**: con el stream realmente caído, cada remonte falla al
+  instante y sin piso serían decenas por segundo.
+- ⚠️ **Solo para vivos.** En un grabado, la posición detenida significa "pausado" o
+  "terminado": aplicarlo lo reiniciaría en bucle. Por eso el hook recibe `game.isLive`, y
+  `onError` solo muestra el cartel de "no se pudo cargar" cuando **no** es en vivo (en un
+  vivo el error casi siempre es transitorio y se reintenta).
+- Cubierto por `hooks/__tests__/useLiveStreamRecovery.test.ts`, que fija sobre todo los
+  **falsos positivos**: pausar y bufferear un rato no son trabas.
+
 ### Game detail (visor HLS) — `hooks/useGameDetail.ts`
 
 ```
