@@ -75,6 +75,9 @@ export interface ForegroundPush {
  * | GAME_SCHEDULED      | game.service (un seguido agendó)    | GameDetail |
  * | GAME_PLAYER_ADDED   | game.service (te sumaron)           | Juegos     |
  * | GAME_APPLICATION_RECEIVED | game.service (se postularon)  | Juegos     |
+ * | GAME_APPLICATION_ACCEPTED | game.service (te aceptaron)   | GameDetail |
+ * | GAME_APPLICATION_REJECTED | game.service (no quedaste)    | Juegos     |
+ * | OPEN_GAME_NEARBY    | game.service (buscan rivales cerca) | GameDetail |
  *
  * La misma tabla resuelve el tap en la **campanita**: cada notificación guardada trae
  * el mismo `data` que viajó en el push (`NotificationsScreen` → `resolvePushTarget`).
@@ -95,6 +98,12 @@ export function resolvePushTarget(data: PushData | null | undefined): PushTarget
     // Un seguido agendó: la partida todavía no tiene stream, pero su detalle es el
     // único lugar donde se la puede ver (cancha, horario, jugadores).
     case 'GAME_SCHEDULED':
+    // "Buscan rivales cerca tuyo": el detalle es donde se decide si postularse
+    // (club, cancha, horario, nivel y quiénes están anotados). Mandarlo al hub
+    // obligaría a encontrar esa partida entre todas las abiertas.
+    case 'OPEN_GAME_NEARBY':
+    // Te aceptaron: ahora jugás esa partida, así que lo relevante es la partida.
+    case 'GAME_APPLICATION_ACCEPTED':
       return data?.gameId ? { name: 'GameDetail', params: { gameId: data.gameId } } : null;
 
     case 'NEW_CHAT_MESSAGE':
@@ -112,6 +121,9 @@ export function resolvePushTarget(data: PushData | null | undefined): PushTarget
     // "Mis partidas", y ahí se la gestiona (aceptar, darse de baja, cancelar).
     case 'GAME_PLAYER_ADDED':
     case 'GAME_APPLICATION_RECEIVED':
+    // No quedaste: llevarte al detalle de una partida que no jugás sería cruel y
+    // además inútil. El hub tiene el resto de las abiertas.
+    case 'GAME_APPLICATION_REJECTED':
       // La partida ya no se puede ver (cancelada) o cambió su composición: el
       // lugar útil es el hub de partidos, no el visor del stream.
       return { name: 'MainPlayer', params: { initialTab: gamesTab } };

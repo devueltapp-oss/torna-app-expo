@@ -67,6 +67,9 @@ import { ShareGameSheet } from './components/ShareGameSheet';
 import { sendDirectMessage } from './api/chat';
 import { useNotifications } from './hooks/useNotifications';
 import { useNotificationBadge } from './hooks/useNotificationBadge';
+import { useNearbyLocation } from './hooks/useNearbyLocation';
+import { useClubLocation } from './hooks/useClubLocation';
+import { ClubLocationSheet } from './components/ClubLocationSheet';
 import type { AppNotification } from './api/notifications';
 import { searchUsers, searchUsersAndClubs, fetchUserProfile, setFollowNotify, fetchFollowing, followUser, unfollowUser } from './api/users';
 import type { CourtData, PlayerData } from './components/cards';
@@ -827,6 +830,14 @@ function MainPlayer({ navigation, route }: any) {
   // Badge de la campanita (GET /notification/unread-count). Solo el contador: la lista
   // se carga recién al abrir la pantalla de Notificaciones.
   const { count: unreadNotifications, refresh: refreshNotificationBadge } = useNotificationBadge();
+
+  // Aviso de partidas abiertas cercanas: acá vive el latido de la posición
+  // (al montar y al volver del segundo plano, con un piso de 15 min). Va en
+  // MainPlayer y no en una pantalla suelta porque el aviso tiene que seguir
+  // andando use el usuario la app donde la use. **No pide permiso**: si el
+  // opt-in está apagado o el permiso no está dado, no hace nada. El toggle
+  // vive en `PlayerSettingsScreen`, y el ofrecimiento en la pestaña Juegos.
+  const nearby = useNearbyLocation(!!user?.id);
   const [myGameSheet, setMyGameSheet] = React.useState<UpcomingGameData | null>(null);
   const { matches: apiMatches, refresh: refreshMatches } = usePlayerMatches(user?.id);
 
@@ -1046,6 +1057,19 @@ function MainPlayer({ navigation, route }: any) {
             openGames={openGames}
             onOpenMyGame={(g) => setMyGameSheet(g)}
             onReserve={() => navigation.navigate('ReservePickClub')}
+            /* Ofrecer el aviso de cercanía solo si está apagado y nunca se
+               descartó. `enable()` es lo ÚNICO que pide el permiso del sistema,
+               y acá sale en contexto: el usuario está mirando partidas abiertas. */
+            nearbyPrompt={nearby.shouldPrompt ? {
+              radiusKm: nearby.settings?.radiusKm,
+              loading: nearby.loading,
+              onEnable: () => {
+                nearby.enable()
+                  .then(() => nearby.dismissPrompt())
+                  .catch(() => { /* el motivo ya queda en nearby.problem */ });
+              },
+              onDismiss: nearby.dismissPrompt,
+            } : undefined}
           />
         );
       case 'chats':
@@ -1206,6 +1230,33 @@ function MainClub({ navigation }: any) {
     region: user?.region ?? '',
   };
 
+  /**
+   * Ubicación del club: se pide una vez, después del login, si falta. Sin ella el
+   * club no aparece en el mapa y sus partidas abiertas no avisan a los jugadores
+   * de la zona (el fan-out de `OPEN_GAME_NEARBY` se ancla en la cancha).
+   *
+   * Va acá y no en `ClubHomeScreen` porque las pestañas se cambian sin desmontar
+   * `MainClub`: si el admin entra y se va a Canchas, el aviso tiene que seguir.
+   * "Ahora no" lo calla hasta el próximo arranque, no para siempre.
+   */
+  const clubLocation = useClubLocation(!!clubId);
+  const [locationPostponed, setLocationPostponed] = React.useState(false);
+  const askLocation = !locationPostponed && clubLocation.location?.hasLocation === false;
+
+  const screen = renderClubTab();
+
+  return (
+    <>
+      {screen}
+      <ClubLocationSheet
+        visible={askLocation}
+        onClose={() => setLocationPostponed(true)}
+        onSaved={() => setLocationPostponed(true)}
+      />
+    </>
+  );
+
+  function renderClubTab() {
   switch (tab) {
     case 'home':
       return (
@@ -1252,6 +1303,7 @@ function MainClub({ navigation }: any) {
       );
     default:
       return null;
+  }
   }
 }
 

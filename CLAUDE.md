@@ -78,7 +78,9 @@ con flujo `Register → Pending → MainClub`.
   2. **Abiertos para sumarme** (GET /game/open vía `useOpenGames`) → cada card con
      hora/cancha/club, cupo (X/4), avatares, **"Ver detalle"** (abre
      `UpcomingMatchSheet` → **Postularme** vía `POST /game/:id/apply`) y **"Buscar en
-     Maps"** (`MapsButton`). **Sin GPS.** Estado vacío por sección.
+     Maps"** (`MapsButton`). Estado vacío por sección. **La lista no usa GPS**: llega
+     entera y se ordena por horario. El GPS solo decide **a quién se le avisa** de una
+     partida abierta nueva (ver "Partidas abiertas cerca" abajo).
 
   > Antes esto vivía en `SearchPlayScreen` + una pestaña "Buscar" aparte (eliminadas).
   > El `UpcomingMatchSheet` se renderiza una sola vez en `MainPlayer` (estado
@@ -269,11 +271,16 @@ auth es una cookie de sesión de navegador, no una API key.
 5. **Multibloque**: `ReserveBlocksScreen` permite 1–4 bloques consecutivos libres **de la
    misma cancha** → `durationMinutes = block × N` (el móvil arma un "slot combinado"; el
    back valida múltiplo/tope). Canchas inactivas no entran a la grilla (no tienen slots).
-6. **Sin GPS.** La sección "Abiertos" de la pestaña Juegos no pide permiso de ubicación:
-   lista partidos abiertos (GET /game/open) y la ubicación de cada uno se abre en Google
-   Maps fuera de la app (`MapsButton`).
-7. **Ubicación estática solo en clubs**: el mapa usa `latitude/longitude` del club
-   (`isClub=true`); el player no tiene ubicación persistida (su GPS es runtime).
+6. **El GPS no filtra ninguna lista.** La sección "Abiertos" de la pestaña Juegos sigue
+   sin pedir permiso: lista todo (GET /game/open) y la ubicación de cada partida se abre
+   en Google Maps fuera de la app (`MapsButton`). Lo único que usa GPS es **a quién se le
+   notifica** una partida abierta nueva (ver abajo).
+7. **Dos ubicaciones distintas, dos reglas distintas.**
+   - `User.latitude/longitude` = dirección **fija y pública** del club (`isClub=true`).
+     Es la que alimenta el mini-mapa y `MapsButton`.
+   - `User.lastLat/lastLng` = última posición **aproximada y privada** del jugador. No se
+     muestra en ninguna pantalla, no viaja en ningún perfil y el backend no tiene ningún
+     endpoint que la devuelva. Ver "Partidas abiertas cerca".
 
 ---
 
@@ -546,6 +553,132 @@ PATCH /game/:id/cancel                        → owner cancela toda la partida 
 POST  /game/:id/leave                         → miembro no-owner se da de baja
 POST  /game/:id/cancel-pair                   → la pareja retadora (team=2) se baja
 ```
+
+### Cercanía (`api/nearby.ts`)
+
+```
+GET    /nearby/settings                       → { enabled, hasLocation, updatedAt, radiusKm }
+PUT    /nearby/settings   { enabled }         → toggle (apagarlo BORRA la posición)
+PUT    /nearby/location   { latitude, longitude } → reportar posición (el back la redondea)
+DELETE /nearby/location                       → olvidarla (logout)
+```
+
+> ⚠️ Prefijo `/nearby` y no `/user/...`: el `UserController` del backend termina en
+> `@Get(':id')` y Nest matchea por orden, así que un `GET /user/nearby-algo` lo resolvería
+> esa ruta y devolvería "usuario no encontrado".
+>
+> ⚠️ **No hay ningún endpoint que devuelva la ubicación de otro usuario**, y no se debe
+> agregar: todo `/nearby` es sobre uno mismo (el UID sale del token).
+
+### Direcciones y ubicación del club — `api/geo.ts` · `api/club.ts`
+
+```
+GET /geo/status                                  → { configured }
+GET /geo/autocomplete?text=&latitude=&longitude= → AddressSuggestion[]
+GET /geo/reverse?latitude=&longitude=            → AddressSuggestion | null
+
+GET /club/location                               → { latitude, longitude, address, hasLocation }
+PUT /club/location  { latitude, longitude, address? }
+```
+
+> ⚠️ **La clave de Geoapify NO viaja en la app.** El backend hace la llamada al proveedor;
+> una clave dentro del APK la extrae cualquiera con un descompresor y regala la cuota. Si ves
+> un `EXPO_PUBLIC_GEOAPIFY_*` en un PR, está mal.
+>
+> ⚠️ `/geo` solo traduce entre texto y coordenadas, para **ubicar un club**. La cercanía de
+> las partidas la calcula el backend con un haversine en SQL y no llama a ningún tercero.
+
+#### Partidas abiertas cerca — el GPS (2026-09-01)
+
+El flujo de "buscar rivales" tenía un agujero: una partida abierta solo la veía quien
+entraba a la pestaña Juegos por su cuenta, y justo ese día. El GPS lo cierra **por el lado
+del aviso, no por el de la búsqueda**.
+
+```
+reserva con mode='search-opponents'  →  backend busca jugadores con el aviso activo
+                                        a ≤25 km del CLUB de la cancha
+                                     →  push + campanita OPEN_GAME_NEARBY → GameDetail
+```
+
+- **Opt-in explícito**, apagado por defecto. Dos lugares donde se enciende, y en los dos el
+  permiso del sistema se pide **en contexto** (iOS da un solo prompt por instalación; pedirlo
+  en el login lo quema frente a alguien que todavía no sabe qué es la app):
+  - **`NearbyPromptCard`** en la pestaña **Juegos**, sobre "Abiertos para sumarme". Es el
+    ofrecimiento real: sin él la función vive solo en Ajustes y **nadie va a Ajustes a buscar
+    algo que no sabe que existe**. Se muestra solo si el aviso está apagado *y* nunca se
+    descartó (`shouldPrompt`); descartarlo es **definitivo** (`AsyncStorage`, clave
+    `@torna/nearby-prompt-dismissed`) — insistir con algo ya rechazado es cómo una app se gana
+    que la silencien.
+  - **`PlayerSettingsScreen`** → sección "Partidas cerca", para quien cambie de idea después.
+  Apagarlo **borra** la posición del servidor.
+- ⚠️ **Nada pide el permiso al iniciar sesión, y es a propósito.** Si alguien reporta "hice
+  login y no me pidió la ubicación", eso es el comportamiento correcto: el único que abre el
+  diálogo del sistema es `enable()`, o sea la tarjeta o el toggle.
+- ⚠️ **El aviso de "sin permiso" NO se puede condicionar a que el toggle esté encendido.**
+  Cuando el permiso se niega, `enable()` sale **sin** activar el flag, así que
+  `settings.enabled` queda en `false`. Un `{on && problem === 'denied'}` no se cumple nunca:
+  el switch vuelve solo, sin una palabra, y como el sistema ya no vuelve a preguntar el
+  usuario queda **sin ninguna salida**. El mensaje con `Linking.openSettings()` se muestra
+  con `problem === 'denied'` a secas — es el único camino de vuelta.
+- ⚠️ **Contraste: `accentSoft` y `accentText` no son intercambiables.** `accentSoft` es lima
+  al **18 %** (fondo, nunca texto) y `accentText` es lima **sólida en tema oscuro**. Pintar
+  copy con `accentText` sobre `accentSoft` deja lima sobre lima y no se lee; usar
+  `accentSoft` como color de texto lo hace invisible. Los pares seguros son texto sobre
+  `bg2`/`surface`, o `colors.ink` sobre lima sólida — que es lo que ya da
+  `<Button variant="accent"/>`. Por eso `NearbyPromptCard` usa el `Button` del design system
+  en vez de un `Pressable` a mano. Cubierto por `components/__tests__/NearbyPromptCard.test.tsx`,
+  que falla si algún texto de la tarjeta usa un color translúcido o lima.
+- **`hooks/useNearbyLocation.ts`** es a la vez el latido y el toggle. El latido vive en
+  `MainPlayer` (`useNearbyLocation(!!user?.id)`), reporta al montar y al volver del segundo
+  plano, con un piso de 15 min entre escrituras.
+- **`lib/location.ts`** nunca lanza: todo devuelve `null` o un motivo. Precisión
+  `Balanced` (~100 m), no `High` — el backend redondea a 110 m, así que pedir metros
+  gastaría batería para producir dígitos que se descartan.
+- ⚠️ **El latido NO pide permiso.** Usa `currentPosition`, que devuelve `denied` si no está
+  concedido; el único que pregunta es `requestPositionOnce`, o sea el toggle. Si los
+  intercambiás, la app abre el diálogo del sistema sola al volver del segundo plano.
+- ⚠️ **No hay `watchPositionAsync` y no debe haberlo.** Seguir la posición en continuo es
+  lo que la gente entiende por "app que me rastrea", gasta batería y no cambiaría ni un
+  resultado: la pregunta que alimenta es "¿estás a menos de 25 km de esta cancha?", y eso
+  no se mueve entre dos aperturas de la app.
+- ⚠️ **La ubicación del jugador no se muestra en ninguna parte.** No está en ningún perfil,
+  ninguna card ni ningún mapa, y el backend no expone ningún endpoint que devuelva la
+  posición de otro. Si aparece un diseño con "jugadores a X km", eso es una feature nueva
+  con otra discusión de privacidad, no un detalle de esta.
+- El logout la borra (`forgetLocationOnLogout`, llamado desde `AuthContext.logout`), igual
+  que el `notificationId`.
+- Cubierto por `hooks/__tests__/useNearbyLocation.test.ts`.
+
+#### Ubicación del club (rol club) — `ClubLocationSheet` (2026-09-02)
+
+Se abre una vez desde `MainClub` si el club no tiene coordenadas. Espejo exacto del
+`ClubLocationDialog` del desktop: los dos resuelven `GET/PUT /club/location` + `/geo/*`,
+porque el admin puede entrar por cualquiera de los dos y el dato tiene que quedar igual.
+
+- **Sin coordenadas, las partidas abiertas del club no avisan a nadie** (el fan-out se ancla
+  en la cancha). Ese es todo el motivo de esta pantalla.
+- Dos caminos: **"Usar mi ubicación actual"** (`precisePosition`, no depende de Geoapify) y
+  **buscar la dirección** (solo si `GET /geo/status` dice `configured`).
+- ⚠️ **`precisePosition` ≠ `currentPosition`.** La primera pide `Accuracy.High` y **no** usa
+  la última posición conocida: acá los metros importan porque la coordenada se guarda exacta
+  y termina en un pin de Maps. La segunda (la del aviso de cercanía) prioriza la última
+  conocida, que es lo que la hace barata. No las intercambies.
+- Se puede posponer; vuelve a preguntar en el próximo arranque.
+
+#### Aceptar o rechazar postulantes
+
+La lista vive en `UpcomingMatchSheet` → sección **"Postulados"**, y **solo la ve el
+organizador** (`game.isCreator`).
+
+- Cada postulante —y el compañero, si se postuló en pareja— es **tocable y abre su perfil**
+  (`onOpenPlayerProfile`), y muestra su **nivel** (`CategoryBadge`). Decidir a quién metés
+  en tu partida mirando un nombre y un avatar de 36px no es decidir; por eso
+  `getGameApplications`/`getMyGames` traen `applicant.id` y `applicant.category`.
+- Aceptar/rechazar es **optimista con revert** contra `PATCH /game/:id/applications/:appId/…`.
+- El postulante se entera: el backend emite `GAME_APPLICATION_ACCEPTED` (→ `GameDetail`) o
+  `GAME_APPLICATION_REJECTED` (→ hub de partidos). Antes postularse era un pozo — el
+  capitán decidía y del otro lado no llegaba nada.
+- Cubierto por `components/__tests__/UpcomingMatchSheet.test.tsx`.
 
 > **Equipos**: cada `GamePlayer` trae `team` (1 = lado owner, 2 = pareja retadora). El tab
 > **Juegos** del player muestra "Mis partidas" (`useMyGames`); tocar una abre `UpcomingMatchSheet`
@@ -1037,7 +1170,7 @@ PATCH /notification/read-all        → { updated }
 | **Video / HLS** | `expo-av` ~14.0.7 (reproductor HLS). **Fullscreen**: in-app, NO el nativo, en `GameDetailScreen` (landscape, ver abajo) y en `VideoPreviewModal` (estado `expanded`). En ambos casos es la **misma instancia** de `<Video>` (solo cambia el estilo del contenedor: card ↔ absolute-fill), nunca un `Modal` con un segundo `<Video>`. `ReelViewScreen` y el `Player` del editor sí siguen usando el nativo `videoRef.current.presentFullscreenPlayer()`. Regla: **si hay que superponer algo sobre el video (comentarios), tiene que ser fullscreen in-app** — el nativo no admite overlays |
 | **Orientación** | La app está bloqueada en **portrait** (`app.json` + `android:screenOrientation="portrait"` en el manifest). La **única** excepción es la pantalla completa del stream (`GameDetailScreen`), que rota a landscape con `expo-screen-orientation` ~7.0.5: `lockAsync(LANDSCAPE)` al entrar y `PORTRAIT_UP` al salir / al desmontar / con el botón atrás. En Android `setRequestedOrientation` en runtime **pisa** el valor del manifest, y el manifest ya trae `configChanges` con `orientation\|screenSize`, así que la activity no se recrea. ⚠️ **En iOS no alcanza**: `UISupportedInterfaceOrientations` es un límite duro y `orientation: "portrait"` en `app.json` lo escribe solo-portrait (el mod `withOrientation` pisa lo que pongas en `ios.infoPlist`). Para habilitarlo en iOS hay que pasar `orientation` a `"default"` y bloquear `PORTRAIT_UP` globalmente al arrancar la app |
 | **Mapas** | Sin mapa embebido ni librería de mapas. La ubicación se referencia con un botón **"Buscar en Maps"** (`components/MapsButton.tsx`) que abre **Google Maps** (URL universal `maps/search/?api=1&query=lat,lng`) vía `Linking`. Antes había Leaflet en `react-native-webview` + MapTiler; se quitó para no requerir dev-client ni API key |
-| **Ubicación** | Sin GPS. Las ubicaciones se abren en **Google Maps** vía `MapsButton` (`Linking`), usando lat/lng del club (pin exacto) o el nombre como fallback. `expo-location` y el hook `useLocation` fueron **eliminados** (también el permiso `NSLocationWhenInUse` de `app.json`) |
+| **Ubicación** | Las ubicaciones de club se abren en **Google Maps** vía `MapsButton` (`Linking`), usando lat/lng del club (pin exacto) o el nombre como fallback — sin mapa embebido. `expo-location` ~17.0.1 volvió el 2026-09-01, con **un solo uso**: el aviso de partidas abiertas cercanas (`lib/location.ts` + `hooks/useNearbyLocation.ts`). Permiso **solo foreground** (`NSLocationWhenInUse`); nada de background |
 | **Subida de archivos** | `expo-file-system` ~17.0.1 (`uploadAsync` binario → B2 presigned) |
 | **Gestos** | `react-native-gesture-handler` ~2.16.1 (swipe entre cámaras, editor) |
 | **Fuentes** | `expo-font` ~12.0.0 (carga de .ttf custom) |

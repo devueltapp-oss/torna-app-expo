@@ -9,11 +9,13 @@
  * persistido en AsyncStorage por la propia provider.
  */
 import React from 'react';
-import { View, Text, Pressable, ScrollView, ActivityIndicator, Image, Alert } from 'react-native';
+import { View, Text, Pressable, ScrollView, ActivityIndicator, Image, Alert, Switch, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight, Lock, Sun, Moon, MonitorSmartphone } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, Lock, Sun, Moon, MonitorSmartphone, MapPin } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme, ThemeMode } from '../theme';
+import { fonts } from '../theme/tokens';
+import { useNearbyLocation } from '../hooks/useNearbyLocation';
 import { Avatar, Button, Input, AppHeader, SectionHeader } from '../components/ui';
 import { ImageViewerModal } from '../components/ImageViewerModal';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
@@ -44,6 +46,9 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
   const [pwError, setPwError]     = React.useState<string | null>(null);
   const [category, setCategory] = React.useState<number | null>(owner.category ?? null);
   const [categoryError, setCategoryError] = React.useState<string | null>(null);
+  // Aviso de partidas abiertas cercanas. El hook también late con la posición
+  // mientras esta pantalla vive; el latido "de verdad" lo hace el de MainPlayer.
+  const nearby = useNearbyLocation(true);
 
   // Se guarda al tocar el chip (no hay "Guardar" para este campo). Update
   // optimista con revert: si el PATCH falla, vuelve al valor anterior.
@@ -151,6 +156,7 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
             onChangePassword={() => setSection('password')}
             onViewPhoto={() => avatar && setViewer(true)}
             onSignOut={onSignOut}
+            nearby={nearby}
           />
         )}
 
@@ -195,7 +201,7 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
 
 function OverviewSection({
   colors, name, username, avatar, mode, onChangeMode,
-  onEditProfile, onChangePassword, onViewPhoto, onSignOut,
+  onEditProfile, onChangePassword, onViewPhoto, onSignOut, nearby,
 }: {
   colors: ReturnType<typeof useTheme>['colors'];
   name: string; username: string; avatar?: string;
@@ -203,6 +209,7 @@ function OverviewSection({
   onEditProfile: () => void; onChangePassword: () => void;
   onViewPhoto: () => void;
   onSignOut?: () => void;
+  nearby: ReturnType<typeof useNearbyLocation>;
 }) {
   return (
     <>
@@ -232,6 +239,12 @@ function OverviewSection({
       <SettingsRow label="Editar perfil"      value={username}     onPress={onEditProfile}/>
       <SettingsRow label="Cambiar contraseña" value="••••••••"     onPress={onChangePassword}/>
 
+      {/* PARTIDAS CERCA */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 18 }}>
+        <SectionHeader title="Partidas cerca"/>
+      </View>
+      <NearbyRow colors={colors} nearby={nearby}/>
+
       {/* APARIENCIA */}
       <View style={{ paddingHorizontal: 16, paddingTop: 18 }}>
         <SectionHeader title="Apariencia"/>
@@ -258,6 +271,83 @@ function OverviewSection({
         Torna v1.0.0
       </Text>
     </>
+  );
+}
+
+/**
+ * El opt-in de "avisame de partidas abiertas cerca".
+ *
+ * Dice explícitamente qué se hace con la ubicación **antes** de que el usuario
+ * toque nada: es el único lugar de la app que pide una posición, y el diálogo
+ * del sistema no explica para qué. Tres cosas que el copy tiene que sostener y
+ * que el código cumple: no se muestra a nadie, se guarda aproximada, y apagar
+ * el switch la borra.
+ */
+function NearbyRow({ colors, nearby }: {
+  colors: ReturnType<typeof useTheme>['colors'];
+  nearby: ReturnType<typeof useNearbyLocation>;
+}) {
+  const on = !!nearby.settings?.enabled;
+  const radio = nearby.settings?.radiusKm ?? 25;
+
+  const toggle = (next: boolean) => {
+    const action = next ? nearby.enable() : nearby.disable();
+    action.catch(() =>
+      Alert.alert('No se pudo guardar', 'Revisá tu conexión e intentá de nuevo.'),
+    );
+  };
+
+  return (
+    <View style={{ paddingHorizontal: 16, paddingTop: 4, gap: 8 }}>
+      <View style={{
+        flexDirection: 'row', alignItems: 'center', gap: 12,
+        backgroundColor: colors.bg2, borderRadius: 12, padding: 14,
+      }}>
+        <MapPin size={20} color={colors.muted2}/>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text }}>
+            Avisarme de partidas cerca
+          </Text>
+          <Text style={{ fontSize: 11, color: colors.muted2, marginTop: 2 }}>
+            Cuando alguien busque rivales a menos de {radio} km.
+          </Text>
+        </View>
+        {nearby.loading
+          ? <ActivityIndicator color={colors.accent}/>
+          : <Switch value={on} onValueChange={toggle}/>}
+      </View>
+
+      {/*
+        ⚠️ **Sin `on` en la condición, y es el punto entero.**
+        Antes decía `{on && problem === 'denied'}`, que **nunca se cumple**: si el
+        permiso se niega, `enable()` sale sin activar el flag, así que `on` queda
+        en false. Resultado: el switch volvía solo, sin una palabra que lo
+        explique y sin forma de recuperarse — el permiso se niega en el sistema y
+        el sistema ya no vuelve a preguntar, así que este enlace es la ÚNICA
+        salida.
+      */}
+      {nearby.problem === 'denied' && (
+        <Pressable onPress={() => Linking.openSettings()}>
+          <Text style={{ fontSize: 12, color: colors.text }}>
+            Torna no tiene permiso de ubicación, así que no podemos activarlo.{' '}
+            <Text style={{ fontFamily: fonts.bold, textDecorationLine: 'underline' }}>
+              Tocá para abrir Ajustes
+            </Text>{' '}
+            y permitir la ubicación.
+          </Text>
+        </Pressable>
+      )}
+      {nearby.problem === 'unavailable' && (
+        <Text style={{ fontSize: 12, color: colors.text }}>
+          No pudimos ubicarte. Probá al aire libre e intentá de nuevo.
+        </Text>
+      )}
+
+      <Text style={{ fontSize: 11, color: colors.muted2, lineHeight: 16 }}>
+        Tu ubicación no se muestra a nadie ni aparece en tu perfil: solo se usa para
+        decidir qué avisos te llegan. Se guarda aproximada y apagar esto la borra.
+      </Text>
+    </View>
   );
 }
 

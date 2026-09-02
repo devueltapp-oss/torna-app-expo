@@ -92,8 +92,9 @@ export interface BackendMyGamePlayer {
 export interface BackendMyGameApplication {
   id: string;
   status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
-  applicant: BackendGameUser;
-  partner?: BackendGameUser | null;
+  /** Trae `category` además de lo básico: la hoja muestra el nivel del postulante. */
+  applicant: BackendGameUser & { category?: number | null };
+  partner?: (BackendGameUser & { category?: number | null }) | null;
 }
 
 export interface BackendMyGame {

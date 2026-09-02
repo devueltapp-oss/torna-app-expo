@@ -21,6 +21,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import firebaseAuth from '@react-native-firebase/auth';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { identifyUser, clearIdentity } from '../services/notifications';
+import { forgetLocationOnLogout } from '../hooks/useNearbyLocation';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -549,6 +550,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // sigue teniendo este notificationId contra la cuenta que se fue y le manda
     // sus pushes a quien quede usando el teléfono.
     await clearIdentity(token);
+    // Por el mismo motivo se olvida la ubicación: si no, la cuenta que se fue
+    // seguiría figurando en la zona de este teléfono hasta que caduque sola.
+    // Va antes de soltar el token porque el endpoint pide sesión.
+    await forgetLocationOnLogout();
     await SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => {});
     await firebaseAuth().signOut().catch(() => {});
     setToken(null);

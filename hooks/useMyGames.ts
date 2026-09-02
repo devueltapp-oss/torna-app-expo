@@ -42,10 +42,13 @@ function mapApplication(a: BackendMyGame['applications'][number]): GameApplicati
     id: a.id,
     status: a.status,
     applicant: {
+      // `id` es lo que permite abrir su perfil desde la fila; `category`, ver su
+      // nivel sin salir de la hoja. Sin los dos, aceptar es adivinar por el nombre.
       id: a.applicant.id,
       username: '@' + a.applicant.username,
       name: a.applicant.name ?? a.applicant.username,
       profilePicture: a.applicant.profilePicture ?? undefined,
+      category: a.applicant.category ?? null,
     },
     partner: a.partner
       ? {
@@ -53,6 +56,7 @@ function mapApplication(a: BackendMyGame['applications'][number]): GameApplicati
           username: '@' + a.partner.username,
           name: a.partner.name ?? a.partner.username,
           profilePicture: a.partner.profilePicture ?? undefined,
+          category: a.partner.category ?? null,
         }
       : undefined,
   };
