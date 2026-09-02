@@ -19,20 +19,14 @@ interface Props {
   greeting?: string;
   liveGames: LiveGameData[];
   /**
-   * **Tus** próximas partidas (no las de quienes seguís). Van en un strip
-   * compacto ARRIBA DE TODO — ver el comentario de `UpcomingStrip`.
+   * Próximas partidas: **las mías + las de la gente y los clubes que sigo**
+   * (`GET /game/upcoming-feed`, ya deduplicadas del lado del backend). Van en un
+   * strip compacto ARRIBA DE TODO — ver `UpcomingStrip`.
    */
   upcomingGames?: UpcomingGameData[];
   /** Abre la hoja de gestión de esa partida (la misma de Juegos → Mis partidas). */
   onOpenUpcoming?: (game: UpcomingGameData) => void;
   feedPosts?: FeedPostData[];
-  /**
-   * Abre el visor tipo reel de las partidas EN VIVO (swipe vertical, una por
-   * pantalla). `initialIndex` = desde cuál arrancar.
-   *
-   * Solo para "En vivo": el reel sirve donde hay **video**. Ver `ReelViewScreen`.
-   */
-  onOpenLiveReel?: (initialIndex?: number) => void;
   onOpenGame?: (id: string) => void;
   onOpenSearch?: () => void;
   onChangeTab?: (id: TabId) => void;
@@ -46,7 +40,7 @@ interface Props {
 
 /**
  * Player home, en este orden:
- *   1. **"Tus próximas partidas"** — strip compacto, ARRIBA DE TODO (`UpcomingStrip`)
+ *   1. **"Próximas partidas"** — mías + de quienes sigo, strip compacto ARRIBA DE TODO
  *   2. "En vivo · de quienes seguís"
  *   3. "Highlights · de tus seguidos"
  *
@@ -69,7 +63,6 @@ export function HomeScreen({
   upcomingGames = [],
   onOpenUpcoming,
   feedPosts = [],
-  onOpenLiveReel,
   onOpenGame,
   onOpenSearch,
   onChangeTab,
@@ -116,12 +109,13 @@ export function HomeScreen({
         {/* Feed vertical (scroll hacia abajo): transmisiones en vivo + highlights
             de quienes seguís, como cards a lo ancho. */}
         {/*
-          Tus próximas partidas: **lo primero de la pantalla**, antes del feed.
-          Estuvo al final y había que bajar todo el Inicio para saber cuándo
-          jugabas — justo el dato que más se consulta y el más enterrado.
+          Próximas partidas (mías + de quienes sigo): **lo primero de la
+          pantalla**, antes del feed. Estuvo al final y había que bajar todo el
+          Inicio para saber cuándo jugabas — el dato que más se consulta y el más
+          enterrado.
 
-          Va fuera del `if` del feed vacío a propósito: tus partidas existen
-          aunque no sigas a nadie, y el estado vacío habla del feed, no de ellas.
+          Va fuera del `if` del feed vacío a propósito: podés tener partidas
+          agendadas sin seguir a nadie, y ese estado vacío habla del feed.
         */}
         <UpcomingStrip games={upcomingGames} onOpen={onOpenUpcoming} />
 
@@ -141,33 +135,13 @@ export function HomeScreen({
             {liveGames.length > 0 && (
               <>
                 <View style={{ paddingHorizontal: 16 }}>
-                  <SectionHeader
-                    title="En vivo · de quienes seguís"
-                    /* Entrada al reel. Se ofrece **solo con más de una partida**:
-                       con una sola, el swipe vertical no lleva a ningún lado y el
-                       botón promete algo que no cumple. */
-                    action={liveGames.length > 1 && onOpenLiveReel ? (
-                      <Pressable onPress={() => onOpenLiveReel(0)} hitSlop={10} testID="open-live-reel">
-                        <Text style={{ fontSize: 11, fontWeight: '700', color: colors.accentText }}>
-                          Ver todos
-                        </Text>
-                      </Pressable>
-                    ) : undefined}
-                  />
+                  {/* Sin acción "Ver todos": las cards ya están todas acá abajo,
+                      así que era un botón que no llevaba a nada nuevo. */}
+                  <SectionHeader title="En vivo · de quienes seguís" />
                 </View>
                 <View style={{ paddingHorizontal: 16, gap: 12 }}>
-                  {liveGames.map((g, i) => (
-                    <LiveGameCard
-                      key={g.id}
-                      game={g}
-                      /* Tocar una card abre el VISOR de esa partida (GameDetail),
-                         no el reel: es lo que la gente espera de una tarjeta y el
-                         visor tiene cámaras, chat y el resto. El reel es para
-                         recorrer varias, y se entra por "Ver todos". */
-                      onPress={onOpenGame}
-                      tornaLogo={tornaLogo}
-                      isActive={isFocused}
-                    />
+                  {liveGames.map((g) => (
+                    <LiveGameCard key={g.id} game={g} onPress={onOpenGame} tornaLogo={tornaLogo} isActive={isFocused} />
                   ))}
                 </View>
               </>
@@ -222,10 +196,16 @@ export function HomeScreen({
   );
 }
 
-/* ─────────── Tus próximas partidas (strip compacto del tope) ─────────── */
+/* ─────────── Próximas partidas (strip compacto del tope) ─────────── */
 
 /**
- * Strip horizontal con **tus** próximas partidas, arriba de todo el Inicio.
+ * Strip horizontal con las próximas partidas —**las mías y las de la gente y
+ * los clubes que sigo**— arriba de todo el Inicio.
+ *
+ * La lista llega ya deduplicada de `GET /game/upcoming-feed`: una partida
+ * alcanzable por varios caminos (sigo al club *y* a un jugador) viene una sola
+ * vez porque el backend la resuelve con un único `OR`. **No dedupliques acá**;
+ * si aparece repetida, el problema está en esa query.
  *
  * ## Por qué acá y por qué chico
  *
@@ -254,7 +234,7 @@ function UpcomingStrip({ games, onOpen }: {
   return (
     <View testID="upcoming-strip" style={{ gap: 8, paddingTop: 4, paddingBottom: 4 }}>
       <View style={{ paddingHorizontal: 16 }}>
-        <SectionHeader title="Tus próximas partidas" />
+        <SectionHeader title="Próximas partidas" />
       </View>
       <ScrollView
         horizontal

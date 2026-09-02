@@ -68,6 +68,7 @@ import { sendDirectMessage } from './api/chat';
 import { useNotifications } from './hooks/useNotifications';
 import { useNotificationBadge } from './hooks/useNotificationBadge';
 import { useNearbyLocation } from './hooks/useNearbyLocation';
+import { useUpcomingFeed } from './hooks/useUpcomingFeed';
 import { useClubLocation } from './hooks/useClubLocation';
 import { ClubLocationSheet } from './components/ClubLocationSheet';
 import type { AppNotification } from './api/notifications';
@@ -841,18 +842,16 @@ function MainPlayer({ navigation, route }: any) {
   const [myGameSheet, setMyGameSheet] = React.useState<UpcomingGameData | null>(null);
 
   /**
-   * Lo que muestra el strip "Tus próximas partidas" del Inicio.
+   * Strip "Próximas partidas" del Inicio: **las mías + las de quienes sigo**
+   * (jugadores y clubes), vía `GET /game/upcoming-feed`.
    *
-   * Derivado de `myGames` y no de un hook aparte: es la misma lista que la
-   * pestaña Juegos, así que las dos pantallas no pueden mostrar cosas distintas
-   * y no hay un segundo request. Se sacan las **LIVE** porque una partida en
-   * curso no es "próxima" y además ya aparece en "En vivo" (el endpoint de lives
-   * incluye las propias).
+   * ⚠️ **No se mergea con `myGames`.** El endpoint ya incluye las propias (el
+   * backend suma el UID a la lista de seguidos) y resuelve todo en una sola
+   * query con `OR`, así que una partida alcanzable por varios caminos —sigo al
+   * club Y a un jugador— viene **una sola vez**. Concatenar acá las dos listas
+   * traería de vuelta los duplicados que esa query evita.
    */
-  const proximas = React.useMemo(
-    () => myGames.filter((g) => g.status !== 'LIVE'),
-    [myGames],
-  );
+  const { games: proximas, refresh: refreshUpcomingFeed } = useUpcomingFeed(user?.id);
 
   /**
    * Invitar gente a una partida ya creada. El id se guarda aparte del sheet
@@ -919,9 +918,10 @@ function MainPlayer({ navigation, route }: any) {
       refreshOwnProfile();
       refreshMyGames();
       refreshOpen();
+      refreshUpcomingFeed();
     });
     return unsubscribe;
-  }, [navigation, refreshOwnProfile, refreshMyGames, refreshOpen]);
+  }, [navigation, refreshOwnProfile, refreshMyGames, refreshOpen, refreshUpcomingFeed]);
 
   // Mis highlights reales (GET /highlights/my): públicos + privados. Los públicos
   // se muestran en el perfil; los privados solo en la librería.
@@ -1076,16 +1076,8 @@ function MainPlayer({ navigation, route }: any) {
           <HomeScreen
             greeting={user?.name ?? user?.username ?? ''}
             liveGames={liveGames}
-            /* Sale de `myGames` (GET /game/mine), la MISMA fuente que la pestaña
-               Juegos: así el Inicio y "Mis partidas" nunca discrepan y no cuesta
-               un request extra. Se filtran las LIVE porque esas ya aparecen en
-               "En vivo" (el endpoint de lives incluye las propias). */
             upcomingGames={proximas}
             onOpenUpcoming={(g) => setMyGameSheet(g)}
-            /* Reel de partidas EN VIVO (swipe vertical). Es el único punto de
-               entrada a `ReelViewScreen`: si se borra, la pantalla vuelve a
-               quedar inalcanzable. */
-            onOpenLiveReel={(idx) => { setReelInitialIndex(idx ?? 0); setReelSection('live'); }}
             feedPosts={feedPosts}
             activeTab="home" onChangeTab={handleTab}
             onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id, liveStreamUrl: liveGames.find(g => g.id === id)?.streamUrl })}

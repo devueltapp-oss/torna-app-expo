@@ -62,7 +62,9 @@ con flujo `Register → Pending → MainClub`.
 
 **Solo Player:**
 - `HomeScreen`, **en este orden**:
-  1. **"Tus próximas partidas"** — strip compacto (tiles de 132 px), **arriba de todo**
+  1. **"Próximas partidas"** — strip compacto (tiles de 132 px), **arriba de todo**.
+     Incluye **las mías y las de la gente y los clubes que sigo**
+     (`GET /game/upcoming-feed` vía `useUpcomingFeed`).
   2. En vivo · de quienes seguís
   3. Highlights · de tus seguidos
 
@@ -70,10 +72,14 @@ con flujo `Register → Pending → MainClub`.
   > había que bajar todo el Inicio —pasando por los highlights de otros— para saber cuándo
   > jugabas, que es el dato que más se consulta. Arriba y chico. **No lo devuelvas abajo.**
   >
-  > - Sale de **`myGames`** (`GET /game/mine`), la misma fuente que la pestaña Juegos, con las
-  >   `LIVE` filtradas (ya aparecen en "En vivo"). Antes había un `useUpcomingGames`
-  >   (`GET /game/:id/upcoming`) aparte: **se eliminó** — era un request extra en cada carga y
-  >   cada pull-to-refresh para pintar lo mismo, y dos fuentes que podían discrepar.
+  > - ⚠️ **La deduplicación la hace el backend, no el cliente.** Una partida puede alcanzarte
+  >   por varios caminos a la vez (seguís al club *y* a un jugador); `getUpcomingFeed` lo
+  >   resuelve con **un solo `findMany` + `OR`**, así que cada fila vuelve una vez.
+  >   **No mergees `useUpcomingFeed` con `useMyGames`**: el endpoint ya incluye las propias
+  >   (suma tu UID a la lista de seguidos), y concatenar traería de vuelta los duplicados.
+  >   Si aparece repetida, el bug está en esa query, no acá.
+  > - Antes había un `useUpcomingGames` (`GET /game/:id/upcoming`): **se eliminó** — solo
+  >   traía las propias y era un request extra en cada carga y cada pull-to-refresh.
   > - La tile muestra solo **cuándo y dónde**; el resto está a **un toque** (antes era doble
   >   toque, un gesto que nadie descubre), en la misma hoja de Juegos → Mis partidas.
   > - Sin partidas **no renderiza nada**: un hueco fijo arriba le cobraría espacio a quien no
@@ -85,9 +91,12 @@ con flujo `Register → Pending → MainClub`.
   > - Cubierto por `screens/__tests__/HomeUpcomingStrip.test.tsx`, que fija **la posición**
   >   además del contenido.
   >
-  > ⚠️ **`ReelViewScreen` quedó inalcanzable**: su único punto de entrada era el "Ver todos"
-  > de la sección vieja (`setReelSection` hoy solo se llama con `null`). Sigue en el repo sin
-  > usarse — o se le da entrada desde En vivo/Highlights, o se borra.
+  > ⚠️ **`ReelViewScreen` está INALCANZABLE y es a propósito.** Se le dio entrada con un
+  > "Ver todos" en "En vivo" y se sacó el 2026-09-02 por pedido: las cards de las
+  > transmisiones ya están todas en el Inicio, así que el botón no llevaba a nada nuevo.
+  > El componente sigue en el repo sin ningún llamador (`setReelSection` solo se llama con
+  > `null`). **No le agregues una entrada sin que alguien la pida**; si se decide que no
+  > vuelve, se borra junto con su estado en `App.tsx`.
 - `ClubProfilePlayerView` — perfil público del club: highlights (live +
   clips), canchas grid 2×2 con CTA Reservar, próximos partidos públicos,
   members, fotos, info + mini-mapa.
