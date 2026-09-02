@@ -8,7 +8,6 @@ export { ForgotPasswordScreen, type ForgotPasswordScreenProps } from './ForgotPa
 // Home
 export { HomeScreen, type UpcomingGameData, type UpcomingGamePlayer } from './HomeScreen';
 export { ClubHomeScreen } from './ClubHomeScreen';
-export { ReelViewScreen, type ReelViewScreenProps, type ReelSection } from './ReelViewScreen';
 
 // Game
 export { GamesScreen } from './GamesScreen';

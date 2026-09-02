@@ -16,7 +16,6 @@ const tornaLogo = require('../assets/torna-icon.png');
 export type { UpcomingGamePlayer, UpcomingGameData } from '../data/types';
 
 interface Props {
-  greeting?: string;
   liveGames: LiveGameData[];
   /**
    * Próximas partidas: **las mías + las de la gente y los clubes que sigo**
@@ -58,7 +57,6 @@ interface Props {
  * The Club admin home is NOT here — it lives in `ClubHomeScreen`.
  */
 export function HomeScreen({
-  greeting = 'Maxi',
   liveGames,
   upcomingGames = [],
   onOpenUpcoming,
@@ -83,10 +81,13 @@ export function HomeScreen({
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
         backgroundColor: colors.surface, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 14,
       }}>
-        <View>
-          <Text style={{ color: colors.muted2, fontSize: 11, fontWeight: '800', letterSpacing: 1.4, textTransform: 'uppercase' }}>Hola</Text>
-          <Text style={{ color: colors.text, fontSize: 22, fontWeight: '800', letterSpacing: -0.3 }}>{greeting}</Text>
-        </View>
+        {/* ⛔ Acá había un "Hola / <tu nombre>". Se eliminó el 2026-09-02: le
+            decía al usuario cómo se llama, que es lo único que ya sabe, y se
+            comía la franja más valiosa de la pantalla — la de arriba de todo,
+            que ahora es para las próximas partidas. No lo repongas. */}
+        <Text style={{ color: colors.text, fontSize: 22, fontWeight: '800', letterSpacing: -0.3 }}>
+          Inicio
+        </Text>
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <Pressable onPress={onOpenSearch} style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: colors.bg2, alignItems: 'center', justifyContent: 'center' }}>
             <Search size={20} color={colors.text} />

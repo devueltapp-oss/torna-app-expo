@@ -38,10 +38,8 @@ import {
   ReserveClubPickerScreen, ReserveBlocksScreen, ReserveStep3Screen, ReserveSuccessScreen,
   VideoEditorScreen,
   PlayerOwnProfileScreen, MyLibraryScreen, PlayerSettingsScreen,
-  ReelViewScreen,
   type LoginRole,
   type GameDetailData,
-  type ReelSection,
 } from './screens';
 import { TabId } from './components/BottomTabBar';
 import { FollowListSheet } from './components/FollowListSheet';
@@ -806,8 +804,6 @@ function MainPlayer({ navigation, route }: any) {
     setTab(requested);
     navigation.setParams({ initialTab: undefined });
   }, [route?.params?.initialTab, navigation]);
-  const [reelSection, setReelSection] = React.useState<ReelSection | null>(null);
-  const [reelInitialIndex, setReelInitialIndex] = React.useState(0);
   const [profileView, setProfileView] = React.useState<'profile' | 'library' | 'settings'>('profile');
   const [ownSheet, setOwnSheet] = React.useState<'followers' | 'following' | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -1045,7 +1041,6 @@ function MainPlayer({ navigation, route }: any) {
   const { logout } = useAuth();
 
   const handleTab = (id: TabId) => {
-    setReelSection(null);
     setTab(id);
     if (id === 'profile') {
       setProfileView('profile');
@@ -1058,23 +1053,8 @@ function MainPlayer({ navigation, route }: any) {
   function renderTabContent() {
     switch (tab) {
       case 'home':
-        if (reelSection !== null) {
-          return (
-            <ReelViewScreen
-              section={reelSection}
-              liveGames={liveGames}
-              feedPosts={feedPosts}
-              onBack={() => setReelSection(null)}
-              onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id, liveStreamUrl: liveGames.find(g => g.id === id)?.streamUrl })}
-              activeTab="home"
-              onChangeTab={handleTab}
-              initialIndex={reelInitialIndex}
-            />
-          );
-        }
         return (
           <HomeScreen
-            greeting={user?.name ?? user?.username ?? ''}
             liveGames={liveGames}
             upcomingGames={proximas}
             onOpenUpcoming={(g) => setMyGameSheet(g)}

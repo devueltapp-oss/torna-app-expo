@@ -20,7 +20,9 @@ import { Avatar, Button, Input, AppHeader, SectionHeader } from '../components/u
 import { ImageViewerModal } from '../components/ImageViewerModal';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import { useAuth } from '../contexts/AuthContext';
-import { uploadProfilePicture, uploadFrontPage, updateMyCategory } from '../api/profile';
+import { uploadProfilePicture, uploadFrontPage, updateMyCategory, updateMyProfile } from '../api/profile';
+import { reverseAddress } from '../api/geo';
+import { precisePosition } from '../lib/location';
 import type { ProfileOwner } from '../data/types';
 
 type Section = 'overview' | 'profile' | 'password';
@@ -46,6 +48,70 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
   const [pwError, setPwError]     = React.useState<string | null>(null);
   const [category, setCategory] = React.useState<number | null>(owner.category ?? null);
   const [categoryError, setCategoryError] = React.useState<string | null>(null);
+
+  /**
+   * Ciudad (`User.region`). Es **texto editable**, no una posición viva: el GPS
+   * solo sirve para rellenarla de una vez. Se guarda al tocar "Guardar", junto
+   * con nombre y username.
+   */
+  const [region, setRegion] = React.useState(owner.location ?? '');
+  const [locatingCity, setLocatingCity] = React.useState(false);
+  const [cityError, setCityError] = React.useState<string | null>(null);
+
+  /**
+   * Toma la posición una vez y resuelve la ciudad con `GET /geo/reverse`.
+   *
+   * No guarda coordenadas en ningún lado: lo único que queda es el nombre de la
+   * ciudad, y solo si el usuario después toca Guardar. Si Geoapify no está
+   * configurado o falla, se avisa y el campo se puede escribir a mano — que es
+   * el camino que siempre tiene que seguir funcionando.
+   */
+  /**
+   * Guarda nombre, username y ciudad. Antes "Guardar" solo cerraba la sección
+   * sin persistir nada — los campos volvían a su valor al reabrirla.
+   */
+  const [savingProfile, setSavingProfile] = React.useState(false);
+  async function handleSaveProfile() {
+    if (savingProfile) return;
+    setSavingProfile(true);
+    try {
+      await updateMyProfile({ name, username, region: region.trim() });
+      setSection('overview');
+    } catch (e) {
+      Alert.alert('No se pudo guardar', (e as Error)?.message ?? 'Intentá de nuevo.');
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  async function handleUseMyCity() {
+    setLocatingCity(true);
+    setCityError(null);
+    try {
+      const { coords, reason } = await precisePosition();
+      if (!coords) {
+        setCityError(
+          reason === 'denied'
+            ? 'Necesitamos permiso de ubicación. Podés escribir tu ciudad a mano.'
+            : 'No pudimos ubicarte. Probá al aire libre o escribila a mano.',
+        );
+        return;
+      }
+      const found = await reverseAddress(coords.latitude, coords.longitude);
+      // `line2` suele traer "Ciudad Guayana 8050, Bolívar, Venezuela"; nos
+      // quedamos con la primera parte, que es la ciudad.
+      const ciudad = found?.line2?.split(',')[0]?.trim() || found?.label?.split(',')[0]?.trim();
+      if (!ciudad) {
+        setCityError('No pudimos resolver tu ciudad. Escribila a mano.');
+        return;
+      }
+      setRegion(ciudad);
+    } catch {
+      setCityError('No pudimos resolver tu ciudad ahora. Escribila a mano.');
+    } finally {
+      setLocatingCity(false);
+    }
+  }
   // Aviso de partidas abiertas cercanas. El hook también late con la posición
   // mientras esta pantalla vive; el latido "de verdad" lo hace el de MainPlayer.
   const nearby = useNearbyLocation(true);
@@ -170,8 +236,10 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
             onChangeCover={changeCover}
             onChangeName={setName} onChangeUsername={setUsername}
             category={category} onChangeCategory={handleChangeCategory} categoryError={categoryError}
+            region={region} onChangeRegion={setRegion}
+            onUseMyCity={handleUseMyCity} locatingCity={locatingCity} cityError={cityError}
             onCancel={() => setSection('overview')}
-            onSave={() => setSection('overview')}
+            onSave={handleSaveProfile}
           />
         )}
 
@@ -377,9 +445,16 @@ function ProfileSection({
   colors, name, username, club, avatar, uploadingPhoto, photoError, onChangePhoto, onViewPhoto,
   cover, uploadingCover, coverError, onChangeCover,
   onChangeName, onChangeUsername, category, onChangeCategory, categoryError, onCancel, onSave,
+  region, onChangeRegion, onUseMyCity, locatingCity, cityError,
 }: {
   colors: ReturnType<typeof useTheme>['colors'];
   name: string; username: string; club: string;
+  /** Ciudad del jugador (`User.region`). Texto editable; el GPS solo la rellena. */
+  region: string;
+  onChangeRegion: (s: string) => void;
+  onUseMyCity: () => void;
+  locatingCity: boolean;
+  cityError: string | null;
   avatar?: string; uploadingPhoto: boolean; photoError: string | null;
   onChangePhoto: () => void;
   onViewPhoto: () => void;
@@ -443,6 +518,40 @@ function ProfileSection({
       <Input label="Nombre" value={name} onChangeText={onChangeName}/>
       <Input label="Username" value={username} onChangeText={onChangeUsername}
         hint="Cómo te encuentran otros jugadores."/>
+      {/*
+        Ciudad. **Es un campo editable, no un rastreador.**
+
+        El GPS es solo una comodidad para rellenarlo: se toma la posición una vez,
+        se resuelve la ciudad y queda guardada como texto en `User.region`. No se
+        actualiza sola ni sigue tu posición.
+
+        ⚠️ Es un dato DISTINTO del de `src/nearby/`. Aquel es una posición
+        aproximada que no se muestra en ninguna parte y solo decide a quién le
+        llegan los avisos de partidas cercanas; éste es una etiqueta que vos
+        elegís mostrar. No los mezcles ni derives uno del otro.
+      */}
+      <Input label="Ciudad" value={region} onChangeText={onChangeRegion}
+        hint="Se usa para ubicarte en tu perfil. Podés escribirla o tomarla del GPS."/>
+      <Pressable
+        onPress={locatingCity ? undefined : onUseMyCity}
+        style={({ pressed }) => ({
+          flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start',
+          borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.surface,
+          paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+          opacity: pressed || locatingCity ? 0.7 : 1,
+        })}
+      >
+        {locatingCity
+          ? <ActivityIndicator size="small" color={colors.text2}/>
+          : <MapPin size={14} color={colors.text2}/>}
+        <Text style={{ color: colors.text2, fontWeight: '700', fontSize: 12 }}>
+          {locatingCity ? 'Ubicando…' : 'Usar mi ubicación actual'}
+        </Text>
+      </Pressable>
+      {cityError ? (
+        <Text style={{ fontSize: 11, color: colors.text }}>{cityError}</Text>
+      ) : null}
+
       <Input label="Club principal" value={club} onChangeText={() => {}} disabled
         hint="Lo administra el club. Pedile al admin si necesitás cambiarlo."/>
 

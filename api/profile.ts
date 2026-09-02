@@ -176,6 +176,21 @@ export async function updateMyCategory(category: number): Promise<void> {
   await patchMe({ category }, token, 'No se pudo guardar la categoría.');
 }
 
+/**
+ * Datos editables del perfil: nombre, username y **ciudad** (`User.region`).
+ *
+ * ⚠️ `region` es una etiqueta de texto que el usuario elige mostrar. **No tiene
+ * relación con la ubicación de `/nearby`**, que es una posición aproximada, no
+ * se muestra en ninguna parte y solo decide a quién le llegan los avisos de
+ * partidas cercanas. Son dos datos distintos con dos reglas distintas.
+ */
+export async function updateMyProfile(
+  data: { name?: string; username?: string; region?: string },
+): Promise<void> {
+  const token = await getToken();
+  await patchMe(data, token, 'No se pudo guardar el perfil.');
+}
+
 /** Foto de perfil (avatar). Sube a B2 y persiste en profilePicture. */
 export async function uploadProfilePicture(uid: string, assetUri: string): Promise<string> {
   const token = await getToken();
