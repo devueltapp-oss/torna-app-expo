@@ -449,7 +449,7 @@ export function GameDetailScreen({
 
           {/* Identidad, arriba a la izquierda: club + estado. Es el equivalente al
               chip del anfitrión en un live: quién transmite, y el "Seguir" al lado.
-              Acá vive el ÚNICO "EN VIVO" de la pantalla. */}
+              Aquí vive el ÚNICO "EN VIVO" de la pantalla. */}
           {!fullscreen && !!game.club && (
             <View style={{
               position: 'absolute', top: 10, left: 10, zIndex: 10,
@@ -626,7 +626,7 @@ export function GameDetailScreen({
 
           {/* Barra de abajo: escribir + acciones. Es lo que hace que el visor se
               parezca a un live y no a un reproductor: el comentario se escribe
-              desde acá, sin salir del partido, y las acciones quedan a mano
+              desde aquí, sin salir del partido, y las acciones quedan a mano
               derecha (pulgar). */}
           {!fullscreen && (
             <View style={{

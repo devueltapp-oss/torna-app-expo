@@ -83,7 +83,7 @@ export function DirectChatScreen({ userId, title, onBack, onOpenGame }: DirectCh
           // dado vuelta (el contenedor lleva un scaleY(-1)).
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
             <Text style={{ color: colors.muted2, fontSize: 13, textAlign: 'center', lineHeight: 19 }}>
-              Todavía no hay mensajes.{'\n'}Escribí para empezar la conversación.
+              Todavía no hay mensajes.{'\n'}Escribe para empezar la conversación.
             </Text>
           </View>
         ) : (
@@ -121,7 +121,7 @@ export function DirectChatScreen({ userId, title, onBack, onOpenGame }: DirectCh
           <TextInput
             value={text}
             onChangeText={setText}
-            placeholder="Escribí un mensaje…"
+            placeholder="Escribe un mensaje…"
             placeholderTextColor={colors.muted}
             multiline
             style={{

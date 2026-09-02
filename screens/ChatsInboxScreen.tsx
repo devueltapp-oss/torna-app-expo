@@ -123,7 +123,7 @@ export function ChatsInboxScreen({
               </Text>
               <Text style={{ fontSize: 13, color: colors.muted2, textAlign: 'center', lineHeight: 19 }}>
                 {filter === 'game'
-                  ? 'Cuando entres a una partida vas a poder chatear acá con los jugadores.'
+                  ? 'Cuando entres a una partida vas a poder chatear aquí con los jugadores.'
                   : 'Iniciá una conversación con "Nuevo chat" o desde el perfil de un jugador o club.'}
               </Text>
             </View>

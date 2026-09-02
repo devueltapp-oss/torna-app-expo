@@ -24,10 +24,10 @@ export function PreviewStep({
       <View>
         <Text style={{ fontSize: 11, fontWeight: '800', color: colors.muted2, letterSpacing: 1.2 }}>PASO 1 DE 4</Text>
         <Text style={{ fontSize: 22, fontWeight: '800', color: colors.text, letterSpacing: -0.4, marginTop: 4 }}>
-          Mirá el partido
+          Mira el partido
         </Text>
         <Text style={{ fontSize: 13, color: colors.muted2, marginTop: 2 }}>
-          Encontrá el momento que querés transformar en highlight. Después lo vamos a recortar.
+          Encuentra el momento que quieres transformar en highlight. Después lo vamos a recortar.
         </Text>
       </View>
 

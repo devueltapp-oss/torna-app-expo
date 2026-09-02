@@ -178,7 +178,7 @@ describe('GameDetailScreen — seguir al club', () => {
     return utils;
   }
 
-  it('NO ofrece "Seguir" si ya seguís al club', () => {
+  it('NO ofrece "Seguir" si ya sigues al club', () => {
     const { queryByText, getByTestId } = openPlayers({ isFollowing: true, onToggleFollow: jest.fn() });
     expect(queryByText('Seguir')).toBeNull();
     expect(queryByText('Siguiendo')).toBeNull();
@@ -186,7 +186,7 @@ describe('GameDetailScreen — seguir al club', () => {
     expect(getByTestId('header-club')).toBeTruthy();
   });
 
-  it('ofrece "Seguir" si todavía no lo seguís', () => {
+  it('ofrece "Seguir" si todavía no lo sigues', () => {
     const onToggleFollow = jest.fn();
     const { getByTestId } = openPlayers({ isFollowing: false, onToggleFollow });
     fireEvent.press(getByTestId('header-follow'));

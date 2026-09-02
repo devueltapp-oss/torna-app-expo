@@ -153,7 +153,7 @@ export function GlobalSearchScreen({
                 Sin resultados para "{query}"
               </Text>
               <Text style={{ color: colors.muted, fontSize: 12, textAlign: 'center', lineHeight: 17 }}>
-                Probá con el nombre o username{'\n'}del jugador o club.
+                Prueba con el nombre o username{'\n'}del jugador o club.
               </Text>
             </View>
           )}
@@ -162,7 +162,7 @@ export function GlobalSearchScreen({
             <View style={{ alignItems: 'center', paddingTop: 48, gap: 10 }}>
               <CourtIcon size={40} color={colors.line} />
               <Text style={{ color: colors.muted2, fontSize: 14, fontFamily: fonts.bold, textAlign: 'center' }}>
-                Buscá jugadores o clubes
+                Busca jugadores o clubes
               </Text>
               <Text style={{ color: colors.muted, fontSize: 12, textAlign: 'center', lineHeight: 17 }}>
                 Por nombre o username. Las canchas y horarios{'\n'}los ves al abrir el club y reservar.

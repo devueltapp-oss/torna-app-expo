@@ -39,13 +39,13 @@ function friendlyResetError(err: any): string {
 
   if (msg.includes('invalid-email')) return 'Ese email no tiene un formato válido.';
   if (msg.includes('too-many-requests')) {
-    return 'Demasiados intentos. Esperá unos minutos y volvé a intentar.';
+    return 'Demasiados intentos. Espera unos minutos y vuelve a intentar.';
   }
   if (msg.includes('network') || msg.includes('Network')) {
-    return 'Sin conexión a internet. Verificá tu red e intentá de nuevo.';
+    return 'Sin conexión a internet. Verifica tu red e intenta de nuevo.';
   }
   // `user-not-found` a propósito NO se traduce: no delatamos qué emails existen.
-  return 'No pudimos enviar el correo. Intentá de nuevo en un momento.';
+  return 'No pudimos enviar el correo. Intenta de nuevo en un momento.';
 }
 
 export function ForgotPasswordScreen({ prefillEmail, onBack }: ForgotPasswordScreenProps) {
@@ -60,7 +60,7 @@ export function ForgotPasswordScreen({ prefillEmail, onBack }: ForgotPasswordScr
   async function handleSend() {
     const value = email.trim();
     if (!looksLikeEmail(value)) {
-      setError('Escribí un email válido.');
+      setError('Escribe un email válido.');
       return;
     }
     setError(null);
@@ -109,7 +109,7 @@ export function ForgotPasswordScreen({ prefillEmail, onBack }: ForgotPasswordScr
               <Text
                 style={{ fontSize: 22, fontWeight: '800', color: colors.text, letterSpacing: -0.4 }}
               >
-                Revisá tu correo
+                Revisa tu correo
               </Text>
               <Text style={{ fontSize: 14, color: colors.muted2, lineHeight: 20 }}>
                 Si hay una cuenta asociada a{' '}
@@ -149,7 +149,7 @@ export function ForgotPasswordScreen({ prefillEmail, onBack }: ForgotPasswordScr
                 Recuperar contraseña
               </Text>
               <Text style={{ fontSize: 14, color: colors.muted2, lineHeight: 20 }}>
-                Escribí el email de tu cuenta y te mandamos un enlace para crear una contraseña
+                Escribe el email de tu cuenta y te mandamos un enlace para crear una contraseña
                 nueva.
               </Text>
             </View>

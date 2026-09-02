@@ -176,8 +176,8 @@ export function ShareGameSheet({
               {searching_
                 ? 'No encontramos a nadie con ese nombre.'
                 : onSearch
-                  ? 'Buscá por nombre o usuario a quién querés invitar.'
-                  : 'Todavía no tenés chats con nadie.\nEscribile a alguien desde su perfil y después vas a poder compartirle partidos.'}
+                  ? 'Busca por nombre o usuario a quién quieres invitar.'
+                  : 'Todavía no tienes chats con nadie.\nEscríbele a alguien desde su perfil y después vas a poder compartirle partidos.'}
             </Text>
           ) : (
             <FlatList

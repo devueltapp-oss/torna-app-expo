@@ -135,7 +135,7 @@ export function CompleteProfileScreen({
       onComplete(completedUser);
     } catch (err: any) {
       setSubmitError(
-        err?.message ?? 'Ocurrió un error al registrar tu perfil. Intentá de nuevo.',
+        err?.message ?? 'Ocurrió un error al registrar tu perfil. Intenta de nuevo.',
       );
     } finally {
       setIsSubmitting(false);
@@ -214,7 +214,7 @@ export function CompleteProfileScreen({
           </Text>
           <Text style={{ fontSize: 14, color: colors.muted2, lineHeight: 20 }}>
             Tu cuenta de {providerLabel[authProvider]} fue verificada.{'\n'}
-            Elegí un nombre de usuario para empezar.
+            Elige un nombre de usuario para empezar.
           </Text>
           {prefillEmail ? (
             <Text style={{ fontSize: 12, color: colors.muted, fontWeight: '600' }}>

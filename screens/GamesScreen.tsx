@@ -88,7 +88,7 @@ export function GamesScreen({
           <SectionHeader title="Mis partidas" />
           {myGames.length === 0 ? (
             <Text style={{ color: colors.muted2, fontSize: 13, lineHeight: 19, paddingBottom: 8 }}>
-              No tenés partidas activas. Reservá una cancha o sumate a un partido abierto.
+              No tienes partidas activas. Reserva una cancha o súmate a un partido abierto.
             </Text>
           ) : (
             <View style={{ gap: 10, paddingBottom: 8 }}>
@@ -117,7 +117,7 @@ export function GamesScreen({
           </View>
           {openGames.length === 0 ? (
             <Text style={{ color: colors.muted2, fontSize: 13, lineHeight: 19 }}>
-              Cuando haya partidos buscando jugadores, aparecerán acá para que te sumes.
+              Cuando haya partidos buscando jugadores, aparecerán aquí para que te sumes.
             </Text>
           ) : (
             <View style={{ gap: 12 }}>

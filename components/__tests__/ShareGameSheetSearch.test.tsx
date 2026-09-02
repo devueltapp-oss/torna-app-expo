@@ -43,7 +43,7 @@ describe('ShareGameSheet — sin búsqueda (comportamiento previo intacto)', () 
     const { queryByTestId, getByText } = renderSheet();
 
     expect(queryByTestId('share-search')).toBeNull();
-    expect(getByText(/Todavía no tenés chats con nadie/)).toBeTruthy();
+    expect(getByText(/Todavía no tienes chats con nadie/)).toBeTruthy();
   });
 
   it('lista a la gente del inbox', () => {

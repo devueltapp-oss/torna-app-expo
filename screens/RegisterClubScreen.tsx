@@ -46,7 +46,7 @@ export function RegisterClubScreen({
     try {
       await onSubmit?.({ ...form, name, username, email });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo crear el club. Intentá de nuevo.');
+      setError(e instanceof Error ? e.message : 'No se pudo crear el club. Intenta de nuevo.');
     } finally {
       setSubmitting(false);
     }

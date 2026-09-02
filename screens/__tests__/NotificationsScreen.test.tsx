@@ -83,7 +83,7 @@ describe('NotificationsScreen', () => {
 
   it('sin notificaciones muestra el estado vacío; mientras carga, no', () => {
     const { getByText, queryByText, rerender } = renderScreen({ items: [], unreadCount: 0 });
-    expect(getByText('No tenés notificaciones')).toBeTruthy();
+    expect(getByText('No tienes notificaciones')).toBeTruthy();
 
     rerender(
       <ThemeProvider initial="light">
@@ -98,7 +98,7 @@ describe('NotificationsScreen', () => {
         />
       </ThemeProvider>,
     );
-    expect(queryByText('No tenés notificaciones')).toBeNull();
+    expect(queryByText('No tienes notificaciones')).toBeNull();
   });
 
   it('volver atrás llama a onBack', () => {

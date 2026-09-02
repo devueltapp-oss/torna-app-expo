@@ -137,7 +137,7 @@ export function GameChatScreen({ gameId, title, readOnly = false, onBack }: Game
             <TextInput
               value={text}
               onChangeText={setText}
-              placeholder="Escribí un mensaje…"
+              placeholder="Escribe un mensaje…"
               placeholderTextColor={colors.muted}
               multiline
               style={{

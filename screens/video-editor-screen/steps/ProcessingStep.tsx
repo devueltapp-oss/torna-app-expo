@@ -38,7 +38,7 @@ export function ProcessingStep({ status, error, onRetry, onCancel }: ProcessingS
           {error ? 'Algo salió mal' : 'Generando tu clip...'}
         </Text>
         <Text style={{ fontSize: 13, color: colors.muted2, marginTop: 2 }}>
-          {error ? 'No pudimos procesar el corte. Intentá de nuevo.' : 'Esto puede tardar unos segundos. No cierres la app.'}
+          {error ? 'No pudimos procesar el corte. Intenta de nuevo.' : 'Esto puede tardar unos segundos. No cierres la app.'}
         </Text>
         {error ? (
           <Text style={{ fontSize: 12, color: colors.danger, marginTop: 8, fontFamily: 'Menlo' }}>

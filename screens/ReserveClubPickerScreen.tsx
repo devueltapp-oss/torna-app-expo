@@ -152,13 +152,13 @@ export function ReserveClubPickerScreen({
         {/* Clubs que seguís */}
         <View>
           <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text, marginBottom: 8 }}>
-            Clubs que seguís
+            Clubs que sigues
           </Text>
           {loadingSuggested ? (
             <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 8 }} />
           ) : suggestedClubs.length === 0 ? (
             <Text style={{ fontSize: 13, color: colors.muted2, paddingVertical: 8, lineHeight: 19 }}>
-              Todavía no seguís ningún club. Buscá uno por nombre arriba para reservar.
+              Todavía no sigues ningún club. Busca uno por nombre arriba para reservar.
             </Text>
           ) : (
             <View style={{ gap: 8 }}>

@@ -44,7 +44,7 @@ export function ApplyMatchSheet({ visible, game, invitablePlayers, suggestedPart
       onApplied();
       onClose();
     } catch (e) {
-      Alert.alert('No se pudo postular', (e as Error)?.message ?? 'Intentá de nuevo.');
+      Alert.alert('No se pudo postular', (e as Error)?.message ?? 'Intenta de nuevo.');
     }
     finally { setSubmitting(false); }
   };
@@ -123,8 +123,8 @@ export function ApplyMatchSheet({ visible, game, invitablePlayers, suggestedPart
                 </Text>
                 <Text style={{ fontSize: 11, color: colors.muted2, marginTop: 1, lineHeight: 15 }}>
                   {withPartner
-                    ? 'Te postulás vos y tu compañero juntos.'
-                    : 'Te postulás solo. El creador puede aceptarte.'}
+                    ? 'Te postulas junto a tu compañero.'
+                    : 'Te postulas solo. El creador puede aceptarte.'}
                 </Text>
               </View>
               <Switch value={withPartner} onChange={(v) => { setWithPartner(v); if (!v) setPartner(null); }} />

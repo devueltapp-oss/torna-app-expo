@@ -79,7 +79,7 @@ export function UpcomingMatchSheet({
       onAcceptApplication?.(gameId, appId);
     } catch (e) {
       setLocalApplications(snapshot);
-      Alert.alert('No se pudo aceptar', (e as Error)?.message ?? 'Intentá de nuevo.');
+      Alert.alert('No se pudo aceptar', (e as Error)?.message ?? 'Intenta de nuevo.');
     }
   };
 
@@ -93,7 +93,7 @@ export function UpcomingMatchSheet({
       onRejectApplication?.(gameId, appId);
     } catch (e) {
       setLocalApplications(snapshot);
-      Alert.alert('No se pudo rechazar', (e as Error)?.message ?? 'Intentá de nuevo.');
+      Alert.alert('No se pudo rechazar', (e as Error)?.message ?? 'Intenta de nuevo.');
     }
   };
 

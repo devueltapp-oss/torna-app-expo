@@ -1,5 +1,5 @@
 /**
- * Cierra el lazo UI de "Clubs que seguís" en la reserva: la pantalla SIEMPRE
+ * Cierra el lazo UI de "Clubs que sigues" en la reserva: la pantalla SIEMPRE
  * muestra uno de tres estados (spinner / lista / mensaje "no encontrados"), nunca
  * queda en blanco. Tocar un club dispara `onPickClub` (arranca la reserva).
  */
@@ -30,7 +30,7 @@ function renderScreen(
   );
 }
 
-describe('ReserveClubPickerScreen — "Clubs que seguís"', () => {
+describe('ReserveClubPickerScreen — "Clubs que sigues"', () => {
   it('muestra los clubs seguidos; tocar uno llama onPickClub con su id', () => {
     const onPickClub = jest.fn();
     const { getByText } = renderScreen({ suggestedClubs: clubs, onPickClub });
@@ -44,12 +44,12 @@ describe('ReserveClubPickerScreen — "Clubs que seguís"', () => {
 
   it('sin clubs y NO cargando → muestra el mensaje "no encontrados" (no queda en blanco)', () => {
     const { getByText } = renderScreen({ suggestedClubs: [], loadingSuggested: false });
-    expect(getByText(/no seguís ningún club/i)).toBeTruthy();
+    expect(getByText(/no sigues ningún club/i)).toBeTruthy();
   });
 
   it('mientras carga NO muestra ni el mensaje ni la lista (solo el spinner)', () => {
     const { queryByText } = renderScreen({ suggestedClubs: [], loadingSuggested: true });
-    expect(queryByText(/no seguís ningún club/i)).toBeNull();
+    expect(queryByText(/no sigues ningún club/i)).toBeNull();
     expect(queryByText('Padel BA')).toBeNull();
   });
 });

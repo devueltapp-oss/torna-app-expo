@@ -294,15 +294,15 @@ function friendlyError(err: any): string {
     return 'No encontramos una cuenta con ese email.';
   }
   if (msg.includes('too-many-requests') || msg.includes('429')) {
-    return 'Demasiados intentos. Esperá unos minutos y volvé a intentar.';
+    return 'Demasiados intentos. Espera unos minutos y vuelve a intentar.';
   }
   if (msg.includes('network') || msg.includes('fetch') || msg.includes('Network')) {
-    return 'Sin conexión a internet. Verificá tu red e intentá de nuevo.';
+    return 'Sin conexión a internet. Verifica tu red e intenta de nuevo.';
   }
   if (msg.includes('instala') || msg.includes('no disponible')) {
     // SDK not yet installed — be transparent
     return msg;
   }
 
-  return msg || 'Ocurrió un error inesperado. Intentá de nuevo.';
+  return msg || 'Ocurrió un error inesperado. Intenta de nuevo.';
 }

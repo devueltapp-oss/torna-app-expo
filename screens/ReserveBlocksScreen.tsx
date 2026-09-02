@@ -108,7 +108,7 @@ export function ReserveBlocksScreen({
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
-      <AppHeader title="Elegí un bloque"
+      <AppHeader title="Elige un bloque"
         left={<Pressable onPress={onBack}><ChevronLeft size={22} color={colors.text} /></Pressable>}
         right={<Text style={{ fontSize: 11, color: colors.muted2, fontWeight: '700' }}>1/2</Text>}
       />
@@ -178,8 +178,8 @@ export function ReserveBlocksScreen({
               <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text }}>Sin bloques disponibles</Text>
               <Text style={{ fontSize: 13, color: colors.muted2, lineHeight: 19 }}>
                 {courtFilter
-                  ? 'Esta cancha no tiene horarios para este día. Probá con otro día o mirá todas las canchas.'
-                  : 'Este club no tiene horarios configurados para este día. Probá con otro día u otro club.'}
+                  ? 'Esta cancha no tiene horarios para este día. Prueba con otro día o mira todas las canchas.'
+                  : 'Este club no tiene horarios configurados para este día. Prueba con otro día u otro club.'}
               </Text>
             </View>
           ) : (
@@ -214,7 +214,7 @@ export function ReserveBlocksScreen({
           <Text style={{ flex: 1, fontSize: 12, color: colors.muted2, fontWeight: '700' }} numberOfLines={1}>
             {pickedEntry && combined
               ? `${pickedEntry.item.court.name} · ${combined.start}–${combined.end}${blocks > 1 ? ` · ${blocks} bloques` : ''}`
-              : 'Elegí un bloque libre'}
+              : 'Elige un bloque libre'}
           </Text>
           <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text }}>
             {combined ? `$${combined.price.toLocaleString('es-AR')}` : '—'}

@@ -112,8 +112,8 @@ export function PlayerSearchOverlay({ slotLabel, players = [], onSearch, onSelec
           <View style={{ paddingHorizontal: 12, paddingVertical: 40, alignItems: 'center' }}>
             <Text style={{ color: colors.muted2, fontSize: 13, textAlign: 'center', lineHeight: 18 }}>
               {value.trim().length < 2 && onSearch
-                ? 'Escribí el nombre o @usuario de tu compañero para buscarlo.'
-                : 'No encontramos jugadores que coincidan.\nPedile a esa persona que cree su cuenta en Torna.'}
+                ? 'Escribe el nombre o @usuario de tu compañero para buscarlo.'
+                : 'No encontramos jugadores que coincidan.\nPídele a esa persona que cree su cuenta en Torna.'}
             </Text>
           </View>
         ) : filtered.map(p => (

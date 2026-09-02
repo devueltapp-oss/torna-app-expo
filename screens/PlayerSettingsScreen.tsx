@@ -78,7 +78,7 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
       await updateMyProfile({ name, username, region: region.trim() });
       setSection('overview');
     } catch (e) {
-      Alert.alert('No se pudo guardar', (e as Error)?.message ?? 'Intentá de nuevo.');
+      Alert.alert('No se pudo guardar', (e as Error)?.message ?? 'Intenta de nuevo.');
     } finally {
       setSavingProfile(false);
     }
@@ -92,8 +92,8 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
       if (!coords) {
         setCityError(
           reason === 'denied'
-            ? 'Necesitamos permiso de ubicación. Podés escribir tu ciudad a mano.'
-            : 'No pudimos ubicarte. Probá al aire libre o escribila a mano.',
+            ? 'Necesitamos permiso de ubicación. Puedes escribir tu ciudad a mano.'
+            : 'No pudimos ubicarte. Prueba al aire libre o escríbela a mano.',
         );
         return;
       }
@@ -127,7 +127,7 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
       await updateMyCategory(next);
     } catch {
       setCategory(previous);
-      setCategoryError('No se pudo guardar la categoría. Intentá de nuevo.');
+      setCategoryError('No se pudo guardar la categoría. Intenta de nuevo.');
     }
   }
 
@@ -361,7 +361,7 @@ function NearbyRow({ colors, nearby }: {
   const toggle = (next: boolean) => {
     const action = next ? nearby.enable() : nearby.disable();
     action.catch(() =>
-      Alert.alert('No se pudo guardar', 'Revisá tu conexión e intentá de nuevo.'),
+      Alert.alert('No se pudo guardar', 'Revisa tu conexión e intenta de nuevo.'),
     );
   };
 
@@ -399,7 +399,7 @@ function NearbyRow({ colors, nearby }: {
           <Text style={{ fontSize: 12, color: colors.text }}>
             Torna no tiene permiso de ubicación, así que no podemos activarlo.{' '}
             <Text style={{ fontFamily: fonts.bold, textDecorationLine: 'underline' }}>
-              Tocá para abrir Ajustes
+              Toca para abrir Ajustes
             </Text>{' '}
             y permitir la ubicación.
           </Text>
@@ -407,7 +407,7 @@ function NearbyRow({ colors, nearby }: {
       )}
       {nearby.problem === 'unavailable' && (
         <Text style={{ fontSize: 12, color: colors.text }}>
-          No pudimos ubicarte. Probá al aire libre e intentá de nuevo.
+          No pudimos ubicarte. Prueba al aire libre e intenta de nuevo.
         </Text>
       )}
 
@@ -528,10 +528,10 @@ function ProfileSection({
         ⚠️ Es un dato DISTINTO del de `src/nearby/`. Aquel es una posición
         aproximada que no se muestra en ninguna parte y solo decide a quién le
         llegan los avisos de partidas cercanas; éste es una etiqueta que vos
-        elegís mostrar. No los mezcles ni derives uno del otro.
+        eliges mostrar. No los mezcles ni derives uno del otro.
       */}
       <Input label="Ciudad" value={region} onChangeText={onChangeRegion}
-        hint="Se usa para ubicarte en tu perfil. Podés escribirla o tomarla del GPS."/>
+        hint="Se usa para ubicarte en tu perfil. Puedes escribirla o tomarla del GPS."/>
       <Pressable
         onPress={locatingCity ? undefined : onUseMyCity}
         style={({ pressed }) => ({
@@ -553,7 +553,7 @@ function ProfileSection({
       ) : null}
 
       <Input label="Club principal" value={club} onChangeText={() => {}} disabled
-        hint="Lo administra el club. Pedile al admin si necesitás cambiarlo."/>
+        hint="Lo administra el club. Pídele al admin si necesitas cambiarlo."/>
 
       {/* Categoría del jugador — se guarda al tocarla (PATCH /user/me). */}
       <View style={{ gap: 6 }}>
@@ -678,18 +678,18 @@ export function friendlyPasswordError(err: any): string {
     return 'La nueva contraseña es muy débil. Usá al menos 8 caracteres.';
   }
   if (msg.includes('requires-recent-login')) {
-    return 'Por seguridad, volvé a iniciar sesión e intentá de nuevo.';
+    return 'Por seguridad, vuelve a iniciar sesión e intenta de nuevo.';
   }
   if (msg.includes('too-many-requests')) {
-    return 'Demasiados intentos. Esperá unos minutos y volvé a intentar.';
+    return 'Demasiados intentos. Espera unos minutos y vuelve a intentar.';
   }
   if (msg.includes('user-not-found') || msg.includes('user-mismatch')) {
     return 'Esta cuenta no usa contraseña (entraste con Google/Apple).';
   }
   if (msg.includes('network') || msg.includes('Network')) {
-    return 'Sin conexión a internet. Verificá tu red e intentá de nuevo.';
+    return 'Sin conexión a internet. Verifica tu red e intenta de nuevo.';
   }
-  return 'No se pudo actualizar la contraseña. Intentá de nuevo.';
+  return 'No se pudo actualizar la contraseña. Intenta de nuevo.';
 }
 
 function SettingsRow({ label, value, onPress }: {

@@ -134,7 +134,7 @@ export function PlayerOwnProfileScreen({
               <Text onPress={onOpenLibrary} style={{ color: colors.accentText, fontWeight: '700' }}>
                 biblioteca privada
               </Text>
-              {' '}y marcá algo como público para que aparezca acá.
+              {' '}y marcá algo como público para que aparezca aquí.
             </Text>
           </View>
         ) : (

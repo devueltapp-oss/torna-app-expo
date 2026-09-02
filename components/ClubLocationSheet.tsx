@@ -188,13 +188,13 @@ export function ClubLocationSheet({ visible, onClose, onSaved }: ClubLocationShe
 function messageFor(problem: NonNullable<ReturnType<typeof useClubLocation>['problem']>): string {
   switch (problem) {
     case 'denied':
-      return 'Necesitamos permiso de ubicación. Podés activarlo en Ajustes, o buscar la dirección.';
+      return 'Necesitamos permiso de ubicación. Puedes activarlo en Ajustes, o buscar la dirección.';
     case 'unavailable':
-      return 'No pudimos ubicarte. Probá al aire libre, o buscá la dirección del club.';
+      return 'No pudimos ubicarte. Prueba al aire libre, o busca la dirección del club.';
     case 'search':
-      return 'No pudimos buscar direcciones ahora. Podés usar tu ubicación actual.';
+      return 'No pudimos buscar direcciones ahora. Puedes usar tu ubicación actual.';
     case 'save':
-      return 'No pudimos guardar la ubicación. Revisá tu conexión e intentá de nuevo.';
+      return 'No pudimos guardar la ubicación. Revisa tu conexión e intenta de nuevo.';
     default:
       return '';
   }

@@ -276,7 +276,7 @@ function friendlyError(err: any): string {
   const msg: string = err?.message ?? err?.code ?? '';
 
   if (msg.includes('email-already-in-use')) {
-    return 'Ya existe una cuenta con ese email. Probá iniciando sesión.';
+    return 'Ya existe una cuenta con ese email. Prueba iniciando sesión.';
   }
   if (msg.includes('invalid-email')) {
     return 'El email no es válido.';
@@ -288,7 +288,7 @@ function friendlyError(err: any): string {
     return 'Ese nombre de usuario ya está en uso.';
   }
   if (msg.includes('network') || msg.includes('Network') || msg.includes('fetch')) {
-    return 'Sin conexión a internet. Verificá tu red e intentá de nuevo.';
+    return 'Sin conexión a internet. Verifica tu red e intenta de nuevo.';
   }
-  return msg || 'No se pudo crear la cuenta. Intentá de nuevo.';
+  return msg || 'No se pudo crear la cuenta. Intenta de nuevo.';
 }

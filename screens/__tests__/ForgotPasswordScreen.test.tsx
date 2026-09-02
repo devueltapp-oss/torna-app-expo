@@ -37,7 +37,7 @@ describe('ForgotPasswordScreen', () => {
     fireEvent.press(getByText('Enviarme el enlace'));
 
     await waitFor(() => expect(mockSendPasswordReset).toHaveBeenCalledWith('jugador@torna.io'));
-    await waitFor(() => expect(getByText('Revisá tu correo')).toBeTruthy());
+    await waitFor(() => expect(getByText('Revisa tu correo')).toBeTruthy());
   });
 
   it('usa el email que venía del login sin obligar a reescribirlo', async () => {
@@ -55,7 +55,7 @@ describe('ForgotPasswordScreen', () => {
     fireEvent.changeText(getByPlaceholderText('tu@email.com'), 'noexiste@torna.io');
     fireEvent.press(getByText('Enviarme el enlace'));
 
-    await waitFor(() => expect(getByText('Revisá tu correo')).toBeTruthy());
+    await waitFor(() => expect(getByText('Revisa tu correo')).toBeTruthy());
     expect(queryByText(/no encontramos/i)).toBeNull();
   });
 
@@ -67,7 +67,7 @@ describe('ForgotPasswordScreen', () => {
     fireEvent.press(getByText('Enviarme el enlace'));
 
     await waitFor(() => expect(getByText(/Demasiados intentos/)).toBeTruthy());
-    expect(queryByText('Revisá tu correo')).toBeNull();
+    expect(queryByText('Revisa tu correo')).toBeNull();
   });
 
   it('email inválido: ni siquiera llama a Firebase', () => {
@@ -77,6 +77,6 @@ describe('ForgotPasswordScreen', () => {
     fireEvent.press(getByText('Enviarme el enlace'));
 
     expect(mockSendPasswordReset).not.toHaveBeenCalled();
-    expect(getByText('Escribí un email válido.')).toBeTruthy();
+    expect(getByText('Escribe un email válido.')).toBeTruthy();
   });
 });

@@ -108,14 +108,14 @@ export function HomeScreen({
         }
       >
         {/* Feed vertical (scroll hacia abajo): transmisiones en vivo + highlights
-            de quienes seguís, como cards a lo ancho. */}
+            de quienes sigues, como cards a lo ancho. */}
         {/*
           Próximas partidas (mías + de quienes sigo): **lo primero de la
           pantalla**, antes del feed. Estuvo al final y había que bajar todo el
           Inicio para saber cuándo jugabas — el dato que más se consulta y el más
           enterrado.
 
-          Va fuera del `if` del feed vacío a propósito: podés tener partidas
+          Va fuera del `if` del feed vacío a propósito: puedes tener partidas
           agendadas sin seguir a nadie, y ese estado vacío habla del feed.
         */}
         <UpcomingStrip games={upcomingGames} onOpen={onOpenUpcoming} />
@@ -127,7 +127,7 @@ export function HomeScreen({
           <View style={{ alignItems: 'center', paddingHorizontal: 32, paddingVertical: 56, gap: 8 }}>
             <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text }}>Tu feed está vacío</Text>
             <Text style={{ fontSize: 13, color: colors.muted2, textAlign: 'center', lineHeight: 19 }}>
-              Seguí a jugadores y clubes para ver acá sus transmisiones en vivo y sus highlights.
+              Sigue a jugadores y clubes para ver aquí sus transmisiones en vivo y sus highlights.
             </Text>
           </View>
         ) : (
@@ -138,7 +138,7 @@ export function HomeScreen({
                 <View style={{ paddingHorizontal: 16 }}>
                   {/* Sin acción "Ver todos": las cards ya están todas acá abajo,
                       así que era un botón que no llevaba a nada nuevo. */}
-                  <SectionHeader title="En vivo · de quienes seguís" />
+                  <SectionHeader title="En vivo · de quienes sigues" />
                 </View>
                 <View style={{ paddingHorizontal: 16, gap: 12 }}>
                   {liveGames.map((g) => (

@@ -101,7 +101,7 @@ export function ReserveStep3Screen({
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text }}>Buscar rivales</Text>
             <Text style={{ fontSize: 11, color: colors.muted2, marginTop: 1, lineHeight: 15 }}>
-              Activalo si solo tenés a tu compañero. Tu partido se publica para que otros 2 jugadores se sumen.
+              Actívalo si solo tienes a tu compañero. Tu partido se publica para que otros 2 jugadores se sumen.
             </Text>
           </View>
           <Switch value={searching} onChange={setSearching}/>
@@ -193,7 +193,7 @@ export function ReserveStep3Screen({
       }}>
         {!category && (
           <Text style={{ fontSize: 12, color: colors.muted2, textAlign: 'center' }}>
-            Elegí el nivel de la partida para confirmar.
+            Elige el nivel de la partida para confirmar.
           </Text>
         )}
         <Button

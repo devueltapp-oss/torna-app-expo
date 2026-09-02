@@ -62,7 +62,7 @@ export function ResultStep({ range, title, resultUrl, visibility, onShare, onDon
         <Text style={{ flex: 1, fontSize: 12, color: colors.accentText, fontWeight: '700', lineHeight: 16 }}>
           {isPublic
             ? 'Publicado en tu feed. Ya pueden verlo quienes te siguen.'
-            : 'Guardado en tu biblioteca privada. Solo vos podés verlo.'}
+            : 'Guardado en tu biblioteca privada. Solo tú puedes verlo.'}
         </Text>
       </View>
 

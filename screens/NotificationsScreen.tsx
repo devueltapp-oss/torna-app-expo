@@ -100,10 +100,10 @@ export function NotificationsScreen({
                 <Bell size={40} color={colors.ink} strokeWidth={2.2} />
               </View>
               <Text style={{ fontSize: 16, fontFamily: fonts.bold, color: colors.text }}>
-                No tenés notificaciones
+                No tienes notificaciones
               </Text>
               <Text style={{ fontSize: 13, color: colors.muted2, textAlign: 'center', lineHeight: 19 }}>
-                Acá vas a ver cuando alguien que seguís agende una partida o empiece a transmitir.
+                Aquí vas a ver cuando alguien que sigues agende una partida o empiece a transmitir.
               </Text>
             </View>
           ) : null

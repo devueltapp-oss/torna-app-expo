@@ -680,7 +680,7 @@ function ReserveInviteScreen({ route, navigation }: { route: any; navigation: an
         } catch (e) {
           Alert.alert(
             'No se pudo crear la reserva',
-            e instanceof Error ? e.message : 'Intentá de nuevo.',
+            e instanceof Error ? e.message : 'Intenta de nuevo.',
           );
         } finally {
           submitting.current = false;
@@ -958,7 +958,7 @@ function MainPlayer({ navigation, route }: any) {
     (action: Promise<unknown>, errorTitle: string) => {
       action
         .catch((e: any) =>
-          Alert.alert(errorTitle, e?.message ?? 'Intentá de nuevo.'),
+          Alert.alert(errorTitle, e?.message ?? 'Intenta de nuevo.'),
         )
         .finally(() => refreshMyGames());
     },
@@ -1034,7 +1034,7 @@ function MainPlayer({ navigation, route }: any) {
     setHighlights(xs => xs.map(h => (h.id === item.id ? { ...h, description } : h)));
     updateHighlightMeta(item.id, { description }).catch(() => {
       setHighlights(xs => xs.map(h => (h.id === item.id ? { ...h, description: prev } : h)));
-      Alert.alert('No se pudo guardar', 'Intentá de nuevo.');
+      Alert.alert('No se pudo guardar', 'Intenta de nuevo.');
     });
   }, []);
 
@@ -1079,7 +1079,7 @@ function MainPlayer({ navigation, route }: any) {
             onReserve={() => navigation.navigate('ReservePickClub')}
             /* Ofrecer el aviso de cercanía solo si está apagado y nunca se
                descartó. `enable()` es lo ÚNICO que pide el permiso del sistema,
-               y acá sale en contexto: el usuario está mirando partidas abiertas. */
+               y aquí sale en contexto: el usuario está mirando partidas abiertas. */
             nearbyPrompt={nearby.shouldPrompt ? {
               radiusKm: nearby.settings?.radiusKm,
               loading: nearby.loading,
@@ -1211,7 +1211,7 @@ function MainPlayer({ navigation, route }: any) {
         onLeaveGame={handleLeaveGame}
         onCancelPair={handleCancelPair}
         /* Se cierra la hoja antes de abrir la de invitar: dos Modals apilados
-           son frágiles en iOS y el usuario vuelve acá igual al terminar. */
+           son frágiles en iOS y el usuario vuelve aquí igual al terminar. */
         onInvite={(gameId) => { setMyGameSheet(null); setInviteGame(gameId); }}
       />
 
@@ -1475,7 +1475,7 @@ function GameDetailContainer({ navigation, route }: { navigation: any; route: an
   const shareTo = React.useCallback(async (userIds: string[]) => {
     const gameId = route.params?.gameId;
     if (!gameId) return false;
-    const texto = game.club ? `Mirá este partido en ${game.club}` : 'Mirá este partido';
+    const texto = game.club ? `Mira este partido en ${game.club}` : 'Mira este partido';
     try {
       // En serie y no en paralelo: son pocos destinatarios y así un fallo no deja
       // la mitad enviada sin que se sepa cuál.
