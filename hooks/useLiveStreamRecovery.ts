@@ -43,6 +43,15 @@ const BUFFERING_MS = 12000;
 /** Piso entre dos intentos: sin esto, un stream caído remonta en bucle cerrado. */
 const MIN_RETRY_MS = 4000;
 
+/**
+ * Cuánto dura el cartel de "Reconectando…" después de un reenganche.
+ *
+ * No se apaga cuando el video vuelve a reproducir sino por tiempo, a propósito:
+ * el remonte tarda un instante en producir el primer frame y un cartel que
+ * parpadea en cada micro-recuperación es peor que uno que se queda un momento.
+ */
+const RECONNECTING_MS = 3500;
+
 export interface LiveStreamRecovery {
   /** Va en la `key` del `<Video>`: al cambiar, se remonta y reengancha. */
   reloadNonce: number;
@@ -52,11 +61,21 @@ export interface LiveStreamRecovery {
   onError: () => void;
   /** Cuántas veces se reenganchó. Para diagnóstico. */
   recoveries: number;
+  /** True mientras se está reenganchando: la UI muestra "Reconectando…". */
+  reconnecting: boolean;
+  /**
+   * Reintento **manual**, desde un botón. Ignora el piso entre intentos: si la
+   * persona lo pide explícitamente, hacerla esperar sin decirle por qué sería
+   * peor que un remonte de más.
+   */
+  retryNow: () => void;
 }
 
 export function useLiveStreamRecovery(enabled: boolean): LiveStreamRecovery {
   const [reloadNonce, setReloadNonce] = useState(0);
   const [recoveries, setRecoveries] = useState(0);
+  const [reconnecting, setReconnecting] = useState(false);
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Refs y no estado: se escriben en cada status (varias veces por segundo) y
   // no deben provocar un render.
@@ -75,14 +94,32 @@ export function useLiveStreamRecovery(enabled: boolean): LiveStreamRecovery {
     if (!enabled) reset();
   }, [enabled, reset]);
 
-  const recover = useCallback(() => {
-    const now = Date.now();
-    if (now - lastRetryRef.current < MIN_RETRY_MS) return;
-    lastRetryRef.current = now;
+  /** Remonta el `<Video>` y enciende el cartel de "Reconectando…". */
+  const doRecover = useCallback(() => {
+    lastRetryRef.current = Date.now();
     reset();
     setReloadNonce((n) => n + 1);
     setRecoveries((n) => n + 1);
+    setReconnecting(true);
+    if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+    reconnectTimer.current = setTimeout(() => setReconnecting(false), RECONNECTING_MS);
   }, [reset]);
+
+  /** Reenganche AUTOMÁTICO: respeta el piso para no remontar en bucle. */
+  const recover = useCallback(() => {
+    if (Date.now() - lastRetryRef.current < MIN_RETRY_MS) return;
+    doRecover();
+  }, [doRecover]);
+
+  /** Reenganche MANUAL: sin piso, lo pidió una persona. */
+  const retryNow = useCallback(() => {
+    doRecover();
+  }, [doRecover]);
+
+  // Un timer vivo tras desmontar deja un setState sobre un componente muerto.
+  useEffect(() => () => {
+    if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+  }, []);
 
   const onPlaybackStatusUpdate = useCallback(
     (status: AVPlaybackStatus) => {
@@ -128,5 +165,5 @@ export function useLiveStreamRecovery(enabled: boolean): LiveStreamRecovery {
     if (enabled) recover();
   }, [enabled, recover]);
 
-  return { reloadNonce, onPlaybackStatusUpdate, onError, recoveries };
+  return { reloadNonce, onPlaybackStatusUpdate, onError, recoveries, reconnecting, retryNow };
 }

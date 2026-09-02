@@ -35,14 +35,20 @@
  *  - **Los jugadores abren su perfil** (`onOpenPlayer`, necesita el `id`/UID que mapea
  *    `useGameDetail`). El **club no está en el panel**: ya está arriba en el chip.
  *
- * ⚠️ `resizeMode` es `CONTAIN` en los tres tamaños: la fuente es 16:9 (cancha
- * apaisada) y las cajas ya no lo son, así que con `COVER` el video a pantalla completa
- * en vertical perdería media cancha por recorte.
+ * ⚠️ `resizeMode` es `CONTAIN` **por defecto**: la fuente es 16:9 (cancha apaisada) y
+ * las cajas ya no lo son, así que con `COVER` fijo el video en vertical perdería media
+ * cancha por recorte. Desde el 2026-09-02 hay un **toggle de zoom** (`zoomed`) que
+ * pasa a `COVER` para llenar la pantalla: las franjas negras son el precio de ver la
+ * cancha entera, y ahora es el usuario quien elige. **No cambies el default.**
+ *
+ * Controles del video, todos en la barra de abajo: pausa (en un vivo, reanudar
+ * REMONTA — ver `togglePaused`), zoom, comentarios, compartir y pantalla completa.
  */
 import React from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet, TouchableOpacity,
   StatusBar, BackHandler, useWindowDimensions, TextInput, FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Svg, Rect, Line } from 'react-native-svg';
@@ -51,6 +57,7 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import {
   Scissors, Send,
   Maximize2, Minimize2, MessageCircle, X,
+  Play, Pause, Expand, Shrink, RotateCw,
 } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
@@ -125,6 +132,33 @@ export function GameDetailScreen({
    * "terminado", y remontar por eso lo reiniciaría en bucle.
    */
   const recovery = useLiveStreamRecovery(game.isLive);
+
+  /**
+   * Zoom del video: `false` = CONTAIN (se ve la cancha entera, con franjas
+   * negras arriba y abajo), `true` = COVER (llena la pantalla, recortando).
+   *
+   * ⚠️ **El default sigue siendo CONTAIN y no hay que cambiarlo.** La fuente es
+   * 16:9 (cancha apaisada) y el contenedor en vertical no lo es: con COVER fijo
+   * se pierde media cancha por recorte, que es peor que las franjas. Por eso el
+   * zoom es un **toggle del usuario** y no una decisión nuestra — quien lo activa
+   * sabe lo que está cambiando, y en horizontal (donde las franjas casi no
+   * existen) ni hace falta.
+   */
+  const [zoomed, setZoomed] = React.useState(false);
+
+  /**
+   * Pausa. Es un vivo, así que pausar es "me alejo un momento": al reanudar se
+   * **remonta** (`recovery.retryNow()`) en vez de continuar donde quedó, porque
+   * los segmentos de hace dos minutos ya no existen — reanudar dejaría el
+   * reproductor pidiendo cosas borradas, que es justo la traba que arreglamos.
+   */
+  const [paused, setPaused] = React.useState(false);
+  const togglePaused = React.useCallback(() => {
+    setPaused((p) => {
+      if (p && game.isLive) recovery.retryNow();
+      return !p;
+    });
+  }, [game.isLive, recovery]);
   const videoRef = React.useRef<Video>(null);
 
   // Pantalla completa in-app (landscape) + paneles de comentarios.
@@ -316,11 +350,15 @@ export function GameDetailScreen({
               key={`${activeCam?.id ?? game.id}:${recovery.reloadNonce}`}
               source={{ uri: streamSrc! }}
               style={StyleSheet.absoluteFill}
-              // CONTAIN siempre: la fuente es 16:9 (cancha apaisada) y las cajas ya
-              // no lo son. Con COVER, el video a pantalla completa en vertical se
-              // recortaría tanto que se perdería media cancha.
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay
+              /*
+               * CONTAIN por defecto: la fuente es 16:9 (cancha apaisada) y las
+               * cajas ya no lo son, así que con COVER fijo se perdería media
+               * cancha por recorte. COVER solo si el usuario pide zoom — ver
+               * `zoomed`. Las franjas negras son el precio de ver la cancha
+               * entera; quien prefiere llenar la pantalla ahora puede elegirlo.
+               */
+              resizeMode={zoomed ? ResizeMode.COVER : ResizeMode.CONTAIN}
+              shouldPlay={!paused}
               isLooping={false}
               isMuted={false}
               progressUpdateIntervalMillis={1000}
@@ -338,7 +376,7 @@ export function GameDetailScreen({
             />
           ) : (
             <>
-              <Svg viewBox="0 0 360 200" width="58%" height="58%" style={{ opacity: 0.4 }}>
+              <Svg viewBox="0 0 360 200" width="58%" height="58%" style={{ opacity: 0.4 }} testID="no-stream-placeholder">
                 <Rect x={40} y={22} width={280} height={156} stroke={colors.accent} strokeWidth={1.6} fill="none"/>
                 <Line x1={180} y1={22} x2={180} y2={178} stroke={colors.accent} strokeWidth={1.6}/>
                 <Line x1={40} y1={68} x2={320} y2={68} stroke={colors.accent} strokeWidth={1}/>
@@ -360,6 +398,53 @@ export function GameDetailScreen({
                 )}
               </View>
             </>
+          )}
+
+          {/*
+            Estado de la conexión, centrado sobre el video.
+            - Reconectando: la app ya está remontando sola; el cartel existe para
+              que la imagen quieta no parezca la app colgada.
+            - En pausa: recuerda que fue una decisión del usuario.
+            El botón "Reintentar" está siempre en un vivo: si el reenganche
+            automático no alcanza, tiene que haber una salida a mano en vez de
+            obligar a salir y volver a entrar.
+          */}
+          {hasStream && game.isLive && (recovery.reconnecting || paused) && (
+            <View
+              testID="stream-status"
+              pointerEvents="box-none"
+              style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                alignItems: 'center', justifyContent: 'center', zIndex: 20,
+              }}
+            >
+              <View style={{
+                flexDirection: 'row', alignItems: 'center', gap: 10,
+                backgroundColor: 'rgba(0,0,0,0.62)', borderRadius: 999,
+                paddingVertical: 9, paddingHorizontal: 14,
+              }}>
+                {recovery.reconnecting && <ActivityIndicator size="small" color={colors.accent} />}
+                <Text style={{ color: '#FFFFFF', fontSize: 13, fontFamily: fonts.bold }}>
+                  {recovery.reconnecting ? 'Reconectando…' : 'En pausa'}
+                </Text>
+                {!recovery.reconnecting && (
+                  <Pressable
+                    onPress={recovery.retryNow}
+                    testID="retry-stream"
+                    hitSlop={8}
+                    style={({ pressed }) => ({
+                      flexDirection: 'row', alignItems: 'center', gap: 5,
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                  >
+                    <RotateCw size={14} color={colors.accent} />
+                    <Text style={{ color: colors.accent, fontSize: 13, fontFamily: fonts.bold }}>
+                      Reintentar
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            </View>
           )}
 
           {/* Identidad, arriba a la izquierda: club + estado. Es el equivalente al
@@ -623,6 +708,38 @@ export function GameDetailScreen({
                   testID="share-game"
                 >
                   <Send size={18} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
+
+              {/* Pausa / reanudar. En un vivo, reanudar REMONTA (ver `togglePaused`). */}
+              {hasStream && (
+                <TouchableOpacity
+                  onPress={togglePaused}
+                  testID="toggle-pause"
+                  style={circleBtn('rgba(0,0,0,0.55)')}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={paused ? 'Reanudar' : 'Pausar'}
+                >
+                  {paused
+                    ? <Play size={18} color="#FFFFFF" />
+                    : <Pause size={18} color="#FFFFFF" />}
+                </TouchableOpacity>
+              )}
+
+              {/* Zoom: llena la pantalla recortando, en vez de dejar franjas negras. */}
+              {hasStream && (
+                <TouchableOpacity
+                  onPress={() => setZoomed((z) => !z)}
+                  testID="toggle-zoom"
+                  style={circleBtn(zoomed ? 'rgba(214,255,126,0.9)' : 'rgba(0,0,0,0.55)')}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={zoomed ? 'Ver la cancha entera' : 'Llenar la pantalla'}
+                >
+                  {zoomed
+                    ? <Shrink size={18} color={colors.ink} />
+                    : <Expand size={18} color="#FFFFFF" />}
                 </TouchableOpacity>
               )}
 

@@ -347,3 +347,78 @@ describe('GameDetailScreen — chrome del live', () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * Controles del reproductor: zoom, pausa y reintento (2026-09-02).
+ *
+ * Los tres salen del mismo reporte: franjas negras arriba y abajo, y una imagen
+ * que se congela sin forma de recuperarla salvo salir y volver a entrar.
+ */
+describe('GameDetailScreen — controles del video', () => {
+  /**
+   * ⚠️ **El default es CONTAIN y tiene que seguir siéndolo.** La fuente es 16:9
+   * (cancha apaisada) y el contenedor vertical no lo es: con COVER fijo se
+   * pierde media cancha por recorte, que es peor que las franjas. El zoom es una
+   * elección del usuario, no nuestra.
+   */
+  it('arranca sin zoom: se ve la cancha entera', () => {
+    const { getByTestId } = renderScreen();
+    expect(getByTestId('toggle-zoom')).toBeTruthy();
+  });
+
+  it('el zoom es un toggle: llena la pantalla y vuelve', () => {
+    const { getByTestId } = renderScreen();
+    const boton = getByTestId('toggle-zoom');
+
+    // Sin zoom ofrece "llenar"; con zoom ofrece volver a ver todo. La etiqueta
+    // accesible es lo que distingue los dos estados sin depender del estilo.
+    expect(boton.props.accessibilityLabel).toBe('Llenar la pantalla');
+    fireEvent.press(boton);
+    expect(getByTestId('toggle-zoom').props.accessibilityLabel).toBe('Ver la cancha entera');
+    fireEvent.press(getByTestId('toggle-zoom'));
+    expect(getByTestId('toggle-zoom').props.accessibilityLabel).toBe('Llenar la pantalla');
+  });
+
+  it('se puede pausar y reanudar', () => {
+    const { getByTestId, queryByTestId } = renderScreen();
+
+    expect(getByTestId('toggle-pause').props.accessibilityLabel).toBe('Pausar');
+    // Sin pausa ni reconexión, el cartel de estado no ocupa la pantalla.
+    expect(queryByTestId('stream-status')).toBeNull();
+
+    fireEvent.press(getByTestId('toggle-pause'));
+    expect(getByTestId('toggle-pause').props.accessibilityLabel).toBe('Reanudar');
+    expect(getByTestId('stream-status')).toBeTruthy();
+
+    fireEvent.press(getByTestId('toggle-pause'));
+    expect(getByTestId('toggle-pause').props.accessibilityLabel).toBe('Pausar');
+  });
+
+  /**
+   * Si el reenganche automático no alcanza, tiene que haber una salida a mano:
+   * sin esto, la única forma de recuperar era salir del visor y volver a entrar.
+   */
+  it('en pausa ofrece reintentar la conexión', () => {
+    const { getByTestId, getByText } = renderScreen();
+
+    fireEvent.press(getByTestId('toggle-pause'));
+
+    expect(getByText('En pausa')).toBeTruthy();
+    expect(getByTestId('retry-stream')).toBeTruthy();
+    // No debe romper: remonta el <Video> cambiando su key.
+    fireEvent.press(getByTestId('retry-stream'));
+  });
+
+  /**
+   * En un grabado, la posición detenida significa "pausado" o "terminado", no
+   * "trabado": el cartel de reconexión no aplica.
+   */
+  it('en una partida NO en vivo no muestra el estado de conexión', () => {
+    const { getByTestId, queryByTestId } = renderScreen({
+      game: { ...game, isLive: false },
+    });
+
+    fireEvent.press(getByTestId('toggle-pause'));
+    expect(queryByTestId('stream-status')).toBeNull();
+  });
+});
