@@ -520,6 +520,26 @@ PATCH /follow/notify/:userId    { notify }   → toggle "Notificarme" (setFollow
   al `VideoPreviewModal` (perfil propio/librería abren via `openPreview`→`previewVideo`; el
   perfil ajeno via `clipModal`). Sin `highlightId` no hay descripción ni comentarios.
 
+### ⚠️ Horarios de partidas: se formatean en hora del CLUB, no del teléfono
+
+**`scheduledStartAt`/`scheduledEndAt` NO son instantes para convertir: son etiquetas
+escritas en UTC.** `GameService.reserve` compone `new Date("2026-09-02T12:30:00")` con la
+hora del server (el droplet corre en UTC) y guarda `2026-09-02T12:30:00.000Z`; `getSlots`
+genera la grilla con la misma base, y el desktop lo declara explícito en `dateBlocks.js`
+(*"un bloque '08:00' es 08:00Z"*).
+
+Por eso hay que formatearlos **en UTC**, con `formatClubTime`/`formatClubDate`
+(`lib/clubTime.ts`). Usar `toLocaleTimeString()` los corre el offset del dispositivo: una
+reserva de las **12:30** se mostraba como **08:30** en Venezuela (UTC−4) — bug real del
+2026-09-02, en `useMyGames` y `useOpenGames`.
+
+- ✅ **Usá `lib/clubTime`** para horarios agendados de partidas y slots.
+- ❌ **NO lo uses** para timestamps que son instantes de verdad —mensajes de chat, "hace
+  5 min" de la campanita, fecha de un highlight—: ésos **sí** van en hora local del
+  dispositivo. `useClubGames` formatea `createdAt`, que es un instante real: queda como está.
+- Cubierto por `lib/clubTime.test.ts`, que fija `TZ=America/Caracas` para que el test falle
+  si alguien vuelve a formatear en local.
+
 ### Canchas y reservas — `api/clubs.ts`
 
 ```

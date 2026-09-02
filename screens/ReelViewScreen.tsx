@@ -11,15 +11,21 @@ import { GameCommentsPanel } from '../components/GameCommentsPanel';
 import { useGameComments } from '../hooks/useGameComments';
 import { useAuth } from '../contexts/AuthContext';
 import type { LiveGameData } from '../components/cards';
-import type { UpcomingGameData } from './HomeScreen';
 import type { FeedPost } from '../data/types';
 
-export type ReelSection = 'live' | 'upcoming' | 'highlights';
+/**
+ * ⚠️ **Ya no existe el modo `upcoming`** (2026-09-02). Eran tarjetas de TEXTO a
+ * pantalla completa —hora, cancha, club— y hacer swipe vertical para leer cuatro
+ * datos es peor que verlos en una lista. Esas partidas viven ahora en el strip
+ * compacto del tope del Inicio (`UpcomingStrip`) y en Juegos → "Mis partidas".
+ *
+ * El reel tiene sentido donde hay **video**: eso es `live` y `highlights`.
+ */
+export type ReelSection = 'live' | 'highlights';
 
 export interface ReelViewScreenProps {
   section: ReelSection;
   liveGames: LiveGameData[];
-  upcomingGames: UpcomingGameData[];
   feedPosts: FeedPost[];
   onBack: () => void;
   onOpenGame?: (id: string) => void;
@@ -30,7 +36,6 @@ export interface ReelViewScreenProps {
 
 const SECTION_TITLES: Record<ReelSection, string> = {
   live: 'En vivo',
-  upcoming: 'Próximos',
   highlights: 'Highlights',
 };
 
@@ -195,55 +200,6 @@ function LiveReelItem({
   );
 }
 
-/* ─── Upcoming reel item (no video) ─── */
-
-function UpcomingReelItem({
-  game,
-  height,
-}: {
-  game: UpcomingGameData;
-  height: number;
-}) {
-  const { colors } = useTheme();
-  return (
-    <View style={{ height, paddingHorizontal: 20, paddingVertical: 28, justifyContent: 'center', gap: 28 }}>
-      <View style={{
-        flex: 1, borderRadius: 18, backgroundColor: colors.surface,
-        borderWidth: 1, borderColor: colors.line,
-        alignItems: 'center', justifyContent: 'center', gap: 8,
-      }}>
-        <Text style={{ color: colors.muted2, fontFamily: fonts.bold, fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase' }}>
-          PRÓXIMO PARTIDO
-        </Text>
-        <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: 56, letterSpacing: -2 }}>
-          {game.time}
-        </Text>
-        <Text style={{ color: colors.muted2, fontSize: 15, fontFamily: fonts.regular }}>
-          {game.court} · {game.club}
-        </Text>
-      </View>
-
-      <View style={{ gap: 14 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <StatusBadge status="SCHEDULED" />
-          <Text style={{ color: colors.muted2, fontSize: 12, fontFamily: fonts.regular }}>
-            {game.players.length} jugadores
-          </Text>
-        </View>
-
-        <AvatarStack users={game.players} size={32} max={4} />
-
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.accent }} />
-          <Text style={{ color: colors.accentText, fontSize: 12, fontFamily: fonts.bold, letterSpacing: 0.4, textTransform: 'uppercase' }}>
-            Sigues a {game.following === 'player' ? game.byPlayer : game.club}
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
-}
-
 /* ─── Highlight reel item ─── */
 
 function HighlightReelItem({
@@ -380,7 +336,6 @@ function HighlightReelItem({
 export function ReelViewScreen({
   section,
   liveGames,
-  upcomingGames,
   feedPosts,
   onBack,
   onOpenGame,
@@ -392,10 +347,8 @@ export function ReelViewScreen({
   const [listHeight, setListHeight] = React.useState(0);
   const [currentIndex, setCurrentIndex] = React.useState(initialIndex);
 
-  const items: (LiveGameData | UpcomingGameData | FeedPost)[] =
-    section === 'live'     ? liveGames :
-    section === 'upcoming' ? upcomingGames :
-    feedPosts;
+  const items: (LiveGameData | FeedPost)[] =
+    section === 'live' ? liveGames : feedPosts;
 
   const total = items.length;
 
@@ -455,14 +408,6 @@ export function ReelViewScreen({
                     game={item as LiveGameData}
                     height={listHeight}
                     isActive={isActive}
-                  />
-                );
-              }
-              if (section === 'upcoming') {
-                return (
-                  <UpcomingReelItem
-                    game={item as UpcomingGameData}
-                    height={listHeight}
                   />
                 );
               }

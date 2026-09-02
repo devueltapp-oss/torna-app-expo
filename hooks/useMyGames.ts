@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetchMyGames, type BackendMyGame } from '../api/games';
+import { formatClubDate, formatClubTime } from '../lib/clubTime';
 import type { GameApplication, UpcomingGameData, UpcomingGamePlayer } from '../data/types';
 
 /**
@@ -11,19 +12,14 @@ import type { GameApplication, UpcomingGameData, UpcomingGamePlayer } from '../d
  * los `gamePlayers`. Mismo patrón que `hooks/useOpenGames.ts`.
  */
 
-function fmtTime(iso?: string | null): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '—';
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function fmtDate(iso?: string | null): string | undefined {
-  if (!iso) return undefined;
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return undefined;
-  return d.toLocaleDateString([], { day: 'numeric', month: 'short' });
-}
+/**
+ * ⚠️ **En hora del CLUB, no del teléfono** (`lib/clubTime`). Acá había un
+ * `toLocaleTimeString()` que convertía a la zona del dispositivo: una reserva de
+ * las 12:30 se mostraba como **08:30** en Venezuela. El `scheduledStartAt` que
+ * guarda el backend es una *etiqueta* escrita en UTC, no un instante a convertir.
+ */
+const fmtTime = formatClubTime;
+const fmtDate = formatClubDate;
 
 function mapPlayer(p: BackendMyGame['gamePlayers'][number]): UpcomingGamePlayer {
   return {

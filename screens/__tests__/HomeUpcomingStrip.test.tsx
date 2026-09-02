@@ -100,3 +100,44 @@ describe('HomeScreen — strip de próximas partidas', () => {
     expect(onOpenUpcoming).toHaveBeenCalledWith(g);
   });
 });
+
+/**
+ * Entrada al reel de partidas EN VIVO.
+ *
+ * `ReelViewScreen` quedó inalcanzable al mover "Próximos" arriba (su único
+ * acceso era el "Ver todos" de esa sección). Este "Ver todos" es ahora **el
+ * único punto de entrada**: si desaparece, la pantalla vuelve a ser código
+ * muerto.
+ */
+describe('HomeScreen — entrada al reel de En vivo', () => {
+  const live = (id: string) => ({
+    id, court: `Cancha ${id}`, club: 'CasaPadel', players: [], streamUrl: 'https://x/y.m3u8',
+  }) as any;
+
+  it('con varias partidas en vivo ofrece "Ver todos"', () => {
+    const onOpenLiveReel = jest.fn();
+    const { getByTestId } = renderHome({
+      liveGames: [live('a'), live('b')], onOpenLiveReel,
+    });
+
+    fireEvent.press(getByTestId('open-live-reel'));
+    expect(onOpenLiveReel).toHaveBeenCalledWith(0);
+  });
+
+  /**
+   * Con una sola partida el swipe vertical no lleva a ningún lado: el botón
+   * prometería algo que no puede cumplir.
+   */
+  it('con una sola partida en vivo NO lo ofrece', () => {
+    const { queryByTestId } = renderHome({
+      liveGames: [live('a')], onOpenLiveReel: jest.fn(),
+    });
+
+    expect(queryByTestId('open-live-reel')).toBeNull();
+  });
+
+  it('sin handler no lo ofrece', () => {
+    const { queryByTestId } = renderHome({ liveGames: [live('a'), live('b')] });
+    expect(queryByTestId('open-live-reel')).toBeNull();
+  });
+});

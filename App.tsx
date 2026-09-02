@@ -1063,7 +1063,6 @@ function MainPlayer({ navigation, route }: any) {
             <ReelViewScreen
               section={reelSection}
               liveGames={liveGames}
-              upcomingGames={proximas}
               feedPosts={feedPosts}
               onBack={() => setReelSection(null)}
               onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id, liveStreamUrl: liveGames.find(g => g.id === id)?.streamUrl })}
@@ -1083,6 +1082,10 @@ function MainPlayer({ navigation, route }: any) {
                "En vivo" (el endpoint de lives incluye las propias). */
             upcomingGames={proximas}
             onOpenUpcoming={(g) => setMyGameSheet(g)}
+            /* Reel de partidas EN VIVO (swipe vertical). Es el único punto de
+               entrada a `ReelViewScreen`: si se borra, la pantalla vuelve a
+               quedar inalcanzable. */
+            onOpenLiveReel={(idx) => { setReelInitialIndex(idx ?? 0); setReelSection('live'); }}
             feedPosts={feedPosts}
             activeTab="home" onChangeTab={handleTab}
             onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id, liveStreamUrl: liveGames.find(g => g.id === id)?.streamUrl })}

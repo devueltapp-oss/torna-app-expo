@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import * as SecureStore from 'expo-secure-store';
+import { formatClubDate, formatClubTime } from '../lib/clubTime';
 import type { UpcomingGameData } from '../data/types';
 
 /**
@@ -43,19 +44,13 @@ interface BackendOpenGame {
   }>;
 }
 
-function fmtTime(iso?: string | null): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '—';
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function fmtDate(iso?: string | null): string | undefined {
-  if (!iso) return undefined;
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return undefined;
-  return d.toLocaleDateString([], { day: 'numeric', month: 'short' });
-}
+/**
+ * ⚠️ **En hora del CLUB, no del teléfono** (`lib/clubTime`). Ver la nota en
+ * `useMyGames`: el `scheduledStartAt` es una etiqueta escrita en UTC, y
+ * convertirla a la zona del dispositivo corría los horarios 4 h en Venezuela.
+ */
+const fmtTime = formatClubTime;
+const fmtDate = formatClubDate;
 
 function mapOpenGame(g: BackendOpenGame): UpcomingGameData {
   const primary =
