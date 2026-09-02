@@ -326,7 +326,12 @@ export function Avatar({ name = '?', size = 40, ringColor, imageUri }: { name?: 
   );
 }
 
-export function AvatarStack({ users, size = 28, max = 4 }: { users: { name?: string; username?: string }[]; size?: number; max?: number }) {
+export function AvatarStack({ users, size = 28, max = 4 }: {
+  // `imageUri`: sin esto la pila siempre mostraba iniciales, incluso teniendo la
+  // foto real (es lo que hacía que el club no se distinguiera en el visor).
+  users: { name?: string; username?: string; imageUri?: string }[];
+  size?: number; max?: number;
+}) {
   const { colors } = useTheme();
   const shown = users.slice(0, max);
   const extra = users.length - max;
@@ -334,7 +339,7 @@ export function AvatarStack({ users, size = 28, max = 4 }: { users: { name?: str
     <View style={{ flexDirection: 'row' }}>
       {shown.map((u, i) => (
         <View key={i} style={{ marginLeft: i === 0 ? 0 : -size * 0.32, zIndex: shown.length - i }}>
-          <Avatar name={u.name || u.username || '?'} size={size} ringColor="#FFFFFF" />
+          <Avatar name={u.name || u.username || '?'} size={size} ringColor="#FFFFFF" imageUri={u.imageUri} />
         </View>
       ))}
       {extra > 0 && (

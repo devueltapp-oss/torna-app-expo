@@ -104,7 +104,7 @@ function buildDays(n = 6): DayOption[] {
 /** Detalle de partido vacío mientras carga / si no hay datos (sin cámaras → placeholder). */
 function emptyGameDetail(id: string): GameDetailData {
   return {
-    id, court: '', category: null, club: '', clubId: '', clubHandle: '', clubFollowers: 0,
+    id, court: '', category: null, club: '', clubId: '', clubHandle: '',
     time: '', date: '', isLive: false, players: [], cameras: [],
   };
 }
@@ -217,7 +217,7 @@ function clipToGameDetailParams(
       id: 'clip',
       court: title || 'Highlight',
       category: null,
-      club: '', clubId: '', clubHandle: '', clubFollowers: 0,
+      club: '', clubId: '', clubHandle: '',
       time: '', date: '',
       isLive: false,
       players: [],
@@ -1301,6 +1301,10 @@ function GameDetailContainer({ navigation, route }: { navigation: any; route: an
           .catch(() => setFollowing(wasFollowing)); // revertir en error
       } : undefined}
       onBack={() => navigation.goBack()}
+      // Desde el panel de jugadores se abre el perfil de cualquiera: los jugadores
+      // por su UID y el club por el suyo (un club es un User con isClub=true).
+      onOpenPlayer={(playerId) => navigation.navigate('PlayerProfile', { playerId })}
+      onOpenClub={(id) => navigation.navigate('ClubProfile', { clubId: id })}
       onCreateHighlight={canCreateHighlight ? () => navigation.navigate('VideoEditor', {
         gameId: apiGame!.id,
         recordingUrl: recordingUrl!,

@@ -23,7 +23,7 @@ interface BackendCamera {
     identifier: string;
     streamingUrl: string | null;
     cameraConfig?: {
-      user?: { id: string; username: string; name?: string | null } | null;
+      user?: { id: string; username: string; name?: string | null; profilePicture?: string | null } | null;
     } | null;
   };
 }
@@ -43,7 +43,7 @@ interface BackendGameDetail {
     isCaptain?: boolean;
     /** 1 = lado del organizador, 2 = pareja retadora. */
     team?: number | null;
-    user: { username: string; name?: string | null; profilePicture?: string | null };
+    user: { id: string; username: string; name?: string | null; profilePicture?: string | null };
   }>;
 }
 
@@ -60,13 +60,15 @@ function mapDetail(data: BackendGameDetail): GameDetailData {
     club: clubUser?.name ?? clubUser?.username ?? '',
     clubId: clubUser?.id ?? '',
     clubHandle: clubUser?.username ? '@' + clubUser.username : '',
-    clubFollowers: 0,
+    clubAvatar: clubUser?.profilePicture ?? undefined,
     time: '',
     date: '',
     isLive: data.status === 'LIVE',
     // `team` y `profilePicture` ya venían en GET /game/:id y no se mapeaban: son lo
     // que le da al panel de jugadores las DOS parejas y las fotos reales.
     players: (data.gamePlayers ?? []).map((gp) => ({
+      // El UID es lo que deja abrir el perfil desde el panel de jugadores.
+      id: gp.user.id,
       username: '@' + gp.user.username,
       name: gp.user.name ?? gp.user.username,
       isHost: gp.isCaptain === true,

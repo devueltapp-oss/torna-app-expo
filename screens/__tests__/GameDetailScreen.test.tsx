@@ -56,10 +56,10 @@ const game: GameDetailData = {
   date: 'hoy',
   isLive: true,
   players: [
-    { username: '@ana', name: 'Ana', team: 1, isHost: true },
-    { username: '@beto', name: 'Beto', team: 1 },
-    { username: '@caro', name: 'Caro', team: 2 },
-    { username: '@dani', name: 'Dani', team: 2 },
+    { id: 'u-ana', username: '@ana', name: 'Ana', team: 1, isHost: true },
+    { id: 'u-beto', username: '@beto', name: 'Beto', team: 1 },
+    { id: 'u-caro', username: '@caro', name: 'Caro', team: 2 },
+    { id: 'u-dani', username: '@dani', name: 'Dani', team: 2 },
   ],
   cameras: [{ id: 'cam1', number: 1, label: 'Principal', state: 'available', streamUrl: 'https://x/y.m3u8' } as any],
 };
@@ -126,12 +126,15 @@ describe('GameDetailScreen — paneles que encogen el video (portrait)', () => {
     expect(queryByText(/^CAT\. /)).toBeNull();
   });
 
-  it('sin equipo 2 no se pinta la sección vacía', () => {
-    const solos = { ...game, players: [{ username: '@ana', name: 'Ana', team: 1 }] };
-    const { getByTestId, getByText, queryByText } = renderScreen({ game: solos });
+  it('sin equipos declarados va UNA sección "Jugadores", no un EQUIPO 1 inventado', () => {
+    const sinEquipos = { ...game, players: game.players.map((p) => ({ ...p, team: null })) };
+    const { getByTestId, getByText, queryByText } = renderScreen({ game: sinEquipos });
     fireEvent.press(getByTestId('toggle-players'));
-    expect(getByText('EQUIPO 1')).toBeTruthy();
-    expect(queryByText('EQUIPO 2')).toBeNull();
+    expect(getByText('JUGADORES')).toBeTruthy();
+    expect(queryByText('EQUIPO 1')).toBeNull();
+    // Nadie se pierde: los cuatro siguen listados.
+    expect(getByText('Ana')).toBeTruthy();
+    expect(getByText('Dani')).toBeTruthy();
   });
 });
 
@@ -225,5 +228,51 @@ describe('GameDetailScreen — espectadores conectados', () => {
     mockViewers = 0;
     const { queryByTestId } = renderScreen();
     expect(queryByTestId('viewer-count')).toBeNull();
+  });
+});
+
+/**
+ * El panel es UN cuadro: el club arriba (con etiqueta CLUB) y los jugadores debajo.
+ * Todo el mundo abre su perfil. Y el club ya no muestra seguidores: ese dato no
+ * viaja en GET /game/:id y no aporta nada en medio de un partido.
+ */
+describe('GameDetailScreen — club y navegación a perfiles', () => {
+  function openPanel(props: Partial<React.ComponentProps<typeof GameDetailScreen>> = {}) {
+    const utils = renderScreen(props);
+    fireEvent.press(utils.getByTestId('toggle-players'));
+    return utils;
+  }
+
+  it('el club va arriba, con su etiqueta', () => {
+    const { getByText } = openPanel();
+    expect(getByText('CLUB')).toBeTruthy();
+    expect(getByText('CasaPadel')).toBeTruthy();
+  });
+
+  it('ya no muestra los seguidores del club', () => {
+    const { queryByText } = openPanel();
+    expect(queryByText(/seguidores/i)).toBeNull();
+  });
+
+  it('tocar el club abre su perfil', () => {
+    const onOpenClub = jest.fn();
+    const { getByTestId } = openPanel({ onOpenClub });
+    fireEvent.press(getByTestId('open-club'));
+    expect(onOpenClub).toHaveBeenCalledWith('club-1');
+  });
+
+  it('tocar un jugador abre el suyo, con su UID', () => {
+    const onOpenPlayer = jest.fn();
+    const { getByTestId } = openPanel({ onOpenPlayer });
+    fireEvent.press(getByTestId('open-player-@caro'));
+    expect(onOpenPlayer).toHaveBeenCalledWith('u-caro');
+  });
+
+  it('un jugador sin UID no navega (partidas viejas sin el dato)', () => {
+    const onOpenPlayer = jest.fn();
+    const sinId = { ...game, players: [{ username: '@viejo', name: 'Viejo', team: 1 }] };
+    const { getByTestId } = openPanel({ game: sinId, onOpenPlayer });
+    fireEvent.press(getByTestId('open-player-@viejo'));
+    expect(onOpenPlayer).not.toHaveBeenCalled();
   });
 });

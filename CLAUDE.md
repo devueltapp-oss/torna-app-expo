@@ -647,10 +647,27 @@ POST /game/:id/comments  { comment }  → comentario creado (máx 500 chars)
   perdería media cancha por recorte.
 - **La hoja de info debajo del video ya no existe** — no hay "debajo". Lo que vivía ahí se
   movió al panel **`players`**, que se abre con los **avatares superpuestos** al video
-  (`testID="toggle-players"`) y trae: las **dos parejas** (separadas por
-  `MatchParticipant.team`: 1 = organizador, 2 = retadores), el **club con su ícono** y
-  "Crear highlight". Se quitaron el chip de superficie (HARD) y la sección "Jugadores · N".
-  Las **cámaras** pasaron a chips superpuestos abajo, y solo si hay más de una.
+  (`testID="toggle-players"`) y trae club + jugadores + "Crear highlight". Se quitaron el
+  chip de superficie (HARD) y la sección "Jugadores · N". Las **cámaras** pasaron a chips
+  superpuestos abajo, y solo si hay más de una.
+- **El panel es UN cuadro** (2026-09-01): arriba el **club** —su foto (`clubAvatar`), la
+  etiqueta `CLUB` y el botón Seguir— y debajo los jugadores, separados por una línea.
+  Antes eran dos tarjetas y el club quedaba al final, después de los equipos.
+- **La pila de avatares sobre el video incluye al club**, primero. Para eso `AvatarStack`
+  acepta `imageUri`: antes pintaba iniciales siempre, aunque hubiera foto.
+- ⚠️ **Equipos solo si el dato existe.** `hasTeams` = hay alguien con `team === 2`. Sin eso
+  va **una sola sección "Jugadores"**: rotular "EQUIPO 1" a los cuatro sería inventar una
+  división que la partida no declaró (pasa en partidas viejas, donde `team` es null).
+- **Club y jugadores abren su perfil** (`onOpenClub` / `onOpenPlayer`, cableados en
+  `App.tsx` a `ClubProfile` / `PlayerProfile`). Los jugadores necesitan
+  **`MatchParticipant.id`** (el UID): `useGameDetail` lo mapea desde `gp.user.id`. Sin id,
+  la fila no navega en vez de romper.
+- ⚠️ **`GET /game/:id` no traía el club** hasta el 2026-09-01: el select de `cameraConfig`
+  no incluía `user`, así que `club`/`clubId` llegaban vacíos y el bloque salía sin nombre
+  ni perfil. Si el club vuelve a verse vacío, mirá ese select antes que el mapper.
+- **Los seguidores del club ya no se muestran**: ese número no viaja en `GET /game/:id`
+  (iba `clubFollowers: 0` fijo) y en medio de un partido no aporta nada. Se borró el campo
+  del tipo.
 - ⚠️ `team` y `profilePicture` ya venían en `GET /game/:id` pero `useGameDetail` **no los
   mapeaba**: sin eso no hay dos parejas ni fotos reales. Si agregás un campo del jugador,
   revisá ese mapper.

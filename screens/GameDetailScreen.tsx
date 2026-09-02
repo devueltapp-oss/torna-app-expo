@@ -19,10 +19,17 @@
  * saca de la pantalla. Un panel por vez (`portraitPanel`).
  *
  * Todo lo que antes vivía en una hoja de info debajo del video se movió acá adentro,
- * porque ya no hay "debajo": los **jugadores** (las dos parejas, por `team`) y el
- * **club** con su ícono y el botón de seguir están en el panel `players`, que se abre
- * con los avatares superpuestos al video. Las **cámaras** pasaron a chips superpuestos
- * (solo si hay más de una).
+ * porque ya no hay "debajo". El panel `players` —que se abre con la pila de avatares
+ * superpuesta al video, **club incluido**— es **un solo cuadro**: arriba el club (con
+ * su foto, la etiqueta CLUB y el botón de seguir) y debajo los jugadores. Las
+ * **cámaras** pasaron a chips superpuestos (solo si hay más de una).
+ *
+ * Dos reglas del panel:
+ *  - **Equipos solo si el dato existe** (`hasTeams`: alguien con `team === 2`). Sin eso
+ *    va una sola sección "Jugadores": rotular "EQUIPO 1" a los cuatro sería inventar
+ *    una división que la partida no declara.
+ *  - **Todo el mundo es tocable**: club y jugadores abren su perfil (`onOpenClub` /
+ *    `onOpenPlayer`). Los jugadores necesitan `id` (el UID que mapea `useGameDetail`).
  *
  * ⚠️ `resizeMode` es `CONTAIN` en los tres tamaños: la fuente es 16:9 (cancha
  * apaisada) y las cajas ya no lo son, así que con `COVER` el video a pantalla completa
@@ -30,7 +37,7 @@
  */
 import React from 'react';
 import {
-  View, Text, Pressable, ScrollView, Image, StyleSheet, TouchableOpacity,
+  View, Text, Pressable, ScrollView, StyleSheet, TouchableOpacity,
   StatusBar, BackHandler, useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -59,7 +66,8 @@ import { useAuth } from '../contexts/AuthContext';
  */
 export const MIN_VIEWERS_TO_SHOW = 3;
 
-const tornaLogo = require('../assets/torna-icon.png');
+/* El logo de Torna ya no se usa acá: el avatar del club es su propia foto
+   (`clubAvatar`), no un placeholder de marca. */
 
 /** Paneles que pueden ocupar la mitad de abajo en portrait. `null` = video a pantalla completa. */
 type PortraitPanel = null | 'comments' | 'players';
@@ -73,7 +81,8 @@ export interface GameDetailData {
   /** Id (Firebase UID) del club del partido, para seguir/dejar de seguir. '' si no hay. */
   clubId: string;
   clubHandle: string;
-  clubFollowers: number;
+  /** Foto del club, para el avatar del panel y de la pila sobre el video. */
+  clubAvatar?: string;
   time: string; date: string;
   /* Sin `viewers`: no hay forma de saber quién está mirando (el backend no lo
      mide) y el número que se mostraba era siempre 0. Ver la nota de CLAUDE.md. */
@@ -82,9 +91,16 @@ export interface GameDetailData {
   cameras: CameraAngleData[];
 }
 
-export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing = false, onToggleFollow, onCreateHighlight }: {
+export function GameDetailScreen({
+  game, fallbackStreamUrl, onBack, isFollowing = false, onToggleFollow, onCreateHighlight,
+  onOpenPlayer, onOpenClub,
+}: {
   game: GameDetailData; fallbackStreamUrl?: string; onBack?: () => void; isFollowing?: boolean; onToggleFollow?: () => void;
   onCreateHighlight?: () => void;
+  /** Abre el perfil público de un jugador. Sin handler, la fila no es tocable. */
+  onOpenPlayer?: (playerId: string) => void;
+  /** Abre el perfil del club dueño de la cancha. */
+  onOpenClub?: (clubId: string) => void;
 }) {
   const { colors, radii } = useTheme();
   const { width } = useWindowDimensions();
@@ -192,10 +208,26 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
   /** ¿Están los comentarios a la vista en el modo actual? (marca el botón) */
   const commentsOpen = fullscreen ? overlayComments : portraitPanel === 'comments';
 
-  // Las dos parejas: 1 = lado del organizador, 2 = retadores. Sin `team` (partidas
-  // viejas) cae todo al equipo 1 para no esconder jugadores.
+  /**
+   * Las dos parejas: 1 = lado del organizador, 2 = retadores.
+   *
+   * ⚠️ Solo se separa en equipos si el dato **existe de verdad**: una partida vieja
+   * puede no tener `team` en ninguno, y ahí mostrar "EQUIPO 1" con los cuatro
+   * adentro es inventar una división que nadie declaró. En ese caso va una sola
+   * sección "Jugadores".
+   */
+  const hasTeams = game.players.some((p) => p.team === 2);
   const teamA = game.players.filter((p) => p.team !== 2);
   const teamB = game.players.filter((p) => p.team === 2);
+
+  /** Pila de avatares sobre el video: el club primero, después los jugadores. */
+  const stackUsers = React.useMemo(
+    () => [
+      ...(game.club ? [{ name: game.club, imageUri: game.clubAvatar }] : []),
+      ...game.players.map((p) => ({ name: p.name || p.username, imageUri: p.profilePicture })),
+    ],
+    [game.club, game.clubAvatar, game.players],
+  );
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={fullscreen ? [] : ['top']}>
@@ -324,7 +356,7 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
                   alignItems: 'center', justifyContent: 'center',
                 }}
               >
-                <AvatarStack users={game.players} size={24} max={4} />
+                <AvatarStack users={stackUsers} size={24} max={4} />
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -448,25 +480,55 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
             </Pressable>
           </View>
 
-          {/* Las dos parejas. El equipo 2 solo aparece si hay retadores anotados. */}
-          <TeamRow title="Equipo 1" players={teamA} />
-          {teamB.length > 0 && <TeamRow title="Equipo 2" players={teamB} />}
+          {/* Un solo cuadro: el club arriba y los jugadores abajo. Antes eran dos
+              tarjetas separadas y el club quedaba al final, después de los equipos. */}
+          <View style={{ backgroundColor: colors.bg2, borderRadius: 14, padding: 12, gap: 12 }}>
+            {/* Club. ⚠️ Si ya lo seguís, el botón NO se muestra: ofrecer "Siguiendo"
+                solo servía para dejar de seguir por accidente en pleno partido. */}
+            {!!game.club && (
+              <>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <Pressable
+                    onPress={game.clubId && onOpenClub ? () => onOpenClub(game.clubId) : undefined}
+                    disabled={!game.clubId || !onOpenClub}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Ver perfil de ${game.club}`}
+                    testID="open-club"
+                    style={({ pressed }) => ({
+                      flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10,
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                  >
+                    <Avatar name={game.club} size={42} imageUri={game.clubAvatar} />
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={{
+                        color: colors.muted2, fontSize: 10, fontFamily: fonts.bold, letterSpacing: 0.8,
+                      }}>
+                        CLUB
+                      </Text>
+                      <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }} numberOfLines={1}>
+                        {game.club}
+                      </Text>
+                    </View>
+                  </Pressable>
+                  {!isFollowing && onToggleFollow && (
+                    <Button size="sm" variant="primary" onPress={onToggleFollow}>
+                      Seguir
+                    </Button>
+                  )}
+                </View>
+                <View style={{ height: 1, backgroundColor: colors.line }} />
+              </>
+            )}
 
-          {/* Club — con su ícono. ⚠️ Si ya lo seguís, el botón NO se muestra: ofrecer
-              "Siguiendo" solo servía para dejar de seguir por accidente en pleno
-              partido. La baja se hace desde el perfil del club. */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.bg2, padding: 12, borderRadius: 14 }}>
-            <View style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' }}>
-              <Image source={tornaLogo} style={{ width: 30, height: 30 }}/>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.text, fontWeight: '700', fontSize: 14 }} numberOfLines={1}>{game.club}</Text>
-              <Text style={{ color: colors.muted2, fontSize: 12 }}>{game.clubHandle} · {game.clubFollowers} seguidores</Text>
-            </View>
-            {!isFollowing && onToggleFollow && (
-              <Button size="sm" variant="primary" onPress={onToggleFollow}>
-                Seguir
-              </Button>
+            {/* Jugadores. Solo se separa en equipos si el dato existe: ver `hasTeams`. */}
+            {hasTeams ? (
+              <>
+                <TeamGroup title="Equipo 1" players={teamA} onOpenPlayer={onOpenPlayer} />
+                <TeamGroup title="Equipo 2" players={teamB} onOpenPlayer={onOpenPlayer} />
+              </>
+            ) : (
+              <TeamGroup title="Jugadores" players={game.players} onOpenPlayer={onOpenPlayer} />
             )}
           </View>
 
@@ -489,29 +551,53 @@ export function GameDetailScreen({ game, fallbackStreamUrl, onBack, isFollowing 
   );
 }
 
-/** Una pareja del partido, dentro del panel de jugadores. */
-function TeamRow({ title, players }: { title: string; players: MatchParticipant[] }) {
+/**
+ * Grupo de jugadores dentro del cuadro del panel: una pareja ("Equipo 1"/"Equipo 2")
+ * o todos juntos ("Jugadores") cuando la partida no declara equipos.
+ *
+ * Ya no dibuja su propia tarjeta: vive dentro del cuadro que comparte con el club.
+ * Cada fila abre el perfil si el jugador trae `id` y hay handler.
+ */
+function TeamGroup({ title, players, onOpenPlayer }: {
+  title: string;
+  players: MatchParticipant[];
+  onOpenPlayer?: (playerId: string) => void;
+}) {
   const { colors } = useTheme();
   if (players.length === 0) return null;
   return (
-    <View style={{ backgroundColor: colors.bg2, borderRadius: 14, padding: 12, gap: 10 }}>
+    <View style={{ gap: 10 }}>
       <Text style={{ color: colors.muted2, fontSize: 11, fontFamily: fonts.bold, letterSpacing: 0.8 }}>
         {title.toUpperCase()}
       </Text>
-      {players.map((p) => (
-        <View key={p.username} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Avatar name={p.name || p.username} size={34} imageUri={p.profilePicture} />
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={{ color: colors.text, fontWeight: '700', fontSize: 14, flexShrink: 1 }} numberOfLines={1}>
-                {p.name || p.username}
-              </Text>
-              {p.isHost && <HostBadge />}
+      {players.map((p) => {
+        const canOpen = !!p.id && !!onOpenPlayer;
+        return (
+          <Pressable
+            key={p.id ?? p.username}
+            onPress={canOpen ? () => onOpenPlayer!(p.id!) : undefined}
+            disabled={!canOpen}
+            accessibilityRole={canOpen ? 'button' : undefined}
+            accessibilityLabel={canOpen ? `Ver perfil de ${p.name || p.username}` : undefined}
+            testID={`open-player-${p.username}`}
+            style={({ pressed }) => ({
+              flexDirection: 'row', alignItems: 'center', gap: 10,
+              opacity: pressed ? 0.7 : 1,
+            })}
+          >
+            <Avatar name={p.name || p.username} size={34} imageUri={p.profilePicture} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ color: colors.text, fontWeight: '700', fontSize: 14, flexShrink: 1 }} numberOfLines={1}>
+                  {p.name || p.username}
+                </Text>
+                {p.isHost && <HostBadge />}
+              </View>
+              <Text style={{ color: colors.muted2, fontSize: 12 }}>{p.username}</Text>
             </View>
-            <Text style={{ color: colors.muted2, fontSize: 12 }}>{p.username}</Text>
-          </View>
-        </View>
-      ))}
+          </Pressable>
+        );
+      })}
     </View>
   );
 }

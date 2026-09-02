@@ -15,6 +15,8 @@ import { Avatar, AvatarStack, StatusBadge, ClubPill, GameStatus } from './ui';
 import type { FeedPost as FeedPostData, UpcomingGameData } from '../data/types';
 
 export interface MatchParticipant {
+  /** Firebase UID. Es lo que permite abrir su perfil desde el visor. */
+  id?: string;
   username: string;
   name?: string;
   profilePicture?: string;
