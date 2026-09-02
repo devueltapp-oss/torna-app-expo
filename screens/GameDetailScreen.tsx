@@ -167,6 +167,9 @@ export function GameDetailScreen({
     const value = draft.trim();
     if (!value || sending) return;
     setDraft('');
+    // Tocar el botón de enviar le saca el foco al campo. Se lo devolvemos para
+    // que el teclado no se cierre entre comentario y comentario.
+    composerRef.current?.focus();
     const ok = await send(value);
     if (!ok) setDraft(value); // restaurar si falló, para no perderlo
   }, [draft, sending, send]);
@@ -469,7 +472,10 @@ export function GameDetailScreen({
               style={{
                 position: 'absolute', left: 0, right: 0,
                 bottom: game.cameras.length > 1 ? 100 : 62,
-                maxHeight: '42%', zIndex: 5,
+                // 25% y no 42%: ocupaba casi media pantalla y competía con el
+                // partido. Lo que importa es lo último que se dijo, no el historial
+                // — para leer todo está el scroll de la propia capa.
+                maxHeight: '25%', zIndex: 5,
               }}
             >
               <FlatList<GameComment>
@@ -521,6 +527,11 @@ export function GameDetailScreen({
                 placeholderTextColor="rgba(255,255,255,0.7)"
                 returnKeyType="send"
                 onSubmitEditing={submitComment}
+                // ⚠️ Sin esto el teclado se cierra en CADA comentario: en un input de
+                // una línea `blurOnSubmit` es true por defecto, así que "enviar" quita
+                // el foco. En un vivo se comenta seguido; que haya que reabrir el
+                // teclado cada vez es insoportable.
+                blurOnSubmit={false}
                 editable={!sending}
                 maxLength={500}
                 testID="compose-bar"
@@ -532,18 +543,19 @@ export function GameDetailScreen({
                   borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
                 }}
               />
-              {!!draft.trim() && (
-                <TouchableOpacity
-                  onPress={submitComment}
-                  disabled={sending}
-                  style={circleBtn(colors.accent)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Enviar comentario"
-                  testID="send-comment"
-                >
-                  <Send size={18} color={colors.ink} />
-                </TouchableOpacity>
-              )}
+              {/* Siempre montado, deshabilitado cuando no hay texto. Si apareciera y
+                  desapareciera con el borrador, ese desmontaje también le roba el
+                  foco al input (y mueve la barra justo cuando estás escribiendo). */}
+              <TouchableOpacity
+                onPress={submitComment}
+                disabled={sending || !draft.trim()}
+                style={circleBtn(draft.trim() ? colors.accent : 'rgba(0,0,0,0.55)')}
+                accessibilityRole="button"
+                accessibilityLabel="Enviar comentario"
+                testID="send-comment"
+              >
+                <Send size={18} color={draft.trim() ? colors.ink : 'rgba(255,255,255,0.6)'} />
+              </TouchableOpacity>
 
               {/* Muestra/oculta la capa de comentarios. Ya no abre nada: sirve para
                   dejar la cancha limpia un momento. */}

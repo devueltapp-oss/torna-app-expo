@@ -97,6 +97,18 @@ describe('GameDetailScreen — comentarios sobre el video (portrait)', () => {
     expect(getByText(/Buen punto/)).toBeTruthy();
   });
 
+  it('el campo NO pierde el foco al enviar (el teclado no se cierra)', () => {
+    const { getByTestId } = renderScreen();
+    // blurOnSubmit=false es lo que evita que 'enviar' cierre el teclado: en un
+    // input de una línea el default es true.
+    expect(getByTestId('compose-bar').props.blurOnSubmit).toBe(false);
+  });
+
+  it('el botón de enviar está SIEMPRE montado (desmontarlo roba el foco)', () => {
+    const { getByTestId } = renderScreen();
+    expect(getByTestId('send-comment')).toBeTruthy();
+  });
+
   it('enviar limpia el campo y llama al hook', async () => {
     const { getByTestId, getByPlaceholderText } = renderScreen();
     const input = getByPlaceholderText('Escribe algo...');
