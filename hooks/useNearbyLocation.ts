@@ -23,6 +23,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   clearMyLocation,
   fetchNearbySettings,
@@ -38,6 +39,15 @@ import { currentPosition, requestPositionOnce } from '../lib/location';
  */
 const MIN_REPORT_INTERVAL_MS = 15 * 60 * 1000;
 
+/**
+ * Se descartó el ofrecimiento de la pestaña Juegos.
+ *
+ * Va en `AsyncStorage` y no en estado: descartar tiene que ser **definitivo**.
+ * Volver a proponer algo que el usuario ya rechazó es cómo una app se gana que
+ * la silencien — y el toggle sigue estando en Ajustes para quien cambie de idea.
+ */
+const PROMPT_DISMISSED_KEY = '@torna/nearby-prompt-dismissed';
+
 export interface UseNearbyLocation {
   settings: NearbySettings | null;
   loading: boolean;
@@ -47,12 +57,23 @@ export interface UseNearbyLocation {
   enable: () => Promise<void>;
   /** Apaga el aviso y borra la posición guardada en el backend. */
   disable: () => Promise<void>;
+  /**
+   * ¿Mostrar el ofrecimiento de la pestaña Juegos? Solo si el aviso está
+   * apagado y nunca se descartó. `false` mientras carga, para que la tarjeta no
+   * aparezca y desaparezca.
+   */
+  shouldPrompt: boolean;
+  /** Descarta el ofrecimiento para siempre (persistido). */
+  dismissPrompt: () => void;
 }
 
 export function useNearbyLocation(enabledForUser: boolean): UseNearbyLocation {
   const [settings, setSettings] = useState<NearbySettings | null>(null);
   const [loading, setLoading] = useState(false);
   const [problem, setProblem] = useState<'denied' | 'unavailable' | null>(null);
+  // `null` = todavía no sabemos si lo descartó. Se distingue de `true`/`false`
+  // para no parpadear la tarjeta en el primer render.
+  const [dismissed, setDismissed] = useState<boolean | null>(null);
   const lastReportRef = useRef(0);
   const aliveRef = useRef(true);
   // El listener de AppState se registra una sola vez y tiene que leer el estado
@@ -67,6 +88,26 @@ export function useNearbyLocation(enabledForUser: boolean): UseNearbyLocation {
     return () => {
       aliveRef.current = false;
     };
+  }, []);
+
+  useEffect(() => {
+    if (!enabledForUser) return;
+    AsyncStorage.getItem(PROMPT_DISMISSED_KEY)
+      .then((v) => {
+        if (aliveRef.current) setDismissed(v === '1');
+      })
+      // Si no se puede leer, se asume descartado: es preferible no ofrecerlo a
+      // ofrecerlo en bucle en cada arranque.
+      .catch(() => {
+        if (aliveRef.current) setDismissed(true);
+      });
+  }, [enabledForUser]);
+
+  const dismissPrompt = useCallback(() => {
+    setDismissed(true);
+    AsyncStorage.setItem(PROMPT_DISMISSED_KEY, '1').catch(() => {
+      // Best-effort: si no persiste, vuelve a aparecer en el próximo arranque.
+    });
   }, []);
 
   /** Único lugar donde el estado y el ref del opt-in se mueven juntos. */
@@ -163,7 +204,17 @@ export function useNearbyLocation(enabledForUser: boolean): UseNearbyLocation {
     }
   }, [apply]);
 
-  return { settings, loading, problem, enable, disable };
+  return {
+    settings,
+    loading,
+    problem,
+    enable,
+    disable,
+    // Solo cuando ya sabemos las dos cosas: que el aviso está apagado y que no
+    // lo descartó. Mientras alguna esté cargando, no se ofrece nada.
+    shouldPrompt: dismissed === false && settings?.enabled === false,
+    dismissPrompt,
+  };
 }
 
 /**

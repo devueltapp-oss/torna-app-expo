@@ -600,9 +600,20 @@ reserva con mode='search-opponents'  →  backend busca jugadores con el aviso a
                                      →  push + campanita OPEN_GAME_NEARBY → GameDetail
 ```
 
-- **Opt-in explícito**, apagado por defecto: `PlayerSettingsScreen` → sección **"Partidas
-  cerca"**. Encenderlo es lo único que pide el permiso del sistema, y lo pide *en contexto*
-  (iOS da un solo prompt por instalación). Apagarlo **borra** la posición del servidor.
+- **Opt-in explícito**, apagado por defecto. Dos lugares donde se enciende, y en los dos el
+  permiso del sistema se pide **en contexto** (iOS da un solo prompt por instalación; pedirlo
+  en el login lo quema frente a alguien que todavía no sabe qué es la app):
+  - **`NearbyPromptCard`** en la pestaña **Juegos**, sobre "Abiertos para sumarme". Es el
+    ofrecimiento real: sin él la función vive solo en Ajustes y **nadie va a Ajustes a buscar
+    algo que no sabe que existe**. Se muestra solo si el aviso está apagado *y* nunca se
+    descartó (`shouldPrompt`); descartarlo es **definitivo** (`AsyncStorage`, clave
+    `@torna/nearby-prompt-dismissed`) — insistir con algo ya rechazado es cómo una app se gana
+    que la silencien.
+  - **`PlayerSettingsScreen`** → sección "Partidas cerca", para quien cambie de idea después.
+  Apagarlo **borra** la posición del servidor.
+- ⚠️ **Nada pide el permiso al iniciar sesión, y es a propósito.** Si alguien reporta "hice
+  login y no me pidió la ubicación", eso es el comportamiento correcto: el único que abre el
+  diálogo del sistema es `enable()`, o sea la tarjeta o el toggle.
 - **`hooks/useNearbyLocation.ts`** es a la vez el latido y el toggle. El latido vive en
   `MainPlayer` (`useNearbyLocation(!!user?.id)`), reporta al montar y al volver del segundo
   plano, con un piso de 15 min entre escrituras.

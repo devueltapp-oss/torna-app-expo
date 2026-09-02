@@ -8,6 +8,7 @@ import { GameListItem, GameListData } from '../components/cards';
 import { EmptyState, StatusBadge, Avatar, SectionHeader, CategoryBadge, HostBadge } from '../components/ui';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import { MapsButton } from '../components/MapsButton';
+import { NearbyPromptCard } from '../components/NearbyPromptCard';
 import type { UpcomingGameData } from '../data/types';
 
 type Filter = 'TODAS' | 'LIVE' | 'SCHEDULED' | 'FINISHED';
@@ -27,6 +28,18 @@ interface Props {
   onOpenMyGame?: (game: UpcomingGameData) => void;
   /** (Player) Inicia el flujo de reserva (crear un juego). */
   onReserve?: () => void;
+  /**
+   * (Player) Ofrecimiento de activar el aviso de partidas cercanas. Va sobre
+   * "Abiertos para sumarme" porque es la lista que ese aviso completa: sin este
+   * ofrecimiento la función queda en Ajustes y no la encuentra nadie.
+   * `undefined` = no mostrar (ya activo, ya descartado, o todavía cargando).
+   */
+  nearbyPrompt?: {
+    radiusKm?: number;
+    loading?: boolean;
+    onEnable: () => void;
+    onDismiss: () => void;
+  };
 }
 
 const FILTER_LABEL: Record<Filter, string> = {
@@ -35,7 +48,7 @@ const FILTER_LABEL: Record<Filter, string> = {
 
 export function GamesScreen({
   games, onOpenGame, onChangeTab, activeTab = 'games', emptyImage, role = 'club',
-  myGames = [], openGames = [], onOpenMyGame, onReserve,
+  myGames = [], openGames = [], onOpenMyGame, onReserve, nearbyPrompt,
 }: Props) {
   const { colors } = useTheme();
   const [filter, setFilter] = React.useState<Filter>('TODAS');
@@ -82,6 +95,19 @@ export function GamesScreen({
               {myGames.map(g => (
                 <MyGameCard key={g.id} game={g} colors={colors} onPress={() => onOpenMyGame?.(g)} />
               ))}
+            </View>
+          )}
+
+          {/* Ofrecimiento del aviso por cercanía: justo antes de la lista que
+              completa, que es donde su utilidad se explica sola. */}
+          {nearbyPrompt && (
+            <View style={{ marginTop: 8 }}>
+              <NearbyPromptCard
+                radiusKm={nearbyPrompt.radiusKm}
+                loading={nearbyPrompt.loading}
+                onEnable={nearbyPrompt.onEnable}
+                onDismiss={nearbyPrompt.onDismiss}
+              />
             </View>
           )}
 

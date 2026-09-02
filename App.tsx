@@ -836,8 +836,8 @@ function MainPlayer({ navigation, route }: any) {
   // MainPlayer y no en una pantalla suelta porque el aviso tiene que seguir
   // andando use el usuario la app donde la use. **No pide permiso**: si el
   // opt-in está apagado o el permiso no está dado, no hace nada. El toggle
-  // vive en `PlayerSettingsScreen`.
-  useNearbyLocation(!!user?.id);
+  // vive en `PlayerSettingsScreen`, y el ofrecimiento en la pestaña Juegos.
+  const nearby = useNearbyLocation(!!user?.id);
   const [myGameSheet, setMyGameSheet] = React.useState<UpcomingGameData | null>(null);
   const { matches: apiMatches, refresh: refreshMatches } = usePlayerMatches(user?.id);
 
@@ -1057,6 +1057,19 @@ function MainPlayer({ navigation, route }: any) {
             openGames={openGames}
             onOpenMyGame={(g) => setMyGameSheet(g)}
             onReserve={() => navigation.navigate('ReservePickClub')}
+            /* Ofrecer el aviso de cercanía solo si está apagado y nunca se
+               descartó. `enable()` es lo ÚNICO que pide el permiso del sistema,
+               y acá sale en contexto: el usuario está mirando partidas abiertas. */
+            nearbyPrompt={nearby.shouldPrompt ? {
+              radiusKm: nearby.settings?.radiusKm,
+              loading: nearby.loading,
+              onEnable: () => {
+                nearby.enable()
+                  .then(() => nearby.dismissPrompt())
+                  .catch(() => { /* el motivo ya queda en nearby.problem */ });
+              },
+              onDismiss: nearby.dismissPrompt,
+            } : undefined}
           />
         );
       case 'chats':

@@ -9,6 +9,7 @@
  *  3. Apagar el toggle borra la posición del servidor.
  */
 import { act, renderHook, waitFor } from '@testing-library/react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNearbyLocation } from '../useNearbyLocation';
 import * as api from '../../api/nearby';
 import * as location from '../../lib/location';
@@ -18,6 +19,7 @@ jest.mock('../../lib/location');
 
 const mockedApi = api as jest.Mocked<typeof api>;
 const mockedLocation = location as jest.Mocked<typeof location>;
+const mockedStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
 
 const settings = (over: Partial<api.NearbySettings> = {}): api.NearbySettings => ({
   enabled: false,
@@ -29,6 +31,9 @@ const settings = (over: Partial<api.NearbySettings> = {}): api.NearbySettings =>
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // Por defecto: nunca descartó el ofrecimiento.
+  mockedStorage.getItem.mockResolvedValue(null);
+  mockedStorage.setItem.mockResolvedValue(undefined);
   mockedLocation.currentPosition.mockResolvedValue({
     coords: { latitude: 10.4915, longitude: -66.9036 },
     reason: null,
@@ -119,7 +124,7 @@ describe('useNearbyLocation — toggle', () => {
     expect(result.current.problem).toBe('denied');
   });
 
-  it('apagar manda enabled:false (que del lado del servidor borra la posición)', async () => {
+  it('apagar manda enabled:false (que del lado del servidor borra la posicion)', async () => {
     mockedApi.fetchNearbySettings.mockResolvedValue(settings({ enabled: true, hasLocation: true }));
     mockedApi.setNearbyEnabled.mockResolvedValue(settings({ enabled: false, hasLocation: false }));
 
@@ -132,5 +137,65 @@ describe('useNearbyLocation — toggle', () => {
 
     expect(mockedApi.setNearbyEnabled).toHaveBeenCalledWith(false);
     expect(result.current.settings?.hasLocation).toBe(false);
+  });
+});
+
+/**
+ * El ofrecimiento de la pestaña Juegos.
+ *
+ * Existe porque el aviso arranca apagado y el permiso solo lo pide el toggle de
+ * Ajustes — y **nadie va a Ajustes a buscar una función que no sabe que
+ * existe**. Sin esto la feature queda disponible y muerta.
+ */
+describe('useNearbyLocation — ofrecimiento en Juegos', () => {
+  it('se ofrece si el aviso está apagado y nunca se descartó', async () => {
+    mockedApi.fetchNearbySettings.mockResolvedValue(settings({ enabled: false }));
+
+    const { result } = renderHook(() => useNearbyLocation(true));
+
+    await waitFor(() => expect(result.current.shouldPrompt).toBe(true));
+  });
+
+  it('NO se ofrece si el aviso ya está activo', async () => {
+    mockedApi.fetchNearbySettings.mockResolvedValue(settings({ enabled: true }));
+
+    const { result } = renderHook(() => useNearbyLocation(true));
+
+    await waitFor(() => expect(result.current.settings).not.toBeNull());
+    expect(result.current.shouldPrompt).toBe(false);
+  });
+
+  /** Descartar es definitivo: insistir es cómo una app se gana que la silencien. */
+  it('NO se ofrece si ya lo descartó en un arranque anterior', async () => {
+    mockedStorage.getItem.mockResolvedValue('1');
+    mockedApi.fetchNearbySettings.mockResolvedValue(settings({ enabled: false }));
+
+    const { result } = renderHook(() => useNearbyLocation(true));
+
+    await waitFor(() => expect(result.current.settings).not.toBeNull());
+    expect(result.current.shouldPrompt).toBe(false);
+  });
+
+  it('descartar lo persiste y lo saca de la vista', async () => {
+    mockedApi.fetchNearbySettings.mockResolvedValue(settings({ enabled: false }));
+    const { result } = renderHook(() => useNearbyLocation(true));
+    await waitFor(() => expect(result.current.shouldPrompt).toBe(true));
+
+    act(() => result.current.dismissPrompt());
+
+    expect(result.current.shouldPrompt).toBe(false);
+    expect(mockedStorage.setItem).toHaveBeenCalledWith('@torna/nearby-prompt-dismissed', '1');
+  });
+
+  /**
+   * No parpadea: mientras no se sepan LAS DOS cosas (si está activo y si lo
+   * descartó), no se ofrece nada.
+   */
+  it('no se ofrece mientras todavía está cargando', () => {
+    mockedApi.fetchNearbySettings.mockReturnValue(new Promise(() => {}));
+
+    const { result } = renderHook(() => useNearbyLocation(true));
+
+    expect(result.current.shouldPrompt).toBe(false);
   });
 });
