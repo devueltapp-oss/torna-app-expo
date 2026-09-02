@@ -869,12 +869,22 @@ function MainPlayer({ navigation, route }: any) {
   // a alguien). Sin esto, MainPlayer queda montado y los conteos de seguidores/
   // seguidos se muestran viejos. Los números previos permanecen visibles hasta que
   // llega la respuesta (useUserProfile no limpia el perfil en el camino feliz).
+  //
+  // ⚠️ **Y las partidas propias.** `useMyGames` carga una sola vez, al montar, y
+  // `MainPlayer` NO se desmonta al entrar al flujo de reserva: se apila encima.
+  // Al volver (`popToTop`) el hook nunca reconsultaba, así que la partida recién
+  // creada **no aparecía en "Mis partidas"** hasta reiniciar la app. Lo mismo
+  // pasaba al postularse, al darse de baja o al aceptar a alguien desde otra
+  // pantalla. Refrescar por foco lo cubre todo sin acoplar el flujo de reserva
+  // con esta pantalla.
   React.useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       refreshOwnProfile();
+      refreshMyGames();
+      refreshOpen();
     });
     return unsubscribe;
-  }, [navigation, refreshOwnProfile]);
+  }, [navigation, refreshOwnProfile, refreshMyGames, refreshOpen]);
 
   // Mis highlights reales (GET /highlights/my): públicos + privados. Los públicos
   // se muestran en el perfil; los privados solo en la librería.
@@ -1307,6 +1317,84 @@ function MainClub({ navigation }: any) {
   }
 }
 
+/* ─────────── Reserva confirmada ─────────── */
+
+/**
+ * Pantalla de "¡Reserva confirmada!" + **compartir la invitación dentro de la app**.
+ *
+ * ⚠️ Tiene que ser un componente propio y no el callback `children` del
+ * `<Screen>`: acá se usan hooks (`useInbox`, estado del sheet), y el callback
+ * inline queda envuelto en un `StaticContainer` que ignora `children` al
+ * comparar props — el mismo motivo por el que existe `GameDetailContainer`.
+ *
+ * El botón "Compartir invitación" existía desde antes pero estaba cableado a
+ * `onShare={() => {}}`: se renderizaba y no hacía absolutamente nada.
+ */
+function ReserveOkContainer({ route, navigation }: { route: any; navigation: any }) {
+  const { reservationId, courtLabel, whenLabel } = route.params || ({} as any);
+  const [shareOpen, setShareOpen] = React.useState(false);
+  const { items: inbox, loading: inboxLoading } = useInbox();
+
+  /**
+   * Manda la invitación como DM con la partida adjunta (`DirectMessage.gameId`),
+   * así el otro ve una **tarjeta abrible** y no un texto suelto — el mismo
+   * mecanismo que "compartir partido" del visor.
+   */
+  const invite = React.useCallback(async (userIds: string[]) => {
+    if (!reservationId) return false;
+    const cuando = [courtLabel, whenLabel].filter(Boolean).join(' · ');
+    const texto = cuando ? `Te invito a jugar: ${cuando}` : 'Te invito a jugar';
+    try {
+      // En serie: son pocos y así un fallo no deja la mitad mandada sin saber cuál.
+      for (const uid of userIds) await sendDirectMessage(uid, texto, reservationId);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [reservationId, courtLabel, whenLabel]);
+
+  return (
+    <>
+      {/* Sin fila "Código": era el UUID de la partida y ningún ID se muestra en
+          la app. Si hiciera falta un código de reserva legible, tiene que ser uno
+          corto pensado para leerse, no el identificador interno. */}
+      <ReserveSuccessScreen
+        summary={[
+          { label: 'Cancha',  value: courtLabel || '—' },
+          { label: 'Horario', value: whenLabel || '—' },
+          { label: 'Pago',    value: 'En el club' },
+        ]}
+        heroLine="¡Reserva confirmada! Te esperamos en la cancha."
+        onBackToClub={() => navigation.popToTop()}
+        // Sin id de reserva no hay nada que adjuntar: se oculta el botón en vez
+        // de ofrecer uno que no puede funcionar.
+        onShare={reservationId ? () => setShareOpen(true) : undefined}
+      />
+
+      <ShareGameSheet
+        visible={shareOpen}
+        items={inbox}
+        loading={inboxLoading}
+        onClose={() => setShareOpen(false)}
+        onSend={invite}
+        // La búsqueda es lo que hace usable esto: a quien invitás a una partida
+        // nueva es justo con quien todavía no chateaste.
+        onSearch={async (q) => {
+          const res = await searchUsers(q);
+          return res.map((u) => ({
+            id: u.id,
+            name: u.name ?? u.username,
+            avatar: u.profilePicture ?? undefined,
+          }));
+        }}
+        title="Invitar a jugar"
+        subtitle="Se envía por chat, con la partida adjunta para que la abran de una."
+        sendLabel="Invitar"
+      />
+    </>
+  );
+}
+
 /* ─────────── Game detail ─────────── */
 
 /**
@@ -1526,24 +1614,7 @@ function AppNavigator() {
       </AppStack.Screen>
 
       <AppStack.Screen name="ReserveOk">
-        {({ route, navigation }) => {
-          const { courtLabel, whenLabel } = route.params || ({} as any);
-          return (
-            // Sin fila "Código": era el UUID de la partida y ningún ID se muestra
-            // en la app. Si hiciera falta un código de reserva legible, tiene que
-            // ser uno corto pensado para leerse, no el identificador interno.
-            <ReserveSuccessScreen
-              summary={[
-                { label: 'Cancha',  value: courtLabel || '—' },
-                { label: 'Horario', value: whenLabel || '—' },
-                { label: 'Pago',    value: 'En el club' },
-              ]}
-              heroLine="¡Reserva confirmada! Te esperamos en la cancha."
-              onBackToClub={() => navigation.popToTop()}
-              onShare={() => {}}
-            />
-          );
-        }}
+        {({ route, navigation }) => <ReserveOkContainer route={route} navigation={navigation} />}
       </AppStack.Screen>
 
       {/* Video editor */}

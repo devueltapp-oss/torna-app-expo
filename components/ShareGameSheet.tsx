@@ -17,12 +17,19 @@
  * que no ofrecerlo. El botón se suma acá cuando exista esa URL.
  */
 import React from 'react';
-import { Modal, View, Text, Pressable, FlatList, ActivityIndicator } from 'react-native';
-import { Check, Send } from 'lucide-react-native';
+import { Modal, View, Text, Pressable, FlatList, ActivityIndicator, TextInput } from 'react-native';
+import { Check, Search, Send } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { Avatar } from './ui';
 import type { InboxItem } from '../api/chat';
+
+/** Alguien a quien se le puede mandar el partido. Sale del inbox o de la búsqueda. */
+export interface SharePerson {
+  id: string;
+  name: string;
+  avatar?: string;
+}
 
 export interface ShareGameSheetProps {
   visible: boolean;
@@ -32,22 +39,77 @@ export interface ShareGameSheetProps {
   onClose: () => void;
   /** Manda el partido a cada UID. Devuelve true si salió bien. */
   onSend: (userIds: string[]) => Promise<boolean>;
+  /**
+   * Buscar usuarios por texto. **Opcional, pero es lo que hace usable la hoja
+   * para una invitación**: el inbox solo tiene gente con la que YA chateaste, y
+   * a quien invitás a una partida nueva es justamente a quien todavía no le
+   * escribiste. Sin esto, un usuario recién llegado ve una lista vacía y no
+   * puede invitar a nadie.
+   */
+  onSearch?: (query: string) => Promise<SharePerson[]>;
+  title?: string;
+  subtitle?: string;
+  /** Texto del botón de envío. Default: "Enviar". */
+  sendLabel?: string;
 }
 
-export function ShareGameSheet({ visible, items, loading = false, onClose, onSend }: ShareGameSheetProps) {
+/** Mínimo de caracteres para buscar: con menos, la lista es ruido. */
+const MIN_QUERY = 2;
+const SEARCH_DEBOUNCE_MS = 350;
+
+export function ShareGameSheet({
+  visible, items, loading = false, onClose, onSend, onSearch,
+  title = 'Compartir partido',
+  subtitle = 'Se envía por chat, con el partido adjunto para que lo abran de una.',
+  sendLabel,
+}: ShareGameSheetProps) {
   const { colors, radii } = useTheme();
   const [selected, setSelected] = React.useState<string[]>([]);
   const [sending, setSending] = React.useState(false);
+  const [query, setQuery] = React.useState('');
+  const [results, setResults] = React.useState<SharePerson[]>([]);
+  const [searching, setSearching] = React.useState(false);
 
   // Al cerrar se limpia: abrir de nuevo no debe arrastrar la selección anterior.
   React.useEffect(() => {
-    if (!visible) { setSelected([]); setSending(false); }
+    if (!visible) {
+      setSelected([]); setSending(false); setQuery(''); setResults([]);
+    }
   }, [visible]);
 
-  const people = React.useMemo(
-    () => items.filter((it) => it.kind === 'dm' && !!it.otherUserId),
+  const fromInbox = React.useMemo<SharePerson[]>(
+    () => items
+      .filter((it) => it.kind === 'dm' && !!it.otherUserId)
+      .map((it) => ({ id: it.otherUserId as string, name: it.title, avatar: it.avatar ?? undefined })),
     [items],
   );
+
+  const searching_ = query.trim().length >= MIN_QUERY;
+
+  React.useEffect(() => {
+    if (!onSearch || !searching_) { setResults([]); return undefined; }
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      try {
+        setResults(await onSearch(query.trim()));
+      } catch {
+        setResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [query, onSearch, searching_]);
+
+  /**
+   * Con búsqueda activa manda el resultado; si no, la gente del inbox.
+   *
+   * Los seleccionados **no se pierden al buscar**: `selected` guarda ids, no
+   * posiciones, así que se puede elegir a uno del inbox, buscar a otro y mandar
+   * a los dos. Por eso el contador del botón sale de `selected` y no de la lista
+   * que se está viendo.
+   */
+  const people = searching_ ? results : fromInbox;
 
   const toggle = (id: string) =>
     setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
@@ -79,27 +141,52 @@ export function ShareGameSheet({ visible, items, loading = false, onClose, onSen
           }} />
 
           <Text style={{ fontFamily: fonts.bold, fontSize: 18, color: colors.text, letterSpacing: -0.3 }}>
-            Compartir partido
+            {title}
           </Text>
-          <Text style={{ fontSize: 13, color: colors.muted2, marginTop: 4, marginBottom: 14 }}>
-            Se envía por chat, con el partido adjunto para que lo abran de una.
+          <Text style={{ fontSize: 13, color: colors.muted2, marginTop: 4, marginBottom: 12 }}>
+            {subtitle}
           </Text>
 
-          {loading && people.length === 0 ? (
+          {onSearch && (
+            <View style={{
+              flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12,
+              backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line,
+              borderRadius: 12, paddingHorizontal: 12,
+            }}>
+              <Search size={16} color={colors.muted2} />
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Buscar a alguien por nombre o usuario"
+                placeholderTextColor={colors.muted2}
+                autoCapitalize="none"
+                testID="share-search"
+                style={{ flex: 1, paddingVertical: 10, color: colors.text, fontSize: 14 }}
+              />
+              {searching && <ActivityIndicator size="small" color={colors.accent} />}
+            </View>
+          )}
+
+          {(loading || searching) && people.length === 0 ? (
             <View style={{ paddingVertical: 32, alignItems: 'center' }}>
               <ActivityIndicator color={colors.accent} />
             </View>
           ) : people.length === 0 ? (
             <Text style={{ color: colors.muted2, fontSize: 13, textAlign: 'center', paddingVertical: 28, lineHeight: 19 }}>
-              Todavía no tenés chats con nadie.{'\n'}Escribile a alguien desde su perfil y después vas a poder compartirle partidos.
+              {searching_
+                ? 'No encontramos a nadie con ese nombre.'
+                : onSearch
+                  ? 'Buscá por nombre o usuario a quién querés invitar.'
+                  : 'Todavía no tenés chats con nadie.\nEscribile a alguien desde su perfil y después vas a poder compartirle partidos.'}
             </Text>
           ) : (
             <FlatList
               data={people}
-              keyExtractor={(it) => it.otherUserId!}
+              keyExtractor={(it) => it.id}
+              keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
               renderItem={({ item }) => {
-                const id = item.otherUserId!;
+                const id = item.id;
                 const on = selected.includes(id);
                 return (
                   <Pressable
@@ -112,9 +199,9 @@ export function ShareGameSheet({ visible, items, loading = false, onClose, onSen
                       paddingVertical: 10, opacity: pressed ? 0.8 : 1,
                     })}
                   >
-                    <Avatar name={item.title} size={42} imageUri={item.avatar ?? undefined} />
+                    <Avatar name={item.name} size={42} imageUri={item.avatar} />
                     <Text style={{ flex: 1, fontFamily: fonts.bold, fontSize: 14, color: colors.text }} numberOfLines={1}>
-                      {item.title}
+                      {item.name}
                     </Text>
                     <View style={{
                       width: 24, height: 24, borderRadius: 12,
@@ -130,7 +217,10 @@ export function ShareGameSheet({ visible, items, loading = false, onClose, onSen
             />
           )}
 
-          {people.length > 0 && (
+          {/* Con búsqueda, el botón va SIEMPRE: si solo se mostrara cuando la
+              lista visible tiene gente, elegir a alguien y después escribir una
+              búsqueda sin resultados escondería el botón con la selección hecha. */}
+          {(people.length > 0 || selected.length > 0) && (
             <Pressable
               onPress={submit}
               disabled={selected.length === 0 || sending}
@@ -152,7 +242,9 @@ export function ShareGameSheet({ visible, items, loading = false, onClose, onSen
                     fontFamily: fonts.bold, fontSize: 14,
                     color: selected.length === 0 ? colors.muted : colors.ink,
                   }}>
-                    {selected.length > 1 ? `Enviar a ${selected.length}` : 'Enviar'}
+                    {selected.length > 1
+                      ? `${sendLabel ?? 'Enviar'} a ${selected.length}`
+                      : (sendLabel ?? 'Enviar')}
                   </Text>
                 </>
               )}

@@ -829,6 +829,38 @@ video) y un botón de **tres puntos que no hacía nada**.
   misma pregunta.
 - Se quitó el texto `HLS · 1080p · CAM`: era ruido técnico y duplicaba el chip de cámara.
 
+#### Invitar a jugar desde la reserva confirmada (2026-09-02)
+
+`ReserveOkContainer` (`App.tsx`) — el botón **"Compartir invitación"** de
+`ReserveSuccessScreen`. Manda un DM con la partida adjunta (`DirectMessage.gameId`), o sea
+la misma tarjeta abrible que "compartir partido" del visor.
+
+- ⚠️ **Estaba cableado a `onShare={() => {}}`**: se renderizaba y no hacía nada. El
+  `reservationId` ya viajaba en los params de `ReserveOk`; la pantalla lo ignoraba.
+- **`ShareGameSheet` ahora acepta `onSearch`** (+ `title`/`subtitle`/`sendLabel`). Sin
+  búsqueda la hoja solo lista el **inbox**, o sea gente con la que ya chateaste — para
+  compartir un partido en vivo alcanza, pero **para invitar no**: a quien invitás a una
+  partida nueva es justo a quien todavía no le escribiste, así que un usuario nuevo veía
+  una lista vacía. Con `onSearch` se busca contra `GET /user/search`.
+- Los seleccionados **sobreviven a la búsqueda** (`selected` guarda ids, no posiciones) y el
+  botón de enviar se muestra si hay lista **o** si hay algo elegido: si dependiera solo de la
+  lista visible, escribir una búsqueda sin resultados escondería la selección ya hecha.
+- Sin `reservationId` el botón no se muestra: mejor que ofrecer uno que no puede funcionar.
+- Es un componente propio y no el callback `children` del `<Screen>` — usa hooks, y ese
+  callback queda envuelto en un `StaticContainer` (mismo motivo que `GameDetailContainer`).
+- Cubierto por `components/__tests__/ShareGameSheetSearch.test.tsx`.
+
+#### "Mis partidas" se refresca al recuperar el foco
+
+⚠️ `useMyGames` carga **una sola vez, al montar**, y `MainPlayer` **no se desmonta** al
+entrar al flujo de reserva: se apila encima. Al volver (`popToTop`) el hook nunca
+reconsultaba, así que **la partida recién creada no aparecía** hasta reiniciar la app. Lo
+mismo al postularse o darse de baja desde otra pantalla.
+
+El `addListener('focus')` de `MainPlayer` —que ya existía para `refreshOwnProfile`— ahora
+refresca también `refreshMyGames()` y `refreshOpen()`. Se resuelve ahí y no en el flujo de
+reserva a propósito: cubre todos los caminos de vuelta sin acoplar pantallas entre sí.
+
 #### Compartir un partido — `ShareGameSheet`
 
 El botón ➤ abre una hoja con tus **chats 1-a-1** (del inbox, sin endpoint nuevo) y manda
