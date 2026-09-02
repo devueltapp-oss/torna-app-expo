@@ -336,6 +336,7 @@ function SheetContent({
                 colors={colors}
                 onAccept={() => onAcceptApplication?.(app.id)}
                 onReject={() => onRejectApplication?.(app.id)}
+                onOpenProfile={onOpenPlayerProfile}
               />
             ))
           )}
@@ -445,38 +446,44 @@ interface ApplicationRowProps {
   colors: ReturnType<typeof useTheme>['colors'];
   onAccept: () => void;
   onReject: () => void;
+  /** Abre el perfil público del postulante. Sin esto, aceptar es adivinar por el nombre. */
+  onOpenProfile?: (playerId: string) => void;
 }
 
-
-function ApplicationRow({ app, colors, onAccept, onReject }: ApplicationRowProps) {
+/**
+ * Un postulante (o una pareja) dentro de "Postulados".
+ *
+ * Cada persona es **tocable y abre su perfil**: decidir a quién metés en tu
+ * partida mirando un nombre y un avatar de 36px no es decidir. El chevron está
+ * para que se vea que se puede tocar — un avatar sin affordance no invita a nada.
+ */
+function ApplicationRow({ app, colors, onAccept, onReject, onOpenProfile }: ApplicationRowProps) {
   return (
     <View style={{
       backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line,
       borderRadius: 12, padding: 12, gap: 10,
     }}>
       {/* Applicant */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <Avatar name={app.applicant.name ?? app.applicant.username} size={36} />
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={{ fontSize: 13, fontFamily: fonts.bold, color: colors.text }} numberOfLines={1}>
-            {app.applicant.name ?? app.applicant.username}
-          </Text>
-          <Text style={{ fontSize: 11, color: colors.muted2 }}>{app.applicant.username}</Text>
-        </View>
-      </View>
+      <ApplicantIdentity
+        player={app.applicant}
+        colors={colors}
+        size={36}
+        onOpenProfile={onOpenProfile}
+      />
 
       {/* Partner (si aplica) */}
       {app.partner && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 4 }}>
-          <View style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 4 }}>
+          <View style={{ width: 20, alignItems: 'center' }}>
             <Text style={{ color: colors.muted2, fontSize: 16 }}>+</Text>
           </View>
-          <Avatar name={app.partner.name ?? app.partner.username} size={28} />
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={{ fontSize: 12, fontFamily: fonts.bold, color: colors.text }} numberOfLines={1}>
-              {app.partner.name ?? app.partner.username}
-            </Text>
-            <Text style={{ fontSize: 11, color: colors.muted2 }}>{app.partner.username}</Text>
+            <ApplicantIdentity
+              player={app.partner}
+              colors={colors}
+              size={28}
+              onOpenProfile={onOpenProfile}
+            />
           </View>
         </View>
       )}
@@ -511,5 +518,60 @@ function ApplicationRow({ app, colors, onAccept, onReject }: ApplicationRowProps
         </Pressable>
       </View>
     </View>
+  );
+}
+
+/**
+ * Nombre + avatar + nivel de un postulante, tocable si hay a dónde ir.
+ *
+ * Sin `onOpenProfile` (o sin `id`, que es el caso de una postulación vieja
+ * mapeada antes de que el backend lo devolviera) se renderiza como texto y no
+ * como botón: un `Pressable` que no hace nada al tocarlo es peor que uno que no
+ * existe.
+ */
+function ApplicantIdentity({ player, colors, size, onOpenProfile }: {
+  player: UpcomingGamePlayer;
+  colors: ReturnType<typeof useTheme>['colors'];
+  size: number;
+  onOpenProfile?: (playerId: string) => void;
+}) {
+  const id = player.id;
+  const canOpen = !!id && !!onOpenProfile;
+  const label = player.name ?? player.username;
+
+  const body = (
+    <>
+      <Avatar name={label} size={size} imageUri={player.profilePicture} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text
+            style={{ fontSize: size >= 36 ? 13 : 12, fontFamily: fonts.bold, color: colors.text, flexShrink: 1 }}
+            numberOfLines={1}
+          >
+            {label}
+          </Text>
+          <CategoryBadge category={player.category} />
+        </View>
+        <Text style={{ fontSize: 11, color: colors.muted2 }}>{player.username}</Text>
+      </View>
+      {canOpen && <ChevronRight size={16} color={colors.muted2} />}
+    </>
+  );
+
+  if (!canOpen) {
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>{body}</View>
+    );
+  }
+
+  return (
+    <Pressable
+      onPress={() => onOpenProfile?.(id as string)}
+      style={({ pressed }) => ({
+        flexDirection: 'row', alignItems: 'center', gap: 10, opacity: pressed ? 0.7 : 1,
+      })}
+    >
+      {body}
+    </Pressable>
   );
 }

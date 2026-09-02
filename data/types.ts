@@ -23,6 +23,12 @@ export interface UpcomingGamePlayer {
   team?: 1 | 2;
   /** Organizador de la partida (`GamePlayer.isCaptain` en el backend). */
   isHost?: boolean;
+  /**
+   * Nivel del jugador: 1 = más alta, 7 = iniciación. Hoy solo viaja en los
+   * postulantes (`GameApplication`), que es donde hace falta para decidir si
+   * aceptarlos sin salir de la hoja.
+   */
+  category?: number | null;
 }
 
 export interface GameApplication {

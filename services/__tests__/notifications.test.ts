@@ -82,12 +82,34 @@ describe('resolvePushTarget', () => {
     expect(resolvePushTarget({ type: 'GAME_SCHEDULED' })).toBeNull();
   });
 
-  it('"te sumaron" y "se postularon" van al hub de partidos', () => {
-    for (const type of ['GAME_PLAYER_ADDED', 'GAME_APPLICATION_RECEIVED']) {
+  it('"te sumaron", "se postularon" y "no quedaste" van al hub de partidos', () => {
+    for (const type of [
+      'GAME_PLAYER_ADDED',
+      'GAME_APPLICATION_RECEIVED',
+      // Llevarte al detalle de una partida que NO vas a jugar no sirve de nada;
+      // el hub tiene el resto de las abiertas.
+      'GAME_APPLICATION_REJECTED',
+    ]) {
       expect(resolvePushTarget({ type, gameId: 'g1' })).toEqual({
         name: 'MainPlayer',
         params: { initialTab: 'games' },
       });
+    }
+  });
+
+  /**
+   * Los dos avisos del flujo de rivales que SÍ terminan en una partida concreta:
+   * "buscan rivales cerca tuyo" (hay que decidir si postularse mirando club,
+   * horario, nivel y quiénes están) y "te aceptaron" (ahora la jugás).
+   */
+  it('OPEN_GAME_NEARBY y GAME_APPLICATION_ACCEPTED abren esa partida', () => {
+    for (const type of ['OPEN_GAME_NEARBY', 'GAME_APPLICATION_ACCEPTED']) {
+      expect(resolvePushTarget({ type, gameId: 'g1' })).toEqual({
+        name: 'GameDetail',
+        params: { gameId: 'g1' },
+      });
+      // Sin gameId no hay a dónde ir.
+      expect(resolvePushTarget({ type })).toBeNull();
     }
   });
 });
