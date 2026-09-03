@@ -4,7 +4,7 @@ import {
   FlatList, TextInput, KeyboardAvoidingView, Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { X, Maximize2, Minimize2, MessageCircle, Send, Heart } from 'lucide-react-native';
+import { X, MessageCircle, Send, Heart } from 'lucide-react-native';
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
@@ -19,7 +19,6 @@ export interface VideoPreviewModalProps {
   title: string;
   durationSeconds: number;
   onClose: () => void;
-  autoFullscreen?: boolean;
   showComments?: boolean;
   /** Id del highlight: habilita likes y comentarios reales (GET /highlights/:id). */
   highlightId?: string;
@@ -97,11 +96,9 @@ function fmt(s: number) {
 }
 
 /**
- * Modal de preview de video. Carga la URL (MP4 o HLS) con expo-av.
- * Con `showComments` activa la sección de comentarios debajo del player.
- *
- * NOTA: presentFullscreenPlayer() puede no funcionar en el emulador
- * Android — usar dispositivo real para probar esta funcionalidad.
+ * Modal de reproducción de un highlight. Carga la URL (MP4 o HLS) con expo-av y
+ * abre **siempre en pantalla completa in-app**, con los controles y —si
+ * `showComments`— el panel de comentarios superpuestos al video.
  */
 /** Burbuja de un comentario (raíz o respuesta) con acción "Responder". */
 function CommentBubble({
@@ -148,7 +145,7 @@ function CommentBubble({
 }
 
 export function VideoPreviewModal({
-  visible, url, title, durationSeconds, onClose, autoFullscreen, showComments = false,
+  visible, url, title, durationSeconds, onClose, showComments = false,
   highlightId,
 }: VideoPreviewModalProps) {
   const { colors } = useTheme();
@@ -159,7 +156,6 @@ export function VideoPreviewModal({
   const [isBuffering, setIsBuffering] = React.useState(false);
   const [positionSec, setPositionSec] = React.useState(0);
   const [totalSec, setTotalSec] = React.useState(durationSeconds);
-  const hasAutoFullscreened = React.useRef(false);
   const [comments, setComments] = React.useState<CommentRow[]>([]);
   const [commentText, setCommentText] = React.useState('');
   const [sending, setSending] = React.useState(false);
@@ -168,12 +164,8 @@ export function VideoPreviewModal({
   const [description, setDescription] = React.useState<string | null>(null);
   // Comentario al que se está respondiendo (thread). null = comentario raíz.
   const [replyingTo, setReplyingTo] = React.useState<{ id: string; user: string } | null>(null);
-  // Pantalla completa in-app (no la nativa del OS): permite superponer el panel de
-  // comentarios sobre el video. `showCommentsPanel` abre ese panel en modo expandido.
-  const [expanded, setExpanded] = React.useState(false);
   const [showCommentsPanel, setShowCommentsPanel] = React.useState(false);
-  // Teclado abierto → en vista normal se oculta el video y los comentarios ocupan
-  // toda la pantalla, para escribir/leer sin que el player apriete la lista.
+  // Teclado abierto: se usa para apartar los controles de abajo mientras se escribe.
   const [kbVisible, setKbVisible] = React.useState(false);
 
   const threads = React.useMemo(() => buildThreads(comments), [comments]);
@@ -194,17 +186,6 @@ export function VideoPreviewModal({
       setIsLiked(false);
       setDescription(null);
       setReplyingTo(null);
-      /*
-       * ⚠️ Abre **en pantalla completa vertical**, no en la card de 16:9.
-       *
-       * Un highlight es video vertical de consumo directo: la card dejaba el
-       * clip chico arriba y media pantalla vacía. `expanded` es el modo in-app
-       * (no `presentFullscreenPlayer`, que es el nativo y rota a horizontal —
-       * justo lo que NO se quiere acá).
-       *
-       * Se sale con la X de arriba, que devuelve a la card.
-       */
-      setExpanded(true);
       setShowCommentsPanel(false);
       setKbVisible(false);
       // Comentarios + likes + descripción reales del highlight (si hay highlightId).
@@ -221,8 +202,6 @@ export function VideoPreviewModal({
           .catch(() => { /* sin datos → estado vacío, sin mock */ });
         return () => { cancelled = true; };
       }
-    } else {
-      hasAutoFullscreened.current = false;
     }
   }, [visible, highlightId, showComments]);
 
@@ -248,13 +227,10 @@ export function VideoPreviewModal({
     setIsPlaying(status.isPlaying);
     setIsBuffering(status.isBuffering ?? false);
     setPositionSec(status.positionMillis / 1000);
-    if (status.durationMillis) {
-      setTotalSec(status.durationMillis / 1000);
-      if (autoFullscreen && !hasAutoFullscreened.current) {
-        hasAutoFullscreened.current = true;
-        setTimeout(() => videoRef.current?.presentFullscreenPlayer(), 400);
-      }
-    }
+    // ⚠️ Nada de `presentFullscreenPlayer()` acá: la pantalla completa NATIVA
+    // rota a horizontal y no admite superponer el panel de comentarios. Este
+    // modal ya abre en completa in-app, que es la que sirve para un vertical.
+    if (status.durationMillis) setTotalSec(status.durationMillis / 1000);
   }
 
   function togglePlay() {
@@ -446,41 +422,21 @@ export function VideoPreviewModal({
       presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
       onRequestClose={onClose}
     >
-      <SafeAreaView
-        style={{ flex: 1, backgroundColor: expanded ? '#000000' : colors.bg }}
-        edges={expanded ? [] : ['top', 'bottom']}
-      >
+      {/*
+        ⚠️ **Un solo modo: pantalla completa.** Un highlight es video vertical de
+        consumo directo; la vista chica dejaba el clip arriba y media pantalla
+        vacía en blanco. Antes se abría en completa y había un botón de
+        minimizar que llevaba justo a esa vista rota — se eliminó el 2026-09-02
+        junto con el modo entero (estado `expanded`, header, `Maximize2`).
 
-        {/* Header (oculto en pantalla completa y con el teclado abierto) */}
-        {!expanded && !kbVisible && (
-          <View style={{
-            flexDirection: 'row', alignItems: 'center',
-            paddingHorizontal: 16, paddingVertical: 12, gap: 12,
-          }}>
-            <Pressable
-              onPress={onClose}
-              style={{
-                width: 36, height: 36, borderRadius: 12,
-                backgroundColor: colors.bg2,
-                alignItems: 'center', justifyContent: 'center',
-              }}>
-              <X size={20} color={colors.text}/>
-            </Pressable>
-            <Text
-              style={{ flex: 1, fontSize: 14, fontWeight: '800', color: colors.text }}
-              numberOfLines={1}>
-              {title || 'Video'}
-            </Text>
-          </View>
-        )}
+        Es pantalla completa **in-app**, no `presentFullscreenPlayer`: la nativa
+        rota a horizontal y no admite superponer el panel de comentarios.
 
-        {/* Contenedor de video: 16:9 normal, pantalla completa cuando expanded.
-            Con el teclado abierto en vista normal se oculta → los comentarios
-            ocupan toda la pantalla para escribir/leer cómodo. */}
-        {(expanded || !kbVisible) && (
-        <View style={expanded
-          ? { flex: 1, backgroundColor: '#000000' }
-          : { backgroundColor: '#000000', aspectRatio: 16 / 9 }}>
+        Se sale con la **X de arriba a la izquierda**, que cierra el modal.
+      */}
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#000000' }} edges={[]}>
+
+        <View style={{ flex: 1, backgroundColor: '#000000' }}>
           <Pressable onPress={togglePlay} style={{ width: '100%', height: '100%' }}>
             {visible && url ? (
               <Video
@@ -536,20 +492,71 @@ export function VideoPreviewModal({
             />
           )}
 
-          {/* Overlays de pantalla completa in-app */}
-          {expanded && (
-            <>
-              {/* Minimizar (arriba izquierda) */}
-              <Pressable
-                onPress={() => { setExpanded(false); setShowCommentsPanel(false); }}
-                style={{
-                  position: 'absolute', top: 14, left: 14,
-                  width: 40, height: 40, borderRadius: 20,
-                  backgroundColor: 'rgba(0,0,0,0.5)',
-                  alignItems: 'center', justifyContent: 'center',
+          {/* Overlays sobre el video */}
+          <>
+              {/* Cerrar + título (arriba). Antes acá había un "minimizar" que
+                  llevaba a la vista chica; ahora se sale directo, y el título
+                  viene con él porque el header donde vivía se eliminó. */}
+              <View style={{
+                position: 'absolute', top: 14, left: 14, right: 14,
+                flexDirection: 'row', alignItems: 'center', gap: 12,
+              }}>
+                <Pressable
+                  onPress={onClose}
+                  testID="close-highlight"
+                  accessibilityRole="button"
+                  accessibilityLabel="Cerrar"
+                  style={{
+                    width: 40, height: 40, borderRadius: 20,
+                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>
+                  <X size={20} color="#FFFFFF"/>
+                </Pressable>
+                {!!title && (
+                  <Text
+                    numberOfLines={1}
+                    style={{
+                      flex: 1, color: '#FFFFFF', fontFamily: fonts.bold, fontSize: 14,
+                      textShadowColor: 'rgba(0,0,0,0.7)', textShadowRadius: 4,
+                    }}>
+                    {title}
+                  </Text>
+                )}
+              </View>
+
+              {/*
+                Barra de progreso + tiempo, sobre el video. Vivía en la vista
+                chica que se eliminó; sin traerla acá, quitar el minimizar habría
+                dejado el highlight **sin forma de adelantar**. Se oculta con el
+                panel de comentarios abierto (queda tapada) y con el teclado.
+              */}
+              {!showCommentsPanel && !kbVisible && (
+                <View style={{
+                  position: 'absolute', left: 16, right: 16, bottom: 76, gap: 6,
                 }}>
-                <Minimize2 size={20} color="#FFFFFF"/>
-              </Pressable>
+                  <Pressable
+                    onLayout={(e) => { seekBarWidth.current = e.nativeEvent.layout.width; }}
+                    onPress={(e) => seekToFraction(e.nativeEvent.locationX / (seekBarWidth.current || 1))}
+                    hitSlop={{ top: 14, bottom: 14 }}
+                    style={{
+                      height: 4, backgroundColor: 'rgba(255,255,255,0.28)',
+                      borderRadius: 2, justifyContent: 'center',
+                    }}
+                  >
+                    <View style={{
+                      width: `${pct * 100}%`, height: '100%',
+                      backgroundColor: colors.accent, borderRadius: 2,
+                    }}/>
+                  </Pressable>
+                  <Text style={{
+                    color: 'rgba(255,255,255,0.85)', fontSize: 12, fontFamily: fonts.mono,
+                    textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3,
+                  }}>
+                    {fmt(positionSec)} / {fmt(totalSec)}
+                  </Text>
+                </View>
+              )}
 
               {/* Botón flotante "Comentarios (N)" (abajo derecha) */}
               {showComments && !showCommentsPanel && (
@@ -591,98 +598,7 @@ export function VideoPreviewModal({
                 </View>
               )}
             </>
-          )}
         </View>
-        )}
-
-        {/* Chrome normal (oculto en pantalla completa) */}
-        {!expanded && (
-          <>
-            {/* Controles (ocultos con el teclado abierto) */}
-            {!kbVisible && (
-            <View style={{
-              paddingHorizontal: 16, paddingTop: 14,
-              paddingBottom: showComments ? 10 : 24,
-              gap: 12,
-            }}>
-              {/* Barra de progreso (tap para adelantar/retroceder) */}
-              <Pressable
-                onLayout={(e) => { seekBarWidth.current = e.nativeEvent.layout.width; }}
-                onPress={(e) => seekToFraction(e.nativeEvent.locationX / (seekBarWidth.current || 1))}
-                hitSlop={{ top: 14, bottom: 14 }}
-                style={{ height: 4, backgroundColor: colors.line, borderRadius: 2, justifyContent: 'center' }}
-              >
-                <View style={{
-                  width: `${pct * 100}%`, height: '100%',
-                  backgroundColor: colors.accent, borderRadius: 2,
-                }}/>
-              </Pressable>
-
-              {/* Fila de controles */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                {/*
-                  ⚠️ Acá había un botón redondo de play/pausa. Se eliminó: el
-                  video **ya se pausa tocando la pantalla** (el `<Pressable>` que
-                  lo envuelve llama a `togglePlay`), que es el gesto que la gente
-                  ya trae aprendido. El botón duplicaba esa acción y le robaba
-                  espacio a la fila. No lo repongas.
-                */}
-                <Text style={{
-                  flex: 1, color: colors.muted2, fontSize: 13, fontFamily: fonts.mono,
-                }}>
-                  {fmt(positionSec)} / {fmt(totalSec)}
-                </Text>
-
-                {/* Botón Comentarios: es la ÚNICA forma de abrirlos (ver abajo). */}
-                {showComments && (
-                  <Pressable
-                    onPress={() => setShowCommentsPanel((v) => !v)}
-                    testID="toggle-highlight-comments"
-                    hitSlop={6}
-                    style={{
-                      flexDirection: 'row', alignItems: 'center', gap: 5,
-                      height: 44, paddingHorizontal: 12, borderRadius: 12,
-                      // Se pinta como activo mientras el panel está abierto: es un
-                      // toggle, y sin la señal no se sabe que el mismo botón cierra.
-                      backgroundColor: showCommentsPanel ? colors.accent : colors.bg2,
-                    }}>
-                    <MessageCircle size={18} color={showCommentsPanel ? colors.ink : colors.text}/>
-                    <Text style={{
-                      color: showCommentsPanel ? colors.ink : colors.text,
-                      fontFamily: fonts.bold, fontSize: 13,
-                    }}>
-                      {comments.length}
-                    </Text>
-                  </Pressable>
-                )}
-
-                {/* Pantalla completa (in-app) */}
-                <Pressable
-                  onPress={() => setExpanded(true)}
-                  style={{
-                    width: 44, height: 44, borderRadius: 12,
-                    backgroundColor: colors.bg2,
-                    alignItems: 'center', justifyContent: 'center',
-                  }}>
-                  <Maximize2 size={20} color={colors.text}/>
-                </Pressable>
-              </View>
-            </View>
-            )}
-
-            {/* Descripción del highlight (oculta con el teclado abierto) */}
-            {!kbVisible && renderDescription()}
-
-            {/*
-              ⚠️ Los comentarios se abren **a pedido**, no de entrada.
-              Antes se renderizaban siempre bajo el video y se comían media
-              pantalla: para ver el highlight —que es a lo que venís— había que
-              mirar por encima de una lista de comentarios. Ahora el botón 💬 de
-              la fila de controles los abre (`showCommentsPanel`).
-            */}
-            {showComments && showCommentsPanel && renderCommentSection()}
-          </>
-        )}
 
       </SafeAreaView>
     </Modal>

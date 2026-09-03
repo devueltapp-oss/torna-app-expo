@@ -68,6 +68,7 @@ import { useNotificationBadge } from './hooks/useNotificationBadge';
 import { useNearbyLocation } from './hooks/useNearbyLocation';
 import { useUpcomingFeed } from './hooks/useUpcomingFeed';
 import { useDoubleBackToExit } from './hooks/useDoubleBackToExit';
+import { useBackToHomeTab } from './hooks/useBackToHomeTab';
 import { useClubLocation } from './hooks/useClubLocation';
 import { ClubLocationSheet } from './components/ClubLocationSheet';
 import type { AppNotification } from './api/notifications';
@@ -806,17 +807,11 @@ function MainPlayer({ navigation, route }: any) {
 
   /**
    * Desde cualquier otro tab, el atrás lleva a Inicio en vez de cerrar la app.
-   * Es la jerarquía que la gente espera: primero se sale de la sección, después
-   * de la app.
+   * El guard de foco vive dentro del hook — ver la nota ahí: sin él, esta
+   * pantalla se comía el atrás de las que se apilan encima (chats, visor).
    */
-  React.useEffect(() => {
-    if (tab === 'home' || Platform.OS !== 'android') return undefined;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      setTab('home');
-      return true;
-    });
-    return () => sub.remove();
-  }, [tab]);
+  const goHomeTab = React.useCallback(() => setTab('home'), []);
+  useBackToHomeTab(tab !== 'home', goHomeTab);
 
   // Un push de partida (cancelada / baja / pareja que se bajó) navega acá con
   // `initialTab`. Si MainPlayer ya estaba montado, el estado inicial no alcanza:

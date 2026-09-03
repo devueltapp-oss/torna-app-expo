@@ -522,9 +522,20 @@ PATCH /follow/notify/:userId    { notify }   → toggle "Notificarme" (setFollow
 - **Miniatura (poster)**: el backend genera `thumbnailUrl` (B2) al recortar. `ContentThumb`
   la renderiza con `imageUri` (grid del perfil propio, `MyLibraryScreen`, carrusel del perfil
   público); cae al placeholder SVG si falta. Tap → abre el video completo.
-- **Pantalla completa in-app**: el botón `Maximize2` de `VideoPreviewModal` expande el video
-  (estado `expanded`, NO el nativo del OS) para poder superponer un panel de comentarios
-  (`showCommentsPanel`) con botón flotante "Comentarios (N)".
+- ⚠️ **`VideoPreviewModal` tiene UN solo modo: pantalla completa in-app** (2026-09-02). No
+  el nativo del OS —que rota a horizontal y no admite overlays—, sino el propio, para poder
+  superponer los controles y el panel de comentarios (`showCommentsPanel`, con su botón
+  flotante "Comentarios (N)").
+  - Antes había además una **vista chica** de 16:9 con su chrome debajo, y un botón de
+    **minimizar** que llevaba a ella. Como el modal ya abría en completa, ese botón solo
+    servía para caer en un clip chiquito arriba y media pantalla vacía en blanco. Se
+    eliminaron **el botón y el modo entero**: el estado `expanded`, el header, el
+    `Maximize2` y el prop muerto `autoFullscreen` (que disparaba el fullscreen **nativo**).
+  - Lo que vivía en ese chrome y hacía falta se movió **sobre el video**: la **barra de
+    progreso** con el tiempo (sin ella el highlight se quedaba sin forma de adelantar) y el
+    **título**, al lado de la **X** de cerrar. La X reemplazó al minimizar en el mismo
+    lugar: es la única salida, así que no la quites.
+  - **No repongas un modo chico.** Un highlight es video vertical de consumo directo.
 - ⚠️ **Todos los caminos que abren un highlight deben pasar `highlightId` + `showComments`**
   al `VideoPreviewModal` (perfil propio/librería abren via `openPreview`→`previewVideo`; el
   perfil ajeno via `clipModal`). Sin `highlightId` no hay descripción ni comentarios.
@@ -1322,7 +1333,7 @@ PATCH /notification/read-all        → { updated }
 | **Iconos** | `lucide-react-native` (size 22 default, stroke 2) |
 | **Tipografía** | Helvetica (manual de marca) — TODO migrar H1 a Coolvetica |
 | **SVG** | `react-native-svg` (`<Svg>`, `<Rect>`, `<Line>`, `<Path>`) |
-| **Video / HLS** | `expo-av` ~14.0.7 (reproductor HLS). **Fullscreen**: in-app, NO el nativo, en `GameDetailScreen` (landscape, ver abajo) y en `VideoPreviewModal` (estado `expanded`). En ambos casos es la **misma instancia** de `<Video>` (solo cambia el estilo del contenedor: card ↔ absolute-fill), nunca un `Modal` con un segundo `<Video>`. `ReelViewScreen` y el `Player` del editor sí siguen usando el nativo `videoRef.current.presentFullscreenPlayer()`. Regla: **si hay que superponer algo sobre el video (comentarios), tiene que ser fullscreen in-app** — el nativo no admite overlays |
+| **Video / HLS** | `expo-av` ~14.0.7 (reproductor HLS). **Fullscreen**: in-app, NO el nativo, en `GameDetailScreen` (landscape, ver abajo) y en `VideoPreviewModal` (que desde 2026-09-02 **solo** existe en pantalla completa: se le quitó la vista chica y el botón de minimizar). En `GameDetailScreen` es la **misma instancia** de `<Video>` (solo cambia el estilo del contenedor: card ↔ absolute-fill), nunca un `Modal` con un segundo `<Video>`. `ReelViewScreen` y el `Player` del editor sí siguen usando el nativo `videoRef.current.presentFullscreenPlayer()`. Regla: **si hay que superponer algo sobre el video (comentarios), tiene que ser fullscreen in-app** — el nativo no admite overlays |
 | **Orientación** | La app está bloqueada en **portrait** (`app.json` + `android:screenOrientation="portrait"` en el manifest). La **única** excepción es la pantalla completa del stream (`GameDetailScreen`), que rota a landscape con `expo-screen-orientation` ~7.0.5: `lockAsync(LANDSCAPE)` al entrar y `PORTRAIT_UP` al salir / al desmontar / con el botón atrás. En Android `setRequestedOrientation` en runtime **pisa** el valor del manifest, y el manifest ya trae `configChanges` con `orientation\|screenSize`, así que la activity no se recrea. ⚠️ **En iOS no alcanza**: `UISupportedInterfaceOrientations` es un límite duro y `orientation: "portrait"` en `app.json` lo escribe solo-portrait (el mod `withOrientation` pisa lo que pongas en `ios.infoPlist`). Para habilitarlo en iOS hay que pasar `orientation` a `"default"` y bloquear `PORTRAIT_UP` globalmente al arrancar la app |
 | **Mapas** | Sin mapa embebido ni librería de mapas. La ubicación se referencia con un botón **"Buscar en Maps"** (`components/MapsButton.tsx`) que abre **Google Maps** (URL universal `maps/search/?api=1&query=lat,lng`) vía `Linking`. Antes había Leaflet en `react-native-webview` + MapTiler; se quitó para no requerir dev-client ni API key |
 | **Ubicación** | Las ubicaciones de club se abren en **Google Maps** vía `MapsButton` (`Linking`), usando lat/lng del club (pin exacto) o el nombre como fallback — sin mapa embebido. `expo-location` ~17.0.1 volvió el 2026-09-01, con **un solo uso**: el aviso de partidas abiertas cercanas (`lib/location.ts` + `hooks/useNearbyLocation.ts`). Permiso **solo foreground** (`NSLocationWhenInUse`); nada de background |
@@ -1601,6 +1612,26 @@ const { colors } = useTheme();
   render.
 - Cada pantalla sigue pintando `colors.bg` en su `SafeAreaView` — eso es el
   fondo real; `contentStyle` sólo cubre los frames de transición.
+
+### ⚠️ Un `BackHandler` en una pantalla de tabs necesita guard de foco
+
+`MainPlayer`/`MainClub` **no se desmontan** cuando se apila una pantalla encima (un chat,
+el visor, el flujo de reserva): siguen montados abajo. Y los listeners de
+`hardwareBackPress` se invocan **en orden inverso al de registro**, así que el de la
+pantalla tapada —registrado antes de navegar— corre **primero** y se come el atrás de la
+pantalla de arriba.
+
+Síntoma real (2026-09-02): estando en un chat, el primer toque del atrás no hacía nada
+visible (solo cambiaba a Inicio el tab que estaba tapado) y el segundo cerraba el chat
+dejándote en **Inicio** en vez de volver a **Chats**.
+
+Los dos hooks de atrás llevan `useIsFocused()` y hay que mantenerlo:
+
+- **`hooks/useBackToHomeTab.ts`** — desde un tab que no es Inicio, el atrás lleva a Inicio.
+- **`hooks/useDoubleBackToExit.ts`** — en Inicio, dos toques para salir de la app.
+
+Si sumás otro `BackHandler.addEventListener` en una pantalla de tabs, guardalo igual.
+Cubierto por `hooks/__tests__/useBackToHomeTab.test.ts`.
 
 ### ⚠️ No llames hooks con estado dentro del render-prop `children` de un `Screen`
 
