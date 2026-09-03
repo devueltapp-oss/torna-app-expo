@@ -253,13 +253,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * El bug era que la app **guardaba un idToken y lo reusaba para siempre**:
    * pasada la hora, cada request daba 401 y nada lo renovaba ni cerraba la
    * sesión. Quedaba en un estado zombie — parecía logueada y no funcionaba
-   * nada. Con esto la sesión dura **indefinidamente** (no 2-3 días: hasta que
+   * nada. Con esto la sesión dura **indefinidamente** (no 4 días: hasta que
    * el usuario cierre sesión), que es el comportamiento que la gente espera de
    * una app de este tipo.
    *
    * `onIdTokenChanged` dispara en cada refresco del SDK: acá se persiste el
    * token nuevo en SecureStore, que es de donde leen TODOS los clientes de
    * `api/*`. Sin esto, refrescar en memoria no serviría de nada.
+   *
+   * ⚠️ **Este listener depende de que `firebaseAuth().currentUser` exista.**
+   * Hasta 2026-09-03 eso era falso para el camino más común — un usuario
+   * volviendo a entrar con email/contraseña—: `loginWithEmailPassword` solo
+   * llamaba al backend, nunca al SDK cliente, así que `currentUser` quedaba
+   * `null`, este efecto nunca disparaba para esas sesiones, y el síntoma en
+   * producción era "se cierra sola a las 3-5 horas". El fix está en
+   * `loginWithEmailPassword`: ver su comentario.
    */
   useEffect(() => {
     const unsubscribe = firebaseAuth().onIdTokenChanged(async (fbUser) => {
@@ -387,9 +395,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
       }
 
-      await SecureStore.setItemAsync(TOKEN_KEY, tokens.idToken);
+      /**
+       * ⚠️ **La causa de que la sesión se cerrara sola a las 3-5 h.**
+       *
+       * Hasta acá solo se autenticó contra el **backend** (`apiLoginEmailPassword`,
+       * que valida la contraseña contra Firebase por su cuenta y devuelve un
+       * idToken propio) — el SDK cliente de Firebase se queda sin `currentUser`.
+       * Y TODO el mecanismo de refresh de este archivo (`onIdTokenChanged`, el
+       * listener de `AppState`, el fallback de `restoreSession`) depende de que
+       * `firebaseAuth().currentUser` exista: sin él, el idToken guardado queda
+       * fijo desde el login y nunca se renueva. A la hora vence (duración fija
+       * de Firebase, no configurable) y cada request empieza a dar 401 en
+       * silencio — recién se nota al reabrir la app, que es por qué el síntoma
+       * se sentía como "3-5 horas" y no como "1 hora en punto".
+       *
+       * `registerWithEmailPassword` (alta) y los logins sociales NO tenían este
+       * problema, porque usan `createUserWithEmailAndPassword` /
+       * `signInWithCredential` del SDK cliente, que sí deja `currentUser`
+       * seteado. Acá se iguala el comportamiento con la misma llamada que ya
+       * usa `changePassword` para este mismo motivo (ver su comentario). Con
+       * esto la sesión pasa a durar lo que dura el refresh token de Firebase:
+       * indefinida hasta que el usuario cierra sesión, muy por encima de los
+       * 4 días pedidos.
+       */
+      let idToken = tokens.idToken;
+      try {
+        const credential = await firebaseAuth().signInWithEmailAndPassword(email.trim(), password);
+        idToken = await credential.user.getIdToken();
+      } catch (err) {
+        // Backend ya validó la contraseña: esto es best-effort para dejar el SDK
+        // cliente con sesión. Si falla (sin red, etc.), se sigue con el token del
+        // backend — la persona queda logueada, solo que sin auto-refresh hasta
+        // el próximo login.
+        console.error('[AuthContext] no se pudo iniciar sesión en el SDK cliente:', err);
+      }
 
-      setToken(tokens.idToken);
+      await SecureStore.setItemAsync(TOKEN_KEY, idToken);
+
+      setToken(idToken);
       const tornaUser: TornaUser = {
         id: user.id,
         email: user.email,
@@ -403,7 +446,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         authProvider: 'email',
       };
       setUser(tornaUser);
-      await registerNotificationId(user.id, tokens.idToken);
+      await registerNotificationId(user.id, idToken);
 
       return { status: 'authenticated', user: tornaUser };
     },

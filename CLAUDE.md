@@ -390,6 +390,45 @@ Club por email — RegisterClubScreen
 > `RegisterPlayer` (`App.tsx`); el de club va a `Register`. El username se valida
 > en vivo contra `GET /auth/check-username?username=` (debounce 400 ms).
 
+#### Duración de la sesión — por qué NO se cierra sola
+
+Un ID token de Firebase dura **1 hora fija, no configurable**. Lo que sí dura es el
+*refresh token*, que el SDK cliente guarda solo y no vence hasta que se cierra sesión o se
+revoca — `getIdToken()` lo usa por debajo para emitir uno nuevo. Con eso, la sesión dura
+**indefinidamente** (bien por encima de cualquier ventana de días que se pida), y todo el
+mecanismo vive en `contexts/AuthContext.tsx`:
+
+- **`onIdTokenChanged`** — dispara en cada refresco del SDK y persiste el token nuevo en
+  `SecureStore`, que es de donde leen todos los clientes de `api/*`.
+- **Listener de `AppState`** — al volver del segundo plano fuerza `getIdToken(true)`: el
+  timer del SDK no corre con la app suspendida, así que sin esto el primer request tras
+  reabrir podía pegarle a un token vencido.
+- **`restoreSession`** (arranque en frío) — un 401 contra `/auth/me` NO se interpreta como
+  "sesión terminada": se reintenta con un token fresco, y solo si ESO falla se borra la
+  sesión.
+
+⚠️ **Los tres dependen de que `firebaseAuth().currentUser` exista**, y eso NO es automático:
+solo lo deja seteado quien inicia sesión **con el SDK cliente** (`signInWithCredential` en
+login social, `createUserWithEmailAndPassword` en alta por email). Hasta 2026-09-03,
+**`loginWithEmailPassword`** —el camino más común, alguien *volviendo* a entrar con
+email/contraseña— no lo hacía: solo llamaba al backend (que valida la contraseña contra
+Firebase por su cuenta y devuelve un idToken propio), así que `currentUser` quedaba `null` y
+los tres mecanismos de arriba nunca corrían para esas sesiones. El idToken del login quedaba
+fijo, vencía a la hora y cada request empezaba a dar 401 en silencio — el síntoma reportado
+en producción fue "la app se cierra sola a las 3-5 horas" (el vencimiento real es a la hora
+exacta; recién se notaba al reabrir la app).
+
+**El fix**: `loginWithEmailPassword` ahora también llama a
+`firebaseAuth().signInWithEmailAndPassword(email, password)` tras que el backend confirma la
+cuenta, y usa el idToken de ESA llamada (no el del backend) para la sesión — mismo patrón que
+ya usaba `changePassword` por el mismo motivo (ver su comentario). Si el SDK cliente falla
+(sin red), el login no se bloquea: sigue con el token del backend, sin auto-refresh hasta el
+próximo login, en vez de dejar a la persona afuera.
+
+⚠️ **Cualquier camino de login nuevo tiene que dejar `firebaseAuth().currentUser` seteado.**
+Si agregás un proveedor o un flujo alternativo que solo hable con el backend, va a heredar
+este mismo bug. Cubierto por `contexts/__tests__/AuthContext.test.tsx`.
+
 #### Recuperar contraseña (usuario deslogueado)
 
 `ForgotPasswordScreen` (ruta `ForgotPassword` del AuthStack) → `AuthContext.sendPasswordReset(email)`
