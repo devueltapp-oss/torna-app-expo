@@ -578,46 +578,37 @@ export function VideoPreviewModal({
 
               {/* Fila de controles */}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <Pressable
-                  onPress={togglePlay}
-                  style={{
-                    width: 48, height: 48, borderRadius: 24,
-                    backgroundColor: colors.accent,
-                    alignItems: 'center', justifyContent: 'center',
-                  }}>
-                  {isPlaying ? (
-                    <View style={{ flexDirection: 'row', gap: 4 }}>
-                      <View style={{ width: 4, height: 16, backgroundColor: colors.ink, borderRadius: 2 }}/>
-                      <View style={{ width: 4, height: 16, backgroundColor: colors.ink, borderRadius: 2 }}/>
-                    </View>
-                  ) : (
-                    <View style={{
-                      width: 0, height: 0, marginLeft: 3,
-                      borderLeftWidth: 14, borderLeftColor: colors.ink,
-                      borderTopWidth: 9, borderTopColor: 'transparent',
-                      borderBottomWidth: 9, borderBottomColor: 'transparent',
-                    }}/>
-                  )}
-                </Pressable>
-
+                {/*
+                  ⚠️ Acá había un botón redondo de play/pausa. Se eliminó: el
+                  video **ya se pausa tocando la pantalla** (el `<Pressable>` que
+                  lo envuelve llama a `togglePlay`), que es el gesto que la gente
+                  ya trae aprendido. El botón duplicaba esa acción y le robaba
+                  espacio a la fila. No lo repongas.
+                */}
                 <Text style={{
                   flex: 1, color: colors.muted2, fontSize: 13, fontFamily: fonts.mono,
                 }}>
                   {fmt(positionSec)} / {fmt(totalSec)}
                 </Text>
 
-                {/* Botón Comentarios (solo cuando hay sección de comentarios) */}
+                {/* Botón Comentarios: es la ÚNICA forma de abrirlos (ver abajo). */}
                 {showComments && (
                   <Pressable
-                    onPress={() => { setExpanded(true); setShowCommentsPanel(true); }}
+                    onPress={() => setShowCommentsPanel((v) => !v)}
+                    testID="toggle-highlight-comments"
                     hitSlop={6}
                     style={{
                       flexDirection: 'row', alignItems: 'center', gap: 5,
                       height: 44, paddingHorizontal: 12, borderRadius: 12,
-                      backgroundColor: colors.bg2,
+                      // Se pinta como activo mientras el panel está abierto: es un
+                      // toggle, y sin la señal no se sabe que el mismo botón cierra.
+                      backgroundColor: showCommentsPanel ? colors.accent : colors.bg2,
                     }}>
-                    <MessageCircle size={18} color={colors.text}/>
-                    <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: 13 }}>
+                    <MessageCircle size={18} color={showCommentsPanel ? colors.ink : colors.text}/>
+                    <Text style={{
+                      color: showCommentsPanel ? colors.ink : colors.text,
+                      fontFamily: fonts.bold, fontSize: 13,
+                    }}>
                       {comments.length}
                     </Text>
                   </Pressable>
@@ -640,8 +631,14 @@ export function VideoPreviewModal({
             {/* Descripción del highlight (oculta con el teclado abierto) */}
             {!kbVisible && renderDescription()}
 
-            {/* ── Sección de comentarios (ocupa toda la pantalla con el teclado) ── */}
-            {showComments && renderCommentSection()}
+            {/*
+              ⚠️ Los comentarios se abren **a pedido**, no de entrada.
+              Antes se renderizaban siempre bajo el video y se comían media
+              pantalla: para ver el highlight —que es a lo que venís— había que
+              mirar por encima de una lista de comentarios. Ahora el botón 💬 de
+              la fila de controles los abre (`showCommentsPanel`).
+            */}
+            {showComments && showCommentsPanel && renderCommentSection()}
           </>
         )}
 

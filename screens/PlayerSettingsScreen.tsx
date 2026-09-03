@@ -21,11 +21,30 @@ import { ImageViewerModal } from '../components/ImageViewerModal';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import { useAuth } from '../contexts/AuthContext';
 import { uploadProfilePicture, uploadFrontPage, updateMyCategory, updateMyProfile } from '../api/profile';
-import { reverseAddress } from '../api/geo';
+import { reverseAddress, searchAddress, type AddressSuggestion } from '../api/geo';
+import { cityFromSuggestion, isRegionVisible, packRegion, unpackRegion } from '../lib/region';
 import { precisePosition } from '../lib/location';
 import type { ProfileOwner } from '../data/types';
 
 type Section = 'overview' | 'profile' | 'password';
+
+/**
+ * Niveles de juego (`User.category`). Convención de pádel: **1 es el más alto**
+ * y 7 la iniciación — al revés de lo que la gente asume, que es justamente por
+ * lo que cada opción lleva su nombre además del número.
+ *
+ * ⚠️ Los `value` son el contrato con el backend (`@Min(1) @Max(7)`): se pueden
+ * cambiar las etiquetas, no los números.
+ */
+const PLAY_LEVELS: { value: number; label: string; hint: string }[] = [
+  { value: 1, label: 'Nivel 1 · Profesional',  hint: 'Compites en circuito' },
+  { value: 2, label: 'Nivel 2 · Avanzado alto', hint: 'Competencia habitual' },
+  { value: 3, label: 'Nivel 3 · Avanzado',      hint: 'Dominas todos los golpes' },
+  { value: 4, label: 'Nivel 4 · Intermedio alto', hint: 'Juegas con constancia' },
+  { value: 5, label: 'Nivel 5 · Intermedio',    hint: 'Ya tienes partidos jugados' },
+  { value: 6, label: 'Nivel 6 · Principiante',  hint: 'Empezando a jugar' },
+  { value: 7, label: 'Nivel 7 · Iniciación',    hint: 'Primera vez en una cancha' },
+];
 
 export interface PlayerSettingsScreenProps {
   owner: ProfileOwner;
@@ -54,9 +73,60 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
    * solo sirve para rellenarla de una vez. Se guarda al tocar "Guardar", junto
    * con nombre y username.
    */
-  const [region, setRegion] = React.useState(owner.location ?? '');
+  const [region, setRegion] = React.useState(unpackRegion(owner.location));
   const [locatingCity, setLocatingCity] = React.useState(false);
   const [cityError, setCityError] = React.useState<string | null>(null);
+
+  /**
+   * Mostrar la ciudad en el perfil público. **Opcional y aparte de tenerla
+   * cargada**: que la app sepa de dónde sos y que se lo enseñe a los demás son
+   * dos decisiones distintas.
+   *
+   * Se persiste como un prefijo en el propio `User.region` (`"~"` = oculta) para
+   * no pedir una columna nueva por un booleano. Ver `packRegion`/`unpackRegion`.
+   */
+  const [showRegion, setShowRegion] = React.useState(() => isRegionVisible(owner.location));
+
+  /**
+   * Sugerencias de ciudad (Geoapify vía `GET /geo/autocomplete`).
+   *
+   * ⚠️ **Es lo que evita los errores de tipeo**: elegir de la lista guarda un
+   * nombre real. Pero escribir libre sigue permitido — si el proveedor no está
+   * configurado o no contesta, el campo tiene que seguir sirviendo.
+   */
+  const [citySuggestions, setCitySuggestions] = React.useState<AddressSuggestion[]>([]);
+  // Marca que el texto salió de la lista, para no volver a buscar por lo elegido.
+  const cityChosen = React.useRef(false);
+
+  React.useEffect(() => {
+    if (cityChosen.current || region.trim().length < 3) {
+      setCitySuggestions([]);
+      return undefined;
+    }
+    const t = setTimeout(async () => {
+      try {
+        const found = await searchAddress(region.trim());
+        // Se deduplica por ciudad: el proveedor devuelve una entrada por calle y
+        // acá se elige una CIUDAD, no una dirección.
+        const vistas = new Set<string>();
+        const soloCiudades = found
+          .map((s) => ({ ...s, label: cityFromSuggestion(s) }))
+          .filter((s) => s.label && !vistas.has(s.label) && vistas.add(s.label))
+          .slice(0, 5);
+        setCitySuggestions(soloCiudades);
+      } catch {
+        setCitySuggestions([]);
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [region]);
+
+  const handlePickCity = React.useCallback((s: AddressSuggestion) => {
+    cityChosen.current = true;
+    setRegion(s.label);
+    setCitySuggestions([]);
+    setCityError(null);
+  }, []);
 
   /**
    * Toma la posición una vez y resuelve la ciudad con `GET /geo/reverse`.
@@ -75,7 +145,8 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
     if (savingProfile) return;
     setSavingProfile(true);
     try {
-      await updateMyProfile({ name, username, region: region.trim() });
+      //  mete la visibilidad en el propio string (ver su nota).
+      await updateMyProfile({ name, username, region: packRegion(region, showRegion) });
       setSection('overview');
     } catch (e) {
       Alert.alert('No se pudo guardar', (e as Error)?.message ?? 'Intenta de nuevo.');
@@ -236,8 +307,10 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
             onChangeCover={changeCover}
             onChangeName={setName} onChangeUsername={setUsername}
             category={category} onChangeCategory={handleChangeCategory} categoryError={categoryError}
-            region={region} onChangeRegion={setRegion}
+            region={region} onChangeRegion={(v) => { cityChosen.current = false; setRegion(v); }}
             onUseMyCity={handleUseMyCity} locatingCity={locatingCity} cityError={cityError}
+            citySuggestions={citySuggestions} onPickCity={handlePickCity}
+            showRegion={showRegion} onChangeShowRegion={setShowRegion}
             onCancel={() => setSection('overview')}
             onSave={handleSaveProfile}
           />
@@ -446,6 +519,7 @@ function ProfileSection({
   cover, uploadingCover, coverError, onChangeCover,
   onChangeName, onChangeUsername, category, onChangeCategory, categoryError, onCancel, onSave,
   region, onChangeRegion, onUseMyCity, locatingCity, cityError,
+  citySuggestions, onPickCity, showRegion, onChangeShowRegion,
 }: {
   colors: ReturnType<typeof useTheme>['colors'];
   name: string; username: string; club: string;
@@ -453,6 +527,12 @@ function ProfileSection({
   region: string;
   onChangeRegion: (s: string) => void;
   onUseMyCity: () => void;
+  /** Sugerencias de ciudad; vacío = no mostrar la lista. */
+  citySuggestions: AddressSuggestion[];
+  onPickCity: (s: AddressSuggestion) => void;
+  /** Mostrar la ciudad en el perfil público. Independiente de tenerla cargada. */
+  showRegion: boolean;
+  onChangeShowRegion: (v: boolean) => void;
   locatingCity: boolean;
   cityError: string | null;
   avatar?: string; uploadingPhoto: boolean; photoError: string | null;
@@ -490,31 +570,6 @@ function ProfileSection({
         <Text style={{ fontSize: 11, color: colors.warnFg, fontWeight: '700' }}>{photoError}</Text>
       ) : null}
 
-      {/* Foto de portada */}
-      <View style={{ gap: 8 }}>
-        <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text2 }}>Portada</Text>
-        <Pressable
-          onPress={uploadingCover ? undefined : onChangeCover}
-          style={{
-            height: 120, borderRadius: 12, overflow: 'hidden',
-            borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.bg2,
-            alignItems: 'center', justifyContent: 'center', opacity: uploadingCover ? 0.6 : 1,
-          }}>
-          {cover ? (
-            <Image source={{ uri: cover }} style={{ width: '100%', height: '100%' }} resizeMode="cover"/>
-          ) : null}
-          <View style={{ position: 'absolute', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {uploadingCover ? <ActivityIndicator size="small" color={colors.text2}/> : null}
-            <Text style={{ color: colors.text2, fontWeight: '700', fontSize: 12 }}>
-              {uploadingCover ? 'Subiendo…' : cover ? 'Cambiar portada' : 'Agregar portada'}
-            </Text>
-          </View>
-        </Pressable>
-        {coverError ? (
-          <Text style={{ fontSize: 11, color: colors.warnFg, fontWeight: '700' }}>{coverError}</Text>
-        ) : null}
-      </View>
-
       <Input label="Nombre" value={name} onChangeText={onChangeName}/>
       <Input label="Username" value={username} onChangeText={onChangeUsername}
         hint="Cómo te encuentran otros jugadores."/>
@@ -530,8 +585,38 @@ function ProfileSection({
         llegan los avisos de partidas cercanas; éste es una etiqueta que vos
         eliges mostrar. No los mezcles ni derives uno del otro.
       */}
-      <Input label="Ciudad" value={region} onChangeText={onChangeRegion}
-        hint="Se usa para ubicarte en tu perfil. Puedes escribirla o tomarla del GPS."/>
+      <Input
+        label="Ciudad"
+        value={region}
+        onChangeText={onChangeRegion}
+        hint="Escribe y elige de la lista, o tómala del GPS."
+      />
+
+      {/*
+        Sugerencias de Geoapify mientras se escribe. **Es lo que evita los errores
+        de tipeo**: elegir de la lista guarda un nombre de ciudad real, no lo que
+        se haya tecleado. Escribir libre sigue permitido — si el proveedor no está
+        configurado o no responde, el campo tiene que seguir sirviendo.
+      */}
+      {citySuggestions.length > 0 && (
+        <View style={{ borderWidth: 1, borderColor: colors.line, borderRadius: 12, overflow: 'hidden' }}>
+          {citySuggestions.map((s, i) => (
+            <Pressable
+              key={s.id}
+              testID={`city-suggestion-${i}`}
+              onPress={() => onPickCity(s)}
+              style={({ pressed }) => ({
+                paddingHorizontal: 12, paddingVertical: 10,
+                borderTopWidth: i === 0 ? 0 : 1, borderTopColor: colors.line,
+                backgroundColor: pressed ? colors.bg2 : 'transparent',
+              })}
+            >
+              <Text style={{ fontSize: 13, color: colors.text }} numberOfLines={1}>{s.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+
       <Pressable
         onPress={locatingCity ? undefined : onUseMyCity}
         style={({ pressed }) => ({
@@ -552,36 +637,75 @@ function ProfileSection({
         <Text style={{ fontSize: 11, color: colors.text }}>{cityError}</Text>
       ) : null}
 
-      <Input label="Club principal" value={club} onChangeText={() => {}} disabled
-        hint="Lo administra el club. Pídele al admin si necesitas cambiarlo."/>
+      {/*
+        Mostrarla es **opcional**: tener la ciudad cargada (para que la app sepa
+        de dónde eres) y enseñarla en tu perfil son dos decisiones distintas, y
+        la segunda es tuya.
+      */}
+      <Pressable
+        onPress={() => onChangeShowRegion(!showRegion)}
+        testID="toggle-show-city"
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 }}
+      >
+        <Switch value={showRegion} onValueChange={onChangeShowRegion} />
+        <Text style={{ flex: 1, fontSize: 13, color: colors.text }}>
+          Mostrar mi ciudad en el perfil
+        </Text>
+      </Pressable>
 
-      {/* Categoría del jugador — se guarda al tocarla (PATCH /user/me). */}
+      {/*
+        ⛔ "Club principal" se eliminó el 2026-09-02: era un campo **deshabilitado**
+        que solo decía "pedile al admin". Un input que no se puede escribir y no
+        aporta un dato accionable es ruido en un formulario.
+      */}
+
+      {/*
+        Nivel de juego — se guarda al elegirlo (PATCH /user/me).
+
+        ⚠️ Antes eran **siete números sueltos** (1…7) sin nada que dijera qué
+        significaban salvo una línea de ayuda debajo: había que saberse la
+        convención de pádel para elegir. Ahora cada opción se nombra, así que se
+        entiende sin leer el pie.
+      */}
       <View style={{ gap: 6 }}>
-        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text2 }}>Categoría</Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          {[1, 2, 3, 4, 5, 6, 7].map((n) => {
-            const active = category === n;
+        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text2 }}>Nivel de juego</Text>
+        <View style={{ gap: 6 }}>
+          {PLAY_LEVELS.map(({ value, label, hint }) => {
+            const active = category === value;
             return (
               <Pressable
-                key={n}
-                onPress={() => onChangeCategory(active ? null : n)}
+                key={value}
+                testID={`level-${value}`}
+                onPress={() => onChangeCategory(active ? null : value)}
                 style={{
-                  minWidth: 44, alignItems: 'center',
-                  backgroundColor: active ? colors.primary : 'transparent',
-                  borderWidth: 1.5, borderColor: active ? colors.primary : colors.line,
-                  borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+                  flexDirection: 'row', alignItems: 'center', gap: 10,
+                  backgroundColor: active ? colors.accentSoft : 'transparent',
+                  borderWidth: 1.5, borderColor: active ? colors.accentStrong : colors.line,
+                  borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,
                 }}
               >
-                <Text style={{ fontSize: 13, fontWeight: '800', color: active ? colors.primaryFg : colors.text }}>
-                  {n}
-                </Text>
+                {/* Radio: deja claro que se elige UNO, no varios. */}
+                <View style={{
+                  width: 20, height: 20, borderRadius: 10,
+                  borderWidth: 2, borderColor: active ? colors.accentStrong : colors.lineStrong,
+                  alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {active && (
+                    <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accentStrong }} />
+                  )}
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text }}>
+                    {label}
+                  </Text>
+                  <Text style={{ fontSize: 11, color: colors.muted2, marginTop: 1 }}>
+                    {hint}
+                  </Text>
+                </View>
               </Pressable>
             );
           })}
         </View>
-        <Text style={{ fontSize: 11, color: colors.muted2, lineHeight: 15 }}>
-          1 es la categoría más alta y 7 la de iniciación.
-        </Text>
         {categoryError ? (
           <Text style={{ fontSize: 11, color: colors.warnFg, fontWeight: '700' }}>{categoryError}</Text>
         ) : null}

@@ -21,6 +21,7 @@ import { Avatar, Button, CategoryBadge } from '../components/ui';
 import { ImageViewerModal } from '../components/ImageViewerModal';
 import { ContentThumb } from '../components/ContentThumb';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
+import { isRegionVisible, unpackRegion } from '../lib/region';
 import type {
   ProfileOwner, LibraryItem, LibraryMatch, LibraryHighlight,
 } from '../data/types';
@@ -51,6 +52,9 @@ export function PlayerOwnProfileScreen({
   const { colors } = useTheme();
   const [tab, setTab] = React.useState<TabKey>('highlights');
   const [viewer, setViewer] = React.useState(false);
+
+  /** Ciudad a mostrar: cadena vacía si el usuario eligió ocultarla. */
+  const visibleRegion = isRegionVisible(owner.location) ? unpackRegion(owner.location) : '';
 
   const publicHl     = highlights.filter(h => h.isPublic);
   const publicMatch  = matches.filter(m => m.isPublic);
@@ -98,22 +102,32 @@ export function PlayerOwnProfileScreen({
         <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
           <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text }}>{owner.name}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
+            {/*
+              ⚠️ La ciudad pasa por `visibleRegion`: mostrarla es OPCIONAL y el
+              flag viaja como un prefijo en `User.region` (ver `lib/region.ts`).
+              Pintar `owner.location` crudo mostraría la
+              ciudad de quien eligió ocultarla, con un `~` delante.
+
+              El `·` solo va si hay las dos cosas: sin esto quedaba un separador
+              suelto cuando faltaba el club o la ciudad.
+            */}
             <Text style={{ fontSize: 12, color: colors.muted2, flexShrink: 1 }}>
-              {owner.club} · {owner.location}
+              {[owner.club, visibleRegion].filter(Boolean).join(' · ')}
             </Text>
             <CategoryBadge category={owner.category} />
           </View>
         </View>
 
-        {/* CTAs */}
-        <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 12 }}>
-          <View style={{ flex: 1 }}>
-            <Button fullWidth size="sm" variant="soft" onPress={onOpenSettings}>Editar perfil</Button>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Button fullWidth size="sm" variant="soft">Compartir</Button>
-          </View>
-        </View>
+        {/*
+          ⚠️ Acá había dos botones y se eliminaron el 2026-09-02:
+           · **Editar perfil** — duplicaba el ⚙ del header, que lleva al mismo
+             lugar (Ajustes → Editar perfil).
+           · **Compartir** — no tenía handler: era un botón que no hacía NADA.
+             Compartir un perfil necesita una URL pública, que todavía no existe
+             (mismo motivo por el que no se puede compartir un partido fuera de
+             la app). Cuando exista, se repone con algo detrás.
+          Sin ellos la ficha respira y las pestañas quedan más arriba.
+        */}
 
         {/* Tabs */}
         <TabStrip
@@ -130,11 +144,11 @@ export function PlayerOwnProfileScreen({
           <View style={{ paddingHorizontal: 24, paddingVertical: 40, alignItems: 'center', gap: 6 }}>
             <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>Nada por ahora</Text>
             <Text style={{ fontSize: 12, color: colors.muted2, textAlign: 'center', lineHeight: 18 }}>
-              Pasá a tu{' '}
+              Pasa a tu{' '}
               <Text onPress={onOpenLibrary} style={{ color: colors.accentText, fontWeight: '700' }}>
                 biblioteca privada
               </Text>
-              {' '}y marcá algo como público para que aparezca aquí.
+              {' '}y marca algo como público para que aparezca aquí.
             </Text>
           </View>
         ) : (
