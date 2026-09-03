@@ -122,7 +122,14 @@ con flujo `Register → Pending → MainClub`.
   (2026-09-02: se eliminó el `StepIndicator` y con él `screens/reserveCommon.tsx`). Son dos
   pantallas y cada una dice en su título qué se elige; el andamiaje de pasos era ruido.
   (`ReserveBlocks` → `ReserveStep3` →
-  `ReserveSuccess`). **La partida nace de un bloque**, igual que en el desktop
+  `ReserveSuccess`). ⚠️ El CTA final dice **"Finalizar"** y lleva al **Inicio**
+  (`navigate('MainPlayer', { initialTab: 'home' })`): decía "Volver al perfil del club" y
+  hacía `popToTop()`, que deja el tab donde estabas —Juegos, de donde se entra a Reservar—.
+  Después de agendar, a donde se quiere ir es al Inicio, que es donde la partida recién
+  creada aparece arriba en "Próximas partidas"; el perfil del club no le sirve a nadie ahí.
+  Se usa `navigate` y no `popToTop` porque sobre una ruta que ya está en la pila hace el pop
+  **y** actualiza los params, que es lo que dispara el efecto de `initialTab` en `MainPlayer`.
+  **La partida nace de un bloque**, igual que en el desktop
   (ver "Reserva por bloques" más abajo):
   1. Día (chips horizontales) + **bloque libre**: una fila por horario del día
      (`06:00 – 07:30`) con cuántas canchas quedan libres; se despliega en las canchas
@@ -783,6 +790,16 @@ organizador** (`game.isCreator`).
     se defiende en las UIs; el `@Min(1) @Max(7)` sí lo valida cuando llega.
   - También se elige en el perfil propio (`PlayerSettingsScreen` → Editar perfil →
     `updateMyCategory` → `PATCH /user/me`, optimista con revert).
+  - ⚠️ **El selector es propio (`components/LevelPickerSheet.tsx`), no un `Picker` nativo.**
+    Se sacó `@react-native-picker/picker` el 2026-09-03 (dependencia desinstalada) porque en
+    Android **no es una rueda: abre un diálogo del sistema**, y eso daba los tres síntomas
+    que se reportaron — la pantalla se veía **en blanco** (el diálogo lo pinta el OS, no el
+    tema de la app: con Torna en oscuro y el teléfono en claro, panel blanco encima), la UI
+    no se parecía a ninguna otra de la app, y **el texto se cortaba** (el ítem nativo es de
+    una sola línea y truncaba justo la descripción que hace entendible el número).
+    La hoja propia usa el patrón de `ConfirmSheet` y pone nombre y descripción en **líneas
+    separadas**. `PLAY_LEVELS` y `levelLabel` viven ahí. No repongas un picker nativo.
+    Cubierto por `components/__tests__/LevelPickerSheet.test.tsx`.
   - Se muestra con **`<CategoryBadge category/>`**, que devuelve `null` si no hay nivel — el
     llamador no condiciona el render. Excepción: en `PlayerProfilePublicView` va como texto,
     porque ahí el fondo es el azul del hero y el badge usa `colors.text`.

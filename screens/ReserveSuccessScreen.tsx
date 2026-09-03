@@ -12,16 +12,17 @@ interface Props {
   heroLine?: string;
   /** Default: "¡Reserva confirmada!" */
   title?: string;
-  onBackToClub?: () => void;
+  /** Cierra el flujo. Lleva al Inicio: la reserva ya está hecha, no hay paso siguiente. */
+  onFinish?: () => void;
   onShare?: () => void;
 }
 
 /**
- * Success screen for the reservation flow. Big circular check, success copy,
- * KV summary of the reservation, primary CTA back to the club's profile.
+ * Cierre del flujo de reserva: check grande, resumen de lo agendado y dos
+ * acciones — **Finalizar** (vuelve al Inicio) y compartir la invitación.
  */
 export function ReserveSuccessScreen({
-  summary, heroLine, title = '¡Reserva confirmada!', onBackToClub, onShare,
+  summary, heroLine, title = '¡Reserva confirmada!', onFinish, onShare,
 }: Props) {
   const { colors } = useTheme();
   return (
@@ -54,7 +55,10 @@ export function ReserveSuccessScreen({
         </View>
 
         <View style={{ width: '100%', gap: 8 }}>
-          <Button fullWidth size="lg" onPress={onBackToClub}>Volver al perfil del club</Button>
+          {/* ⚠️ Dice **Finalizar**, no "volver al club": lo que termina acá es la
+              reserva, y el perfil del club no es a donde quiere ir nadie después
+              de agendar. Lleva al Inicio. */}
+          <Button fullWidth size="lg" onPress={onFinish}>Finalizar</Button>
           {onShare && (
             <Pressable onPress={onShare} style={{ alignItems: 'center', paddingVertical: 4 }}>
               <Text style={{ color: colors.accentText, fontSize: 13, fontWeight: '700' }}>Compartir invitación</Text>

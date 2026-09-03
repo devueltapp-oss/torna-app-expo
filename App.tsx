@@ -1417,7 +1417,16 @@ function ReserveOkContainer({ route, navigation }: { route: any; navigation: any
           { label: 'Pago',    value: 'En el club' },
         ]}
         heroLine="¡Reserva confirmada! Te esperamos en la cancha."
-        onBackToClub={() => navigation.popToTop()}
+        /*
+         * ⚠️ `navigate` y no `popToTop`: los dos vuelven a `MainPlayer` (es la
+         * raíz del stack), pero `popToTop` lo deja en el tab donde estabas —
+         * Juegos, desde donde se entra a Reservar—, y después de agendar lo que
+         * corresponde es el **Inicio**, donde la partida recién creada aparece
+         * arriba en "Próximas partidas". `navigate` sobre una ruta que ya está
+         * en la pila hace el pop **y** actualiza los params, que es lo que
+         * dispara el efecto de `initialTab` en `MainPlayer`.
+         */
+        onFinish={() => navigation.navigate('MainPlayer', { initialTab: 'home' })}
         // Sin id de reserva no hay nada que adjuntar: se oculta el botón en vez
         // de ofrecer uno que no puede funcionar.
         onShare={reservationId ? () => setShareOpen(true) : undefined}

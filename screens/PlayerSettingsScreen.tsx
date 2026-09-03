@@ -11,7 +11,7 @@
 import React from 'react';
 import { View, Text, Pressable, ScrollView, ActivityIndicator, Image, Alert, Switch, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight, Lock, Sun, Moon, MonitorSmartphone, MapPin } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, ChevronDown, Lock, Sun, Moon, MonitorSmartphone, MapPin } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme, ThemeMode } from '../theme';
 import { fonts } from '../theme/tokens';
@@ -19,7 +19,7 @@ import { useNearbyLocation } from '../hooks/useNearbyLocation';
 import { Avatar, Button, Input, AppHeader, SectionHeader } from '../components/ui';
 import { ImageViewerModal } from '../components/ImageViewerModal';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
-import { Picker } from '@react-native-picker/picker';
+import { LevelPickerSheet, levelLabel } from '../components/LevelPickerSheet';
 import { useAuth } from '../contexts/AuthContext';
 import { uploadProfilePicture, uploadFrontPage, updateMyCategory, updateMyProfile } from '../api/profile';
 import type { ProfileOwner } from '../data/types';
@@ -27,22 +27,9 @@ import type { ProfileOwner } from '../data/types';
 type Section = 'overview' | 'profile' | 'password';
 
 /**
- * Niveles de juego (`User.category`). Convención de pádel: **1 es el más alto**
- * y 7 la iniciación — al revés de lo que la gente asume, que es justamente por
- * lo que cada opción lleva su nombre además del número.
- *
- * ⚠️ Los `value` son el contrato con el backend (`@Min(1) @Max(7)`): se pueden
- * cambiar las etiquetas, no los números.
+ * Los niveles viven en `components/LevelPickerSheet.tsx` (`PLAY_LEVELS`), junto
+ * al selector que los muestra. **1 es el más alto** — convención de pádel.
  */
-const PLAY_LEVELS: { value: number; label: string; hint: string }[] = [
-  { value: 1, label: 'Nivel 1 · Profesional',  hint: 'Compites en circuito' },
-  { value: 2, label: 'Nivel 2 · Avanzado alto', hint: 'Competencia habitual' },
-  { value: 3, label: 'Nivel 3 · Avanzado',      hint: 'Dominas todos los golpes' },
-  { value: 4, label: 'Nivel 4 · Intermedio alto', hint: 'Juegas con constancia' },
-  { value: 5, label: 'Nivel 5 · Intermedio',    hint: 'Ya tienes partidos jugados' },
-  { value: 6, label: 'Nivel 6 · Principiante',  hint: 'Empezando a jugar' },
-  { value: 7, label: 'Nivel 7 · Iniciación',    hint: 'Primera vez en una cancha' },
-];
 
 export interface PlayerSettingsScreenProps {
   owner: ProfileOwner;
@@ -448,6 +435,7 @@ function ProfileSection({
   categoryError: string | null;
   onCancel: () => void; onSave: () => void;
 }) {
+  const [levelSheet, setLevelSheet] = React.useState(false);
   return (
     <View style={{ paddingHorizontal: 16, paddingTop: 14, gap: 12 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -481,43 +469,46 @@ function ProfileSection({
       */}
 
       {/*
-        Nivel de juego — selector de rueda (`@react-native-picker/picker`).
+        Nivel de juego — campo que abre `LevelPickerSheet` (hoja propia).
 
-        ⚠️ Pasó por dos formas antes de esta: primero **siete números sueltos**
-        (había que saberse la convención de pádel —1 es el MÁS alto— para
-        elegir), después una lista de radios que ocupaba media pantalla. La rueda
-        deja las siete opciones en una sola fila de alto fijo y muestra el nombre
-        completo, que es lo que hace entendible el número.
+        ⚠️ Antes acá había un `Picker` nativo (`@react-native-picker/picker`), y
+        antes números sueltos. El nativo se sacó el 2026-09-03 porque en Android
+        abre un **diálogo del sistema**: salía en blanco con el tema oscuro
+        puesto en la app, no se parecía a nada del resto de Torna y truncaba las
+        etiquetas en una sola línea, comiéndose justo la descripción que hace
+        entendible el número. La hoja propia arregla las tres cosas.
 
         Se guarda al elegir (PATCH /user/me), sin botón aparte.
       */}
       <View style={{ gap: 6 }}>
         <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text2 }}>Nivel de juego</Text>
-        <View style={{
-          borderWidth: 1.5, borderColor: colors.line, borderRadius: 12,
-          backgroundColor: colors.surface, overflow: 'hidden',
-        }}>
-          <Picker
-            selectedValue={category ?? 0}
-            onValueChange={(v) => onChangeCategory(Number(v) === 0 ? null : Number(v))}
-            testID="level-picker"
-            // En Android el texto lo pinta el propio widget nativo: sin `color`
-            // sale negro sobre fondo oscuro en tema oscuro.
-            style={{ color: colors.text }}
-            dropdownIconColor={colors.text}
-            itemStyle={{ color: colors.text, fontSize: 16 }}
-          >
-            {/* Sin nivel es un estado válido: `User.category` es nullable. */}
-            <Picker.Item label="Sin declarar" value={0} color={colors.text} />
-            {PLAY_LEVELS.map(({ value, label, hint }) => (
-              <Picker.Item key={value} label={`${label} — ${hint}`} value={value} color={colors.text} />
-            ))}
-          </Picker>
-        </View>
+        <Pressable
+          onPress={() => setLevelSheet(true)}
+          testID="level-field"
+          accessibilityRole="button"
+          style={{
+            flexDirection: 'row', alignItems: 'center', gap: 10,
+            borderWidth: 1.5, borderColor: colors.line, borderRadius: 12,
+            backgroundColor: colors.surface,
+            paddingHorizontal: 14, paddingVertical: 13,
+          }}
+        >
+          <Text style={{ flex: 1, fontSize: 15, color: category == null ? colors.muted2 : colors.text }}>
+            {levelLabel(category)}
+          </Text>
+          <ChevronDown size={18} color={colors.muted2} />
+        </Pressable>
         {categoryError ? (
           <Text style={{ fontSize: 11, color: colors.warnFg, fontWeight: '700' }}>{categoryError}</Text>
         ) : null}
       </View>
+
+      <LevelPickerSheet
+        visible={levelSheet}
+        value={category}
+        onSelect={onChangeCategory}
+        onClose={() => setLevelSheet(false)}
+      />
 
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
         <Button variant="soft" size="lg" onPress={onCancel}>Cancelar</Button>
