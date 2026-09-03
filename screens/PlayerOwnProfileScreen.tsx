@@ -15,7 +15,7 @@
 import React from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Lock, Settings, ChevronRight } from 'lucide-react-native';
+import { Lock, Settings } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { Avatar, Button, CategoryBadge } from '../components/ui';
 import { ImageViewerModal } from '../components/ImageViewerModal';
@@ -68,10 +68,10 @@ export function PlayerOwnProfileScreen({
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
         paddingHorizontal: 16, paddingVertical: 8,
       }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text style={{ fontSize: 17, fontWeight: '800', color: colors.text }}>{owner.username}</Text>
-          <ChevronRight size={16} color={colors.muted2} style={{ transform: [{ rotate: '90deg' }] }}/>
-        </View>
+        {/* ⛔ Al lado del usuario había una flecha hacia abajo (un `ChevronRight`
+            rotado) que **no hacía nada**: prometía un desplegable —cambiar de
+            cuenta, como en otras apps— que acá no existe. Se eliminó. */}
+        <Text style={{ fontSize: 17, fontWeight: '800', color: colors.text }}>{owner.username}</Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <IconButton onPress={onOpenLibrary} colors={colors} dot>
             <Lock size={18} color={colors.text}/>
@@ -126,11 +126,13 @@ export function PlayerOwnProfileScreen({
           Sin ellos la ficha respira y las pestañas quedan más arriba.
         */}
 
-        {/* Tabs */}
+        {/* Tabs — ⚠️ **sin número debajo** (2026-09-02). El contenido de cada
+            pestaña ya está a un toque y el grid lo muestra entero: el contador
+            solo repetía, en chiquito, algo que se ve. */}
         <TabStrip
           tabs={[
-            { id: 'highlights', label: '▶ HIGHLIGHTS', count: publicHl.length },
-            { id: 'matches',    label: '◫ PARTIDOS',   count: publicMatch.length },
+            { id: 'highlights', label: '▶ HIGHLIGHTS' },
+            { id: 'matches',    label: '◫ PARTIDOS' },
           ]}
           active={tab}
           onChange={(k) => setTab(k as TabKey)}
@@ -223,7 +225,8 @@ function StatBlock({ value, label, colors, onPress }: {
 }
 
 interface TabStripProps {
-  tabs: { id: string; label: string; count: number }[];
+  /** Sin `count`: el número bajo cada pestaña se eliminó — ver la nota en el render. */
+  tabs: { id: string; label: string }[];
   active: string;
   onChange: (id: string) => void;
 }
@@ -242,7 +245,6 @@ function TabStrip({ tabs, active, onChange }: TabStripProps) {
               fontSize: 11, fontWeight: '800', letterSpacing: 1.2,
               color: on ? colors.text : colors.muted2,
             }}>{tab.label}</Text>
-            <Text style={{ fontSize: 10, color: colors.muted2 }}>{tab.count}</Text>
             {on ? (
               <View style={{
                 position: 'absolute', bottom: -1, left: '20%', right: '20%',

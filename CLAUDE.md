@@ -118,7 +118,10 @@ con flujo `Register → Pending → MainClub`.
   > El `UpcomingMatchSheet` se renderiza una sola vez en `MainPlayer` (estado
   > `myGameSheet`) y sirve ambos casos: gestión si `viewerIsParticipant`, postularse
   > si es un abierto. `JoinMatchScreen` es legacy y ya no existe.
-- Flujo de reserva en **2 pasos** (`ReserveBlocks` → `ReserveStep3` →
+- Flujo de reserva en **2 pasos**, ⚠️ **sin barra de avance ni "1/2" en el header**
+  (2026-09-02: se eliminó el `StepIndicator` y con él `screens/reserveCommon.tsx`). Son dos
+  pantallas y cada una dice en su título qué se elige; el andamiaje de pasos era ruido.
+  (`ReserveBlocks` → `ReserveStep3` →
   `ReserveSuccess`). **La partida nace de un bloque**, igual que en el desktop
   (ver "Reserva por bloques" más abajo):
   1. Día (chips horizontales) + **bloque libre**: una fila por horario del día
@@ -134,7 +137,11 @@ con flujo `Register → Pending → MainClub`.
   → `UpcomingMatchSheet` → **Postularme** (`POST /game/:id/apply`, con switch "voy con
   compañero").
 - **Reservar ahora, pagar en el club.** NO hay pago en la app.
-- `PlayerOwnProfileScreen` — perfil propio del player: avatar, stats (seguidores / siguiendo / partidos / highlights), 3 tabs (Highlights / Partidos / Fotos), grid 3×N de contenido. Accesos a `MyLibraryScreen` y `PlayerSettingsScreen`.
+- `PlayerOwnProfileScreen` — perfil propio del player: avatar, stats (posts / seguidores / siguiendo), 2 pestañas (Highlights / Partidos) y grid 3×N. Accesos a `MyLibraryScreen` y `PlayerSettingsScreen`.
+  - ⚠️ **Las pestañas no llevan número debajo** (2026-09-02): el contenido está a un toque
+    y el grid lo muestra entero, así que el contador solo repetía en chiquito algo visible.
+  - ⛔ **Al lado del usuario no va ninguna flecha.** Había un `ChevronRight` rotado 90° que
+    no hacía nada: prometía un desplegable (cambiar de cuenta) que en Torna no existe.
 - `MyLibraryScreen` — librería privada (solo el dueño la ve): 3 secciones colapsables (Mis partidos completos → acción "Crear highlight", Mis highlights con toggle Privado/Público, Mis subidas con foto/video ≤3 min). FAB "+" abre `UploadSheet`.
 - `VideoEditorScreen` — flujo de 5 pasos para crear highlight desde una grabación de partido: Preview → Trim (`TrimRangeSlider`) → Metadata (título + visibilidad) → Procesando → Resultado. **El recorte es server-side**: la app llama `POST /highlights/from-recording` con `{ gameId, start, end, title, isPublic }` y el backend recorta (FFmpeg byte-range), sube el clip a B2 y crea el highlight. (Antes se recortaba on-device con `ffmpeg-kit`, que crasheaba la app.)
   - **Preview pre-subida (en `MetadataStep`)**: el paso de Detalles, justo antes de "Generar clip", muestra el clip **exacto que se va a subir** reproduciendo en loop solo el rango `start→end` con el `Player` (`startAt`/`endAt`, `muted`). Es 100% client-side (byte-range sobre `recordingUrl`, el mismo mecanismo de loop que usa `TrimStep`) — **no hay endpoint de preview**: el archivo final en B2 no existe hasta después de subir, así que se previsualiza la grabación de origen en el rango elegido. El `Player` acepta un prop `muted` (default `false`) para silenciar el preview inline.

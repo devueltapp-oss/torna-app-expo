@@ -7,7 +7,6 @@ import { fonts } from '../theme/tokens';
 import { Button, AppHeader } from '../components/ui';
 import { MapsButton } from '../components/MapsButton';
 import type { Slot, ClubCourtPublic } from '../data/types';
-import { StepIndicator } from './reserveCommon';
 import {
   MAX_BLOCKS, groupSlotsIntoBlocks, blockAvailability, isBookable,
   maxConsecutiveFreeBlocks, combineSlots,
@@ -108,13 +107,11 @@ export function ReserveBlocksScreen({
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
+      {/* ⚠️ Sin barra de avance ni "1/2". Son dos pantallas y cada una dice en
+          el título qué se elige; el andamiaje de pasos solo agregaba ruido. */}
       <AppHeader title="Elige un bloque"
         left={<Pressable onPress={onBack}><ChevronLeft size={22} color={colors.text} /></Pressable>}
-        right={<Text style={{ fontSize: 11, color: colors.muted2, fontWeight: '700' }}>1/2</Text>}
       />
-      <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
-        <StepIndicator step={1} total={2} />
-      </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
         <View>

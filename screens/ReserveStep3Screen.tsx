@@ -6,7 +6,6 @@ import { useTheme } from '../theme';
 import { Button, AppHeader, Avatar, Switch } from '../components/ui';
 import { PlayerSearchOverlay } from '../components/PlayerSearchOverlay';
 import type { InvitablePlayer } from '../data/types';
-import { StepIndicator } from './reserveCommon';
 
 type SlotKey = 'partner' | 'opp1' | 'opp2';
 
@@ -72,13 +71,10 @@ export function ReserveStep3Screen({
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
+      {/* Sin barra de avance ni "2/2" — ver la nota en `ReserveBlocksScreen`. */}
       <AppHeader title="Jugadores"
         left={<Pressable onPress={onBack}><ChevronLeft size={22} color={colors.text}/></Pressable>}
-        right={<Text style={{ fontSize: 11, color: colors.muted2, fontWeight: '700' }}>2/2</Text>}
       />
-      <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
-        <StepIndicator step={2} total={2}/>
-      </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
         {/* Match summary */}
