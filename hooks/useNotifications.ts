@@ -13,7 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIsFocused } from '@react-navigation/native';
 import {
   fetchNotifications,
-  markAllNotificationsRead,
+  markAllNotificationsRead, clearNotifications,
   markNotificationRead,
   type AppNotification,
 } from '../api/notifications';
@@ -29,6 +29,8 @@ export interface UseNotifications {
   loadMore: () => Promise<void>;
   markRead: (id: string) => Promise<void>;
   markAllRead: () => Promise<void>;
+  /** Borra TODO el historial (el backend borra, no oculta). */
+  clearAll: () => Promise<void>;
 }
 
 export function useNotifications(): UseNotifications {
@@ -126,6 +128,25 @@ export function useNotifications(): UseNotifications {
     }
   }, []);
 
+  /**
+   * Vacía el historial. Optimista con revert, como el resto del hook: la lista
+   * se limpia al instante y vuelve si el backend falla.
+   */
+  const clearAll = useCallback(async () => {
+    const prevItems = itemsRef.current;
+    const prevUnread = unreadRef.current;
+    if (prevItems.length === 0) return;
+
+    setItems([]);
+    setUnreadCount(0);
+    try {
+      await clearNotifications();
+    } catch {
+      setItems(prevItems);
+      setUnreadCount(prevUnread);
+    }
+  }, []);
+
   return {
     items,
     unreadCount,
@@ -135,5 +156,6 @@ export function useNotifications(): UseNotifications {
     loadMore,
     markRead,
     markAllRead,
+    clearAll,
   };
 }

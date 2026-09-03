@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, Pressable, RefreshControl, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  ChevronLeft, CheckCheck, Bell, Radio, CalendarPlus, CalendarX, Video, Trophy, UserPlus,
+  CheckCheck, Bell, Radio, CalendarPlus, CalendarX, Video, Trophy, UserPlus, Trash2,
 } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
@@ -18,6 +18,8 @@ export interface NotificationsScreenProps {
   onEndReached?: () => void;
   onPress: (item: AppNotification) => void;
   onMarkAllRead: () => void;
+  /** Vacía el historial. Sin handler, el botón no se pinta. */
+  onClearAll?: () => void;
   onBack: () => void;
 }
 
@@ -56,7 +58,7 @@ const ICONS: Record<AppNotificationType, typeof Bell> = {
  */
 export function NotificationsScreen({
   items, loading, hasMore = false, unreadCount,
-  onRefresh, onEndReached, onPress, onMarkAllRead, onBack,
+  onRefresh, onEndReached, onPress, onMarkAllRead, onClearAll, onBack,
 }: NotificationsScreenProps) {
   const { colors } = useTheme();
 
@@ -64,17 +66,39 @@ export function NotificationsScreen({
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <AppHeader
         title="Notificaciones"
-        left={
-          <Pressable onPress={onBack} hitSlop={10} accessibilityLabel="Volver">
-            <ChevronLeft size={22} color={colors.text} />
-          </Pressable>
-        }
+        /* Sin flecha propia: se vuelve con el botón atrás del sistema. */
         right={
-          unreadCount > 0 ? (
-            <Pressable onPress={onMarkAllRead} hitSlop={10} accessibilityLabel="Marcar todas como leídas">
-              <CheckCheck size={22} color={colors.text} />
-            </Pressable>
-          ) : undefined
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+            {unreadCount > 0 && (
+              <Pressable onPress={onMarkAllRead} hitSlop={10} accessibilityLabel="Marcar todas como leídas">
+                <CheckCheck size={22} color={colors.text} />
+              </Pressable>
+            )}
+            {/*
+              Limpiar el historial. **Borra de verdad**, así que se confirma
+              antes: no hay deshacer del lado del usuario.
+              Solo aparece si hay algo que borrar.
+            */}
+            {items.length > 0 && onClearAll && (
+              <Pressable
+                onPress={() => {
+                  Alert.alert(
+                    'Limpiar historial',
+                    'Se borrarán todas tus notificaciones. No se puede deshacer.',
+                    [
+                      { text: 'Cancelar', style: 'cancel' },
+                      { text: 'Limpiar', style: 'destructive', onPress: onClearAll },
+                    ],
+                  );
+                }}
+                hitSlop={10}
+                testID="clear-notifications"
+                accessibilityLabel="Limpiar historial de notificaciones"
+              >
+                <Trash2 size={21} color={colors.text} />
+              </Pressable>
+            )}
+          </View>
         }
       />
 

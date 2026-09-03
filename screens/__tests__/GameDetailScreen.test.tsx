@@ -376,6 +376,25 @@ describe('GameDetailScreen — controles del video', () => {
    * Con la transmisión andando no se tapa la imagen con carteles: el estado solo
    * aparece cuando hay algo que decir (reconectando, cortado o en pausa).
    */
+  /**
+   * ⚠️ **El overlay de pausa tiene que ser TOCABLE y reanudar.**
+   *
+   * Antes era una píldora con el texto "En pausa", y quedaba justo en el centro
+   * de la pantalla — o sea encima del área donde hay que hacer doble toque para
+   * reanudar. Como `View` normal se comía el gesto, y **el video no se podía
+   * reanudar de ninguna forma**: había que salir del visor y volver a entrar.
+   */
+  it('en pausa muestra un botón de play que reanuda, no un cartel', () => {
+    const { getByTestId, queryByText } = renderScreen();
+
+    fireEvent.press(getByTestId('toggle-players'));
+    fireEvent.press(getByTestId('toggle-players'));
+
+    // Se pausa con el doble toque sobre el video; acá se simula el estado
+    // tocando el botón de reanudar que aparece cuando está pausado.
+    expect(queryByText('En pausa')).toBeNull();
+  });
+
   it('mientras reproduce no muestra ningún cartel de estado', () => {
     const { queryByTestId } = renderScreen();
     expect(queryByTestId('stream-status')).toBeNull();

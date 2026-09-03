@@ -194,7 +194,17 @@ export function VideoPreviewModal({
       setIsLiked(false);
       setDescription(null);
       setReplyingTo(null);
-      setExpanded(false);
+      /*
+       * ⚠️ Abre **en pantalla completa vertical**, no en la card de 16:9.
+       *
+       * Un highlight es video vertical de consumo directo: la card dejaba el
+       * clip chico arriba y media pantalla vacía. `expanded` es el modo in-app
+       * (no `presentFullscreenPlayer`, que es el nativo y rota a horizontal —
+       * justo lo que NO se quiere acá).
+       *
+       * Se sale con la X de arriba, que devuelve a la card.
+       */
+      setExpanded(true);
       setShowCommentsPanel(false);
       setKbVisible(false);
       // Comentarios + likes + descripción reales del highlight (si hay highlightId).
@@ -485,6 +495,38 @@ export function VideoPreviewModal({
                 onPlaybackStatusUpdate={handleStatus}
               />
             ) : null}
+
+            {/*
+              Ícono de play sobre el video cuando está en pausa.
+              Sin esto, un video pausado se ve igual que uno trabado: no había
+              ninguna señal de que el toque hizo algo. Va DENTRO del `Pressable`
+              y con `pointerEvents="none"` para que el toque siga llegando al
+              video y reanude.
+            */}
+            {!isPlaying && !isBuffering && (
+              <View
+                pointerEvents="none"
+                testID="highlight-paused"
+                style={{
+                  position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <View style={{
+                  width: 68, height: 68, borderRadius: 34,
+                  backgroundColor: 'rgba(0,0,0,0.55)',
+                  alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {/* Triángulo corrido a la derecha: uno centrado por caja se ve a la izquierda. */}
+                  <View style={{
+                    width: 0, height: 0, marginLeft: 6,
+                    borderLeftWidth: 24, borderLeftColor: '#FFFFFF',
+                    borderTopWidth: 15, borderTopColor: 'transparent',
+                    borderBottomWidth: 15, borderBottomColor: 'transparent',
+                  }} />
+                </View>
+              </View>
+            )}
           </Pressable>
           {isBuffering && (
             <ActivityIndicator

@@ -19,11 +19,9 @@ import { useNearbyLocation } from '../hooks/useNearbyLocation';
 import { Avatar, Button, Input, AppHeader, SectionHeader } from '../components/ui';
 import { ImageViewerModal } from '../components/ImageViewerModal';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
+import { Picker } from '@react-native-picker/picker';
 import { useAuth } from '../contexts/AuthContext';
 import { uploadProfilePicture, uploadFrontPage, updateMyCategory, updateMyProfile } from '../api/profile';
-import { reverseAddress, searchAddress, type AddressSuggestion } from '../api/geo';
-import { cityFromSuggestion, isRegionVisible, packRegion, unpackRegion } from '../lib/region';
-import { precisePosition } from '../lib/location';
 import type { ProfileOwner } from '../data/types';
 
 type Section = 'overview' | 'profile' | 'password';
@@ -69,84 +67,32 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
   const [categoryError, setCategoryError] = React.useState<string | null>(null);
 
   /**
-   * Ciudad (`User.region`). Es **texto editable**, no una posición viva: el GPS
-   * solo sirve para rellenarla de una vez. Se guarda al tocar "Guardar", junto
-   * con nombre y username.
-   */
-  const [region, setRegion] = React.useState(unpackRegion(owner.location));
-  const [locatingCity, setLocatingCity] = React.useState(false);
-  const [cityError, setCityError] = React.useState<string | null>(null);
-
-  /**
-   * Mostrar la ciudad en el perfil público. **Opcional y aparte de tenerla
-   * cargada**: que la app sepa de dónde sos y que se lo enseñe a los demás son
-   * dos decisiones distintas.
-   *
-   * Se persiste como un prefijo en el propio `User.region` (`"~"` = oculta) para
-   * no pedir una columna nueva por un booleano. Ver `packRegion`/`unpackRegion`.
-   */
-  const [showRegion, setShowRegion] = React.useState(() => isRegionVisible(owner.location));
-
-  /**
-   * Sugerencias de ciudad (Geoapify vía `GET /geo/autocomplete`).
-   *
-   * ⚠️ **Es lo que evita los errores de tipeo**: elegir de la lista guarda un
-   * nombre real. Pero escribir libre sigue permitido — si el proveedor no está
-   * configurado o no contesta, el campo tiene que seguir sirviendo.
-   */
-  const [citySuggestions, setCitySuggestions] = React.useState<AddressSuggestion[]>([]);
-  // Marca que el texto salió de la lista, para no volver a buscar por lo elegido.
-  const cityChosen = React.useRef(false);
-
-  React.useEffect(() => {
-    if (cityChosen.current || region.trim().length < 3) {
-      setCitySuggestions([]);
-      return undefined;
-    }
-    const t = setTimeout(async () => {
-      try {
-        const found = await searchAddress(region.trim());
-        // Se deduplica por ciudad: el proveedor devuelve una entrada por calle y
-        // acá se elige una CIUDAD, no una dirección.
-        const vistas = new Set<string>();
-        const soloCiudades = found
-          .map((s) => ({ ...s, label: cityFromSuggestion(s) }))
-          .filter((s) => s.label && !vistas.has(s.label) && vistas.add(s.label))
-          .slice(0, 5);
-        setCitySuggestions(soloCiudades);
-      } catch {
-        setCitySuggestions([]);
-      }
-    }, 400);
-    return () => clearTimeout(t);
-  }, [region]);
-
-  const handlePickCity = React.useCallback((s: AddressSuggestion) => {
-    cityChosen.current = true;
-    setRegion(s.label);
-    setCitySuggestions([]);
-    setCityError(null);
-  }, []);
-
-  /**
-   * Toma la posición una vez y resuelve la ciudad con `GET /geo/reverse`.
-   *
-   * No guarda coordenadas en ningún lado: lo único que queda es el nombre de la
-   * ciudad, y solo si el usuario después toca Guardar. Si Geoapify no está
-   * configurado o falla, se avisa y el campo se puede escribir a mano — que es
-   * el camino que siempre tiene que seguir funcionando.
-   */
-  /**
-   * Guarda nombre, username y ciudad. Antes "Guardar" solo cerraba la sección
-   * sin persistir nada — los campos volvían a su valor al reabrirla.
+   * Guarda nombre y username. Antes "Guardar" solo cerraba la sección sin
+   * persistir nada — los campos volvían a su valor al reabrirla.
    */
   const [savingProfile, setSavingProfile] = React.useState(false);
   async function handleSaveProfile() {
     if (savingProfile) return;
     setSavingProfile(true);
     try {
-      //  mete la visibilidad en el propio string (ver su nota).
-      await updateMyProfile({ name, username, region: packRegion(region, showRegion) });
+      /**
+       * ⚠️ **El `@` NO se manda al backend.**
+       *
+       * El username se MUESTRA como `@raulsncz` (`atHandle` en `App.tsx`) pero
+       * se guarda sin arroba: el DTO valida `^[a-zA-Z0-9_]+$`, así que mandarlo
+       * con `@` devuelve **400** y "Guardar cambios" fallaba siempre. Es lo que
+       * rompía también al tocar Guardar después de cambiar el nivel de juego.
+       *
+       * Y solo se mandan los campos que **cambiaron**: reenviar el mismo
+       * username lo hace pasar por la validación de unicidad sin necesidad.
+       */
+      const patch: { name?: string; username?: string } = {};
+      const cleanUsername = username.trim().replace(/^@+/, '');
+      const originalUsername = owner.username.trim().replace(/^@+/, '');
+      if (name.trim() && name.trim() !== owner.name.trim()) patch.name = name.trim();
+      if (cleanUsername && cleanUsername !== originalUsername) patch.username = cleanUsername;
+
+      if (Object.keys(patch).length > 0) await updateMyProfile(patch);
       setSection('overview');
     } catch (e) {
       Alert.alert('No se pudo guardar', (e as Error)?.message ?? 'Intenta de nuevo.');
@@ -155,34 +101,6 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
     }
   }
 
-  async function handleUseMyCity() {
-    setLocatingCity(true);
-    setCityError(null);
-    try {
-      const { coords, reason } = await precisePosition();
-      if (!coords) {
-        setCityError(
-          reason === 'denied'
-            ? 'Necesitamos permiso de ubicación. Puedes escribir tu ciudad a mano.'
-            : 'No pudimos ubicarte. Prueba al aire libre o escríbela a mano.',
-        );
-        return;
-      }
-      const found = await reverseAddress(coords.latitude, coords.longitude);
-      // `line2` suele traer "Ciudad Guayana 8050, Bolívar, Venezuela"; nos
-      // quedamos con la primera parte, que es la ciudad.
-      const ciudad = found?.line2?.split(',')[0]?.trim() || found?.label?.split(',')[0]?.trim();
-      if (!ciudad) {
-        setCityError('No pudimos resolver tu ciudad. Escribila a mano.');
-        return;
-      }
-      setRegion(ciudad);
-    } catch {
-      setCityError('No pudimos resolver tu ciudad ahora. Escribila a mano.');
-    } finally {
-      setLocatingCity(false);
-    }
-  }
   // Aviso de partidas abiertas cercanas. El hook también late con la posición
   // mientras esta pantalla vive; el latido "de verdad" lo hace el de MainPlayer.
   const nearby = useNearbyLocation(true);
@@ -307,10 +225,6 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
             onChangeCover={changeCover}
             onChangeName={setName} onChangeUsername={setUsername}
             category={category} onChangeCategory={handleChangeCategory} categoryError={categoryError}
-            region={region} onChangeRegion={(v) => { cityChosen.current = false; setRegion(v); }}
-            onUseMyCity={handleUseMyCity} locatingCity={locatingCity} cityError={cityError}
-            citySuggestions={citySuggestions} onPickCity={handlePickCity}
-            showRegion={showRegion} onChangeShowRegion={setShowRegion}
             onCancel={() => setSection('overview')}
             onSave={handleSaveProfile}
           />
@@ -366,11 +280,12 @@ function OverviewSection({
           <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text }}>{name}</Text>
           <Text style={{ fontSize: 12, color: colors.muted2 }}>{username}</Text>
         </View>
-        <Pressable onPress={onEditProfile} style={{
-          backgroundColor: colors.accent, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
-        }}>
-          <Text style={{ color: colors.ink, fontWeight: '800', fontSize: 11 }}>Editar</Text>
-        </Pressable>
+        {/*
+          ⛔ Acá había un chip "Editar" que llevaba al mismo lugar que la fila
+          "Editar perfil" de dos renglones más abajo: dos entradas idénticas en
+          la misma pantalla. Queda la fila, que está en la lista donde uno busca
+          los ajustes.
+        */}
       </View>
 
       {/* CUENTA */}
@@ -518,23 +433,9 @@ function ProfileSection({
   colors, name, username, club, avatar, uploadingPhoto, photoError, onChangePhoto, onViewPhoto,
   cover, uploadingCover, coverError, onChangeCover,
   onChangeName, onChangeUsername, category, onChangeCategory, categoryError, onCancel, onSave,
-  region, onChangeRegion, onUseMyCity, locatingCity, cityError,
-  citySuggestions, onPickCity, showRegion, onChangeShowRegion,
 }: {
   colors: ReturnType<typeof useTheme>['colors'];
   name: string; username: string; club: string;
-  /** Ciudad del jugador (`User.region`). Texto editable; el GPS solo la rellena. */
-  region: string;
-  onChangeRegion: (s: string) => void;
-  onUseMyCity: () => void;
-  /** Sugerencias de ciudad; vacío = no mostrar la lista. */
-  citySuggestions: AddressSuggestion[];
-  onPickCity: (s: AddressSuggestion) => void;
-  /** Mostrar la ciudad en el perfil público. Independiente de tenerla cargada. */
-  showRegion: boolean;
-  onChangeShowRegion: (v: boolean) => void;
-  locatingCity: boolean;
-  cityError: string | null;
   avatar?: string; uploadingPhoto: boolean; photoError: string | null;
   onChangePhoto: () => void;
   onViewPhoto: () => void;
@@ -574,137 +475,44 @@ function ProfileSection({
       <Input label="Username" value={username} onChangeText={onChangeUsername}
         hint="Cómo te encuentran otros jugadores."/>
       {/*
-        Ciudad. **Es un campo editable, no un rastreador.**
-
-        El GPS es solo una comodidad para rellenarlo: se toma la posición una vez,
-        se resuelve la ciudad y queda guardada como texto en `User.region`. No se
-        actualiza sola ni sigue tu posición.
-
-        ⚠️ Es un dato DISTINTO del de `src/nearby/`. Aquel es una posición
-        aproximada que no se muestra en ninguna parte y solo decide a quién le
-        llegan los avisos de partidas cercanas; éste es una etiqueta que vos
-        eliges mostrar. No los mezcles ni derives uno del otro.
-      */}
-      <Input
-        label="Ciudad"
-        value={region}
-        onChangeText={onChangeRegion}
-        hint="Escribe y elige de la lista, o tómala del GPS."
-      />
-
-      {/*
-        Sugerencias de Geoapify mientras se escribe. **Es lo que evita los errores
-        de tipeo**: elegir de la lista guarda un nombre de ciudad real, no lo que
-        se haya tecleado. Escribir libre sigue permitido — si el proveedor no está
-        configurado o no responde, el campo tiene que seguir sirviendo.
-      */}
-      {citySuggestions.length > 0 && (
-        <View style={{ borderWidth: 1, borderColor: colors.line, borderRadius: 12, overflow: 'hidden' }}>
-          {citySuggestions.map((s, i) => (
-            <Pressable
-              key={s.id}
-              testID={`city-suggestion-${i}`}
-              onPress={() => onPickCity(s)}
-              style={({ pressed }) => ({
-                paddingHorizontal: 12, paddingVertical: 10,
-                borderTopWidth: i === 0 ? 0 : 1, borderTopColor: colors.line,
-                backgroundColor: pressed ? colors.bg2 : 'transparent',
-              })}
-            >
-              <Text style={{ fontSize: 13, color: colors.text }} numberOfLines={1}>{s.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-      )}
-
-      <Pressable
-        onPress={locatingCity ? undefined : onUseMyCity}
-        style={({ pressed }) => ({
-          flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start',
-          borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.surface,
-          paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
-          opacity: pressed || locatingCity ? 0.7 : 1,
-        })}
-      >
-        {locatingCity
-          ? <ActivityIndicator size="small" color={colors.text2}/>
-          : <MapPin size={14} color={colors.text2}/>}
-        <Text style={{ color: colors.text2, fontWeight: '700', fontSize: 12 }}>
-          {locatingCity ? 'Ubicando…' : 'Usar mi ubicación actual'}
-        </Text>
-      </Pressable>
-      {cityError ? (
-        <Text style={{ fontSize: 11, color: colors.text }}>{cityError}</Text>
-      ) : null}
-
-      {/*
-        Mostrarla es **opcional**: tener la ciudad cargada (para que la app sepa
-        de dónde eres) y enseñarla en tu perfil son dos decisiones distintas, y
-        la segunda es tuya.
-      */}
-      <Pressable
-        onPress={() => onChangeShowRegion(!showRegion)}
-        testID="toggle-show-city"
-        style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 }}
-      >
-        <Switch value={showRegion} onValueChange={onChangeShowRegion} />
-        <Text style={{ flex: 1, fontSize: 13, color: colors.text }}>
-          Mostrar mi ciudad en el perfil
-        </Text>
-      </Pressable>
-
-      {/*
         ⛔ "Club principal" se eliminó el 2026-09-02: era un campo **deshabilitado**
         que solo decía "pedile al admin". Un input que no se puede escribir y no
         aporta un dato accionable es ruido en un formulario.
       */}
 
       {/*
-        Nivel de juego — se guarda al elegirlo (PATCH /user/me).
+        Nivel de juego — selector de rueda (`@react-native-picker/picker`).
 
-        ⚠️ Antes eran **siete números sueltos** (1…7) sin nada que dijera qué
-        significaban salvo una línea de ayuda debajo: había que saberse la
-        convención de pádel para elegir. Ahora cada opción se nombra, así que se
-        entiende sin leer el pie.
+        ⚠️ Pasó por dos formas antes de esta: primero **siete números sueltos**
+        (había que saberse la convención de pádel —1 es el MÁS alto— para
+        elegir), después una lista de radios que ocupaba media pantalla. La rueda
+        deja las siete opciones en una sola fila de alto fijo y muestra el nombre
+        completo, que es lo que hace entendible el número.
+
+        Se guarda al elegir (PATCH /user/me), sin botón aparte.
       */}
       <View style={{ gap: 6 }}>
         <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text2 }}>Nivel de juego</Text>
-        <View style={{ gap: 6 }}>
-          {PLAY_LEVELS.map(({ value, label, hint }) => {
-            const active = category === value;
-            return (
-              <Pressable
-                key={value}
-                testID={`level-${value}`}
-                onPress={() => onChangeCategory(active ? null : value)}
-                style={{
-                  flexDirection: 'row', alignItems: 'center', gap: 10,
-                  backgroundColor: active ? colors.accentSoft : 'transparent',
-                  borderWidth: 1.5, borderColor: active ? colors.accentStrong : colors.line,
-                  borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,
-                }}
-              >
-                {/* Radio: deja claro que se elige UNO, no varios. */}
-                <View style={{
-                  width: 20, height: 20, borderRadius: 10,
-                  borderWidth: 2, borderColor: active ? colors.accentStrong : colors.lineStrong,
-                  alignItems: 'center', justifyContent: 'center',
-                }}>
-                  {active && (
-                    <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accentStrong }} />
-                  )}
-                </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text }}>
-                    {label}
-                  </Text>
-                  <Text style={{ fontSize: 11, color: colors.muted2, marginTop: 1 }}>
-                    {hint}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          })}
+        <View style={{
+          borderWidth: 1.5, borderColor: colors.line, borderRadius: 12,
+          backgroundColor: colors.surface, overflow: 'hidden',
+        }}>
+          <Picker
+            selectedValue={category ?? 0}
+            onValueChange={(v) => onChangeCategory(Number(v) === 0 ? null : Number(v))}
+            testID="level-picker"
+            // En Android el texto lo pinta el propio widget nativo: sin `color`
+            // sale negro sobre fondo oscuro en tema oscuro.
+            style={{ color: colors.text }}
+            dropdownIconColor={colors.text}
+            itemStyle={{ color: colors.text, fontSize: 16 }}
+          >
+            {/* Sin nivel es un estado válido: `User.category` es nullable. */}
+            <Picker.Item label="Sin declarar" value={0} color={colors.text} />
+            {PLAY_LEVELS.map(({ value, label, hint }) => (
+              <Picker.Item key={value} label={`${label} — ${hint}`} value={value} color={colors.text} />
+            ))}
+          </Picker>
         </View>
         {categoryError ? (
           <Text style={{ fontSize: 11, color: colors.warnFg, fontWeight: '700' }}>{categoryError}</Text>

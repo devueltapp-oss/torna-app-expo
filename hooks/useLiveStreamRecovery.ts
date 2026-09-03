@@ -58,15 +58,6 @@ const MAX_AUTO_RETRIES = 3;
  */
 const STABLE_MS = 8000;
 
-/**
- * Cuánto dura el cartel de "Reconectando…" después de un reenganche.
- *
- * No se apaga cuando el video vuelve a reproducir sino por tiempo, a propósito:
- * el remonte tarda un instante en producir el primer frame y un cartel que
- * parpadea en cada micro-recuperación es peor que uno que se queda un momento.
- */
-const RECONNECTING_MS = 3500;
-
 export interface LiveStreamRecovery {
   /** Va en la `key` del `<Video>`: al cambiar, se remonta y reengancha. */
   reloadNonce: number;
@@ -96,17 +87,34 @@ export interface LiveStreamRecovery {
   retryNow: () => void;
 }
 
-export function useLiveStreamRecovery(enabled: boolean): LiveStreamRecovery {
+/**
+ * @param enabled Solo `true` en partidas EN VIVO.
+ * @param hold    Mientras sea `true`, **no se remonta el video**. Ver abajo.
+ *
+ * ⚠️ **`hold` existe por el teclado.** Remontar el `<Video>` crea un
+ * `SurfaceView` nuevo y Android le da el foco de ventana, lo que **cierra el
+ * teclado**: si el reenganche caía justo mientras alguien escribía un
+ * comentario, le cortaba la escritura a mitad. Un comentario dura pocos
+ * segundos y el reenganche puede esperar; al revés no — perder lo que estabas
+ * tipeando es peor que ver la imagen trabada un rato más.
+ *
+ * La detección **sigue corriendo** durante el hold: solo se posterga el
+ * remonte, así que apenas se suelta el foco reengancha en el siguiente ciclo.
+ */
+export function useLiveStreamRecovery(enabled: boolean, hold = false): LiveStreamRecovery {
   const [reloadNonce, setReloadNonce] = useState(0);
   const [recoveries, setRecoveries] = useState(0);
   const [reconnecting, setReconnecting] = useState(false);
   const [stalled, setStalled] = useState(false);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Reintentos automáticos consecutivos. Se resetea al recuperar de verdad. */
   const autoRetriesRef = useRef(0);
   // Espejo de `stalled` para poder leerlo dentro del handler de status sin
   // meterlo en sus dependencias (se llama varias veces por segundo).
   const stalledRef = useRef(false);
+  // `hold` en un ref: lo lee `recover`, que se memoiza y no debe recrearse cada
+  // vez que el composer gana o pierde el foco.
+  const holdRef = useRef(hold);
+  useEffect(() => { holdRef.current = hold; }, [hold]);
 
   // Refs y no estado: se escriben en cada status (varias veces por segundo) y
   // no deben provocar un render.
@@ -125,15 +133,22 @@ export function useLiveStreamRecovery(enabled: boolean): LiveStreamRecovery {
     if (!enabled) reset();
   }, [enabled, reset]);
 
-  /** Remonta el `<Video>` y enciende el cartel de "Reconectando…". */
+  /**
+   * Remonta el `<Video>` y enciende el cartel de "Reconectando…".
+   *
+   * ⚠️ El cartel **no se apaga por tiempo**: queda encendido hasta que el video
+   * vuelve de verdad o hasta que se agota el último reintento. Antes duraba 3,5 s
+   * por intento, así que entre un intento y el siguiente la pantalla se quedaba
+   * congelada **sin ninguna señal** — parecía colgada. Ahora la secuencia se lee
+   * entera: spinner mientras se intenta, y recién al rendirse el botón de
+   * recargar.
+   */
   const doRecover = useCallback(() => {
     lastRetryRef.current = Date.now();
     reset();
     setReloadNonce((n) => n + 1);
     setRecoveries((n) => n + 1);
     setReconnecting(true);
-    if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-    reconnectTimer.current = setTimeout(() => setReconnecting(false), RECONNECTING_MS);
   }, [reset]);
 
   /**
@@ -142,10 +157,16 @@ export function useLiveStreamRecovery(enabled: boolean): LiveStreamRecovery {
    * le da al usuario el botón de recarga con una explicación.
    */
   const recover = useCallback(() => {
+    // Escribiendo: se posterga el remonte para no cerrarle el teclado. Ver la
+    // nota de `hold` en la firma del hook.
+    if (holdRef.current) return;
     if (Date.now() - lastRetryRef.current < MIN_RETRY_MS) return;
     if (autoRetriesRef.current >= MAX_AUTO_RETRIES) {
       stalledRef.current = true;
       setStalled(true);
+      // Se apaga el spinner: ya no se está intentando, ahora la pelota la tiene
+      // el usuario (botón de recargar).
+      setReconnecting(false);
       return;
     }
     autoRetriesRef.current += 1;
@@ -162,11 +183,6 @@ export function useLiveStreamRecovery(enabled: boolean): LiveStreamRecovery {
     setStalled(false);
     doRecover();
   }, [doRecover]);
-
-  // Un timer vivo tras desmontar deja un setState sobre un componente muerto.
-  useEffect(() => () => {
-    if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-  }, []);
 
   const onPlaybackStatusUpdate = useCallback(
     (status: AVPlaybackStatus) => {
@@ -214,6 +230,8 @@ export function useLiveStreamRecovery(enabled: boolean): LiveStreamRecovery {
           if (now - lastRetryRef.current > STABLE_MS) {
             if (autoRetriesRef.current !== 0) autoRetriesRef.current = 0;
             if (stalledRef.current) { stalledRef.current = false; setStalled(false); }
+            // Volvió de verdad: se apaga el "Reconectando…".
+            setReconnecting((v) => (v ? false : v));
           }
           lastPositionRef.current = pos;
           positionSinceRef.current = now;

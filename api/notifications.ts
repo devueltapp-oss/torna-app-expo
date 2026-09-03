@@ -129,3 +129,21 @@ export function markNotificationRead(id: string): Promise<{ ok: true }> {
 export function markAllNotificationsRead(): Promise<{ updated: number }> {
   return authedPatch<{ updated: number }>('/notification/read-all');
 }
+
+/**
+ * Vacía el historial. **Borra de verdad, no oculta** — y por eso la pantalla lo
+ * confirma antes de llamar.
+ */
+export async function clearNotifications(): Promise<{ deleted: number }> {
+  const res = await fetch(`${API_URL}/notification/all`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${await token()}` },
+  });
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { message?: string };
+    const err = new Error(payload.message ?? `HTTP ${res.status}`);
+    (err as any).status = res.status;
+    throw err;
+  }
+  return unwrap<{ deleted: number }>(await res.json().catch(() => ({})));
+}

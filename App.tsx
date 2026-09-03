@@ -14,7 +14,7 @@
  *     separate route param, so the AppStack always lands in the right tab container.
  */
 import React, { useCallback, useState, useRef, useEffect } from 'react';
-import { View, Text, ActivityIndicator, Alert, Pressable } from 'react-native';
+import { View, Text, ActivityIndicator, Alert, Pressable, BackHandler, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -67,6 +67,7 @@ import { useNotifications } from './hooks/useNotifications';
 import { useNotificationBadge } from './hooks/useNotificationBadge';
 import { useNearbyLocation } from './hooks/useNearbyLocation';
 import { useUpcomingFeed } from './hooks/useUpcomingFeed';
+import { useDoubleBackToExit } from './hooks/useDoubleBackToExit';
 import { useClubLocation } from './hooks/useClubLocation';
 import { ClubLocationSheet } from './components/ClubLocationSheet';
 import type { AppNotification } from './api/notifications';
@@ -543,6 +544,7 @@ function NotificationsContainer({ navigation }: { navigation: any }) {
       onEndReached={n.loadMore}
       onPress={open}
       onMarkAllRead={n.markAllRead}
+      onClearAll={n.clearAll}
       onBack={() => navigation.goBack()}
     />
   );
@@ -793,6 +795,28 @@ function AuthNavigator() {
 
 function MainPlayer({ navigation, route }: any) {
   const [tab, setTab] = React.useState<TabId>(route?.params?.initialTab ?? 'home');
+
+  /**
+   * Salir de la app pide DOS toques del atrás del sistema, y solo desde Inicio.
+   * En la raíz no hay a dónde volver, así que un toque cerraría la app —
+   * caro si estabas viendo un partido o escribiendo. En los otros tabs se
+   * vuelve a Inicio primero (ver abajo).
+   */
+  useDoubleBackToExit(tab === 'home');
+
+  /**
+   * Desde cualquier otro tab, el atrás lleva a Inicio en vez de cerrar la app.
+   * Es la jerarquía que la gente espera: primero se sale de la sección, después
+   * de la app.
+   */
+  React.useEffect(() => {
+    if (tab === 'home' || Platform.OS !== 'android') return undefined;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setTab('home');
+      return true;
+    });
+    return () => sub.remove();
+  }, [tab]);
 
   // Un push de partida (cancelada / baja / pareja que se bajó) navega acá con
   // `initialTab`. Si MainPlayer ya estaba montado, el estado inicial no alcanza:

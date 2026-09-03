@@ -138,7 +138,13 @@ export function GameDetailScreen({
    * EN VIVO: en un grabado, la posición detenida significa "pausado" o
    * "terminado", y remontar por eso lo reiniciaría en bucle.
    */
-  const recovery = useLiveStreamRecovery(game.isLive);
+  /**
+   * ¿El usuario está escribiendo un comentario? Mientras lo esté, el reenganche
+   * NO remonta el video: remontarlo crea un `SurfaceView` nuevo, Android le da
+   * el foco de ventana y **se cierra el teclado a mitad de la frase**.
+   */
+  const [composing, setComposing] = React.useState(false);
+  const recovery = useLiveStreamRecovery(game.isLive, composing);
 
   /**
    * Zoom del video: `false` = CONTAIN (se ve la cancha entera, con franjas
@@ -520,17 +526,51 @@ export function GameDetailScreen({
                     </Text>
                   </View>
                 </View>
-              ) : (
+              ) : recovery.reconnecting ? (
                 <View style={{
                   flexDirection: 'row', alignItems: 'center', gap: 10,
                   backgroundColor: 'rgba(0,0,0,0.62)', borderRadius: 999,
                   paddingVertical: 9, paddingHorizontal: 14,
                 }}>
-                  {recovery.reconnecting && <ActivityIndicator size="small" color={colors.accent} />}
+                  <ActivityIndicator size="small" color={colors.accent} />
                   <Text style={{ color: '#FFFFFF', fontSize: 13, fontFamily: fonts.bold }}>
-                    {recovery.reconnecting ? 'Reconectando…' : 'En pausa'}
+                    Reconectando…
                   </Text>
                 </View>
+              ) : (
+                /*
+                 * ⚠️ **Un ícono de play TOCABLE, no el cartel "En pausa".**
+                 *
+                 * Dos bugs en uno, y el segundo era el grave: la píldora de texto
+                 * quedaba justo en el centro de la pantalla, o sea encima del
+                 * área donde hay que hacer doble toque para reanudar. Como es una
+                 * `View` normal, se comía el gesto y **el video no se podía
+                 * reanudar de ninguna forma**.
+                 *
+                 * Ahora es un botón: un toque simple reanuda. El doble toque
+                 * sobre el video sigue funcionando en el resto de la pantalla.
+                 */
+                <Pressable
+                  onPress={togglePaused}
+                  testID="resume-stream"
+                  accessibilityRole="button"
+                  accessibilityLabel="Reanudar"
+                  style={({ pressed }) => ({
+                    width: 72, height: 72, borderRadius: 36,
+                    backgroundColor: 'rgba(0,0,0,0.55)',
+                    alignItems: 'center', justifyContent: 'center',
+                    opacity: pressed ? 0.8 : 1,
+                  })}
+                >
+                  {/* Triángulo de play, corrido a la derecha para que se vea
+                      centrado (un triángulo centrado por caja se ve a la izquierda). */}
+                  <View style={{
+                    width: 0, height: 0, marginLeft: 6,
+                    borderLeftWidth: 26, borderLeftColor: '#FFFFFF',
+                    borderTopWidth: 16, borderTopColor: 'transparent',
+                    borderBottomWidth: 16, borderBottomColor: 'transparent',
+                  }} />
+                </Pressable>
               )}
             </View>
           )}
@@ -737,7 +777,15 @@ export function GameDetailScreen({
                 // el foco. En un vivo se comenta seguido; que haya que reabrir el
                 // teclado cada vez es insoportable.
                 blurOnSubmit={false}
-                editable={!sending}
+                // Mientras el campo tiene foco, el reenganche del stream no
+                // remonta el <Video>: ese remonte le cierra el teclado.
+                onFocus={() => setComposing(true)}
+                onBlur={() => setComposing(false)}
+                // ⚠️ `editable` SIEMPRE true: con `editable={!sending}` el campo
+                // se volvía no-editable durante el envío y Android le quitaba el
+                // foco, cerrando el teclado en cada comentario. El envío ya se
+                // bloquea en `submitComment` (`if (!value || sending) return`).
+                editable
                 maxLength={500}
                 testID="compose-bar"
                 style={{

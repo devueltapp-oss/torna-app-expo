@@ -4,6 +4,7 @@
  * pasándole props (no toca `api/*` ni navegación).
  */
 import React from 'react';
+import { Alert } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme';
 import { NotificationsScreen } from '../NotificationsScreen';
@@ -101,10 +102,41 @@ describe('NotificationsScreen', () => {
     expect(queryByText('No tienes notificaciones')).toBeNull();
   });
 
-  it('volver atrás llama a onBack', () => {
-    const onBack = jest.fn();
-    const { getByLabelText } = renderScreen({ onBack });
-    fireEvent.press(getByLabelText('Volver'));
-    expect(onBack).toHaveBeenCalledTimes(1);
+  /**
+   * ⛔ Ya no hay flecha propia: se vuelve con el botón atrás del sistema. El
+   * test que probaba `onBack` se eliminó con ella.
+   */
+  it('no dibuja una flecha de volver propia', () => {
+    const { queryByLabelText } = renderScreen();
+    expect(queryByLabelText('Volver')).toBeNull();
+  });
+
+  /**
+   * Limpiar el historial **borra de verdad**, así que se confirma antes: no hay
+   * deshacer del lado del usuario.
+   */
+  it('limpiar el historial pide confirmación y recién ahí borra', () => {
+    const onClearAll = jest.fn();
+    const spy = jest.spyOn(Alert, 'alert');
+    const { getByTestId } = renderScreen({ onClearAll });
+
+    fireEvent.press(getByTestId('clear-notifications'));
+
+    // Todavía no borró: primero pregunta.
+    expect(onClearAll).not.toHaveBeenCalled();
+    expect(spy).toHaveBeenCalled();
+
+    // El botón destructivo de la confirmación es el que dispara el borrado.
+    const botones = spy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    botones.find((b) => b.text === 'Limpiar')?.onPress?.();
+    expect(onClearAll).toHaveBeenCalledTimes(1);
+
+    spy.mockRestore();
+  });
+
+  /** Sin nada en la lista no hay nada que limpiar. */
+  it('sin notificaciones no ofrece limpiar', () => {
+    const { queryByTestId } = renderScreen({ items: [], onClearAll: jest.fn() });
+    expect(queryByTestId('clear-notifications')).toBeNull();
   });
 });

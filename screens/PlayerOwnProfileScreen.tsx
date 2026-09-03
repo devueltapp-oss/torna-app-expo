@@ -21,7 +21,6 @@ import { Avatar, Button, CategoryBadge } from '../components/ui';
 import { ImageViewerModal } from '../components/ImageViewerModal';
 import { ContentThumb } from '../components/ContentThumb';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
-import { isRegionVisible, unpackRegion } from '../lib/region';
 import type {
   ProfileOwner, LibraryItem, LibraryMatch, LibraryHighlight,
 } from '../data/types';
@@ -53,8 +52,6 @@ export function PlayerOwnProfileScreen({
   const [tab, setTab] = React.useState<TabKey>('highlights');
   const [viewer, setViewer] = React.useState(false);
 
-  /** Ciudad a mostrar: cadena vacía si el usuario eligió ocultarla. */
-  const visibleRegion = isRegionVisible(owner.location) ? unpackRegion(owner.location) : '';
 
   const publicHl     = highlights.filter(h => h.isPublic);
   const publicMatch  = matches.filter(m => m.isPublic);
@@ -101,19 +98,19 @@ export function PlayerOwnProfileScreen({
         {/* Bio */}
         <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
           <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text }}>{owner.name}</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
-            {/*
-              ⚠️ La ciudad pasa por `visibleRegion`: mostrarla es OPCIONAL y el
-              flag viaja como un prefijo en `User.region` (ver `lib/region.ts`).
-              Pintar `owner.location` crudo mostraría la
-              ciudad de quien eligió ocultarla, con un `~` delante.
+          {/*
+            ⛔ Bajo el nombre va **solo el nivel de juego**.
 
-              El `·` solo va si hay las dos cosas: sin esto quedaba un separador
-              suelto cuando faltaba el club o la ciudad.
-            */}
-            <Text style={{ fontSize: 12, color: colors.muted2, flexShrink: 1 }}>
-              {[owner.club, visibleRegion].filter(Boolean).join(' · ')}
-            </Text>
+            Antes se pintaba `club · ciudad`, pero la ciudad venía de
+            `User.region` — un dato viejo cargado a mano (a alguien de Ciudad
+            Guayana le decía "caracas") que la app ya no edita: el único uso de
+            la ubicación es el aviso de partidas cercanas, que es aproximado y
+            no se muestra. Enseñar una ciudad que el usuario no puede corregir es
+            peor que no mostrar nada.
+
+            El club tampoco: `ProfileOwner.club` llega siempre vacío en la app.
+          */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
             <CategoryBadge category={owner.category} />
           </View>
         </View>
