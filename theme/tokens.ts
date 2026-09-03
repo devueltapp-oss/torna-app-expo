@@ -22,6 +22,23 @@ const brand = {
   accent:     '#D6FF7E',
   accentSoft: 'rgba(214,255,126,0.18)',
 
+  /**
+   * Verde de marca **legible sobre una superficie clara**.
+   *
+   * ⚠️ El lima (`#D6FF7E`) sobre blanco da **1.14:1** de contraste — medido, no
+   * estimado. Es prácticamente invisible: es lo que hacía que el ítem activo del
+   * navbar no se distinguiera del inactivo en modo claro. Este verde da
+   * **5.08:1** (WCAG AA) y sigue siendo de la misma familia.
+   *
+   * `darkColors` lo pisa con el lima, que sobre el azul de marca da 7.69:1: ahí
+   * el problema no existe y usar el verde oscuro sería el error inverso.
+   *
+   * ✅ Para **texto e íconos** sobre `surface`/`bg`.
+   * ❌ NO para fondos de CTA: ahí sigue mandando `accent` con texto `ink`, que es
+   *    el par de la marca (y el que usa el badge EN VIVO).
+   */
+  accentStrong: '#4F7A1C',
+
   ink:   '#2d4c75',
   ink2:  '#25406b',
   navy:  '#2d4c75',
@@ -78,6 +95,8 @@ export const darkColors = {
   bg:       '#2d4c75',
   // accent text flips to lime on the blue surface
   accentText: '#D6FF7E',
+  // Sobre el azul de marca el lima da 7.69:1: acá el verde oscuro sería ilegible.
+  accentStrong: '#D6FF7E',
   surface:  '#2d4c75',
   surface2: '#25406b',
   bg2:      '#25406b',

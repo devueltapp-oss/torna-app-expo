@@ -55,11 +55,20 @@ export function BottomTabBar({ active, onChange, role = 'club', safeBottom = 18 
             {on && (
               <View style={{
                 position: 'absolute', top: -10, width: 26, height: 3,
+                // La barrita es un BLOQUE de color, no texto: el lima sólido se
+                // ve bien en los dos temas y es la señal de marca.
                 backgroundColor: colors.accent, borderRadius: 2,
               }} />
             )}
-            <Icon size={22} strokeWidth={on ? 2.2 : 2} color={on ? colors.primary : colors.muted} />
-            <Text style={{ fontSize: 10, fontWeight: on ? '800' : '600', color: on ? colors.primary : colors.muted }}>
+            {/*
+              ⚠️ `accentStrong`, NO `primary`.
+              `primary` es el lima `#D6FF7E`, que sobre la superficie clara del
+              navbar da **1.14:1** de contraste — o sea, el ítem activo no se
+              distinguía del inactivo en modo claro. `accentStrong` es verde
+              oscuro en claro (5.08:1) y vuelve a ser lima en oscuro (7.69:1).
+            */}
+            <Icon size={22} strokeWidth={on ? 2.2 : 2} color={on ? colors.accentStrong : colors.muted} />
+            <Text style={{ fontSize: 10, fontWeight: on ? '800' : '600', color: on ? colors.accentStrong : colors.muted }}>
               {label}
             </Text>
           </Pressable>

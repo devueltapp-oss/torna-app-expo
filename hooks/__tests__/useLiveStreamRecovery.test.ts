@@ -144,3 +144,82 @@ describe('useLiveStreamRecovery — no remonta en bucle', () => {
     expect(result.current.reloadNonce).toBeGreaterThan(trasPrimero);
   });
 });
+
+/**
+ * Rendirse y pedir ayuda.
+ *
+ * Reintentar para siempre en silencio es peor que decir "se cortó": si la
+ * transmisión terminó de verdad, la app quedaría con la imagen congelada y un
+ * spinner eterno, sin que el usuario sepa que ya no hay nada del otro lado.
+ */
+describe('useLiveStreamRecovery — se rinde y ofrece recargar', () => {
+  /**
+   * Gasta los reintentos automáticos con el video siempre congelado.
+   *
+   * Hacen falta ~10 ciclos y no 3: cada remonte necesita DOS status para volver a
+   * detectar la traba (el primero se ve como "posición nueva" porque `reset()`
+   * dejó el último valor en -1, y recién el segundo confirma que no avanza).
+   */
+  function agotarReintentos(result: any) {
+    for (let i = 0; i < 10; i++) {
+      act(() => {
+        jest.advanceTimersByTime(8000);
+        result.current.onPlaybackStatusUpdate(cargado({ positionMillis: 5000 }));
+      });
+    }
+  }
+
+  it('tras varios intentos fallidos marca `stalled`', () => {
+    const { result } = renderHook(() => useLiveStreamRecovery(true));
+    expect(result.current.stalled).toBe(false);
+
+    agotarReintentos(result);
+
+    expect(result.current.stalled).toBe(true);
+    // Y deja de remontar: el bucle infinito es justo lo que se evita.
+    const nonce = result.current.reloadNonce;
+    act(() => {
+      jest.advanceTimersByTime(8000);
+      result.current.onPlaybackStatusUpdate(cargado({ positionMillis: 5000 }));
+    });
+    expect(result.current.reloadNonce).toBe(nonce);
+  });
+
+  it('el reintento manual limpia `stalled` y vuelve a intentar', () => {
+    const { result } = renderHook(() => useLiveStreamRecovery(true));
+    agotarReintentos(result);
+    const nonce = result.current.reloadNonce;
+
+    act(() => result.current.retryNow());
+
+    expect(result.current.stalled).toBe(false);
+    expect(result.current.reloadNonce).toBeGreaterThan(nonce);
+  });
+
+  /**
+   * Tres microcortes a lo largo de un partido entero NO deben acabar mostrando
+   * el botón de recarga con el video reproduciéndose perfecto.
+   */
+  it('recuperarse de verdad resetea el contador', () => {
+    const { result } = renderHook(() => useLiveStreamRecovery(true));
+
+    // Dos trabas, y entre ellas el video vuelve a reproducir DE VERDAD: no basta
+    // con un frame suelto, tiene que sostenerse más de `STABLE_MS` (ver la nota
+    // en el hook sobre por qué el primer status tras un remonte no cuenta).
+    for (let ciclo = 0; ciclo < 2; ciclo++) {
+      act(() => {
+        jest.advanceTimersByTime(8000);
+        result.current.onPlaybackStatusUpdate(cargado({ positionMillis: 5000 }));
+      });
+      // Reproduciendo sostenido: 12 s avanzando de a 2 s.
+      for (let i = 1; i <= 6; i++) {
+        act(() => {
+          jest.advanceTimersByTime(2000);
+          result.current.onPlaybackStatusUpdate(cargado({ positionMillis: 10000 + ciclo * 100000 + i * 2000 }));
+        });
+      }
+    }
+
+    expect(result.current.stalled).toBe(false);
+  });
+});

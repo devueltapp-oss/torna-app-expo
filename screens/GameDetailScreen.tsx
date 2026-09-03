@@ -25,10 +25,10 @@
  * se escribe en la barra, con `adjustResize` el teclado empuja la barra y el video
  * sigue a la vista. El botón 💬 solo los muestra/oculta.
  *
- * El panel `players` (la pila de avatares) es lo único que todavía le quita alto al
- * video, y **solo el que ocupa su contenido** (`flexGrow: 0` + `maxHeight: 55%`): con
- * `flex: 1` se estiraba hasta el borde y dejaba un hueco vacío enorme después del
- * último jugador. Tres reglas suyas:
+ * ⚠️ **El panel `players` FLOTA sobre el video; no le quita alto** (2026-09-02).
+ * Antes era un bloque del layout y abrirlo encogía la transmisión: ver quién juega te
+ * movía el partido. Ahora es `position: absolute` con fondo translúcido del tema, así
+ * que el video no cambia de tamaño. Dos reglas suyas:
  *  - **Equipos solo si el dato existe** (`hasTeams`: alguien con `team === 2`). Sin eso
  *    va una sola sección "Jugadores": rotular "EQUIPO 1" a los cuatro sería inventar
  *    una división que la partida no declara.
@@ -37,12 +37,19 @@
  *
  * ⚠️ `resizeMode` es `CONTAIN` **por defecto**: la fuente es 16:9 (cancha apaisada) y
  * las cajas ya no lo son, así que con `COVER` fijo el video en vertical perdería media
- * cancha por recorte. Desde el 2026-09-02 hay un **toggle de zoom** (`zoomed`) que
- * pasa a `COVER` para llenar la pantalla: las franjas negras son el precio de ver la
- * cancha entera, y ahora es el usuario quien elige. **No cambies el default.**
+ * cancha por recorte. El zoom lo decide el usuario **con un pellizco**. No cambies el
+ * default.
  *
- * Controles del video, todos en la barra de abajo: pausa (en un vivo, reanudar
- * REMONTA — ver `togglePaused`), zoom, comentarios, compartir y pantalla completa.
+ * **Los controles del video son gestos, no botones** (2026-09-02):
+ *   · **doble toque** → pausa / reanuda
+ *   · **pellizco**    → zoom (CONTAIN ↔ COVER)
+ * Los botones que hacían esto se eliminaron: son gestos que la gente ya trae aprendidos
+ * y como botones solo tapaban la imagen. La barra de abajo queda para lo que NO tiene
+ * gesto obvio: comentarios, compartir y pantalla completa.
+ *
+ * Si la transmisión se corta y el reenganche automático se rinde, aparece un **botón de
+ * recarga grande al centro** con "Se interrumpió la transmisión" — ver
+ * `useLiveStreamRecovery` (`stalled`).
  */
 import React from 'react';
 import {
@@ -53,11 +60,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Svg, Rect, Line } from 'react-native-svg';
 import { Video, ResizeMode } from 'expo-av';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import {
   Scissors, Send,
-  Maximize2, Minimize2, MessageCircle, X,
-  Play, Pause, Expand, Shrink, RotateCw,
+  Maximize2, Minimize2, MessageCircle, X, RotateCw,
 } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
@@ -121,7 +128,7 @@ export function GameDetailScreen({
   /** Compartir el partido. Sin handler, el botón no se pinta. */
   onShare?: () => void;
 }) {
-  const { colors, radii } = useTheme();
+  const { colors, radii, isDark } = useTheme();
   const { width } = useWindowDimensions();
   const [camIdx, setCamIdx] = React.useState(0);
   const activeCam = game.cameras[camIdx];
@@ -147,6 +154,45 @@ export function GameDetailScreen({
   const [zoomed, setZoomed] = React.useState(false);
 
   /**
+   * Gestos sobre el video, en vez de botones (2026-09-02):
+   *
+   *  · **doble toque** → pausa / reanuda
+   *  · **pellizco**    → zoom (CONTAIN ↔ COVER)
+   *
+   * Son los gestos que la gente ya trae aprendidos de cualquier reproductor; como
+   * botones solo tapaban la imagen.
+   *
+   * ⚠️ El pellizco NO es un zoom continuo con escala libre: `expo-av` no expone
+   * transform del contenido, así que se traduce a los dos `resizeMode` que el
+   * reproductor entiende. Abrir los dedos llena la pantalla (COVER) y cerrarlos
+   * vuelve a la cancha entera (CONTAIN). Un zoom libre exigiría envolver el video
+   * en un contenedor animado y recortar por fuera — mucho más frágil, y con la
+   * fuente 16:9 los dos estados cubren lo que la gente realmente quiere.
+   *
+   * ⚠️ **Sin `runOnJS` a propósito.** Ese helper es de `react-native-reanimated`,
+   * que este proyecto **no** tiene instalado; sin reanimated, RNGH corre los
+   * callbacks directamente en el hilo de JS y `setState` funciona normal. Si
+   * algún día se suma reanimated y estos callbacks pasan a ser worklets, hay que
+   * envolverlos en `runOnJS` o van a reventar en release.
+   */
+  const videoGestures = React.useMemo(() => {
+    const doubleTap = Gesture.Tap()
+      .numberOfTaps(2)
+      .maxDuration(300)
+      .onEnd((_e, ok) => { if (ok) togglePausedRef.current(); });
+
+    const pinch = Gesture.Pinch()
+      .onEnd((e) => {
+        // Umbral del 12 %: por debajo suele ser ruido de los dedos, no intención.
+        if (e.scale > 1.12) setZoomed(true);
+        else if (e.scale < 0.88) setZoomed(false);
+      });
+
+    // Simultáneos: pellizcar no debe cancelar el doble toque ni al revés.
+    return Gesture.Simultaneous(doubleTap, pinch);
+  }, []);
+
+  /**
    * Pausa. Es un vivo, así que pausar es "me alejo un momento": al reanudar se
    * **remonta** (`recovery.retryNow()`) en vez de continuar donde quedó, porque
    * los segmentos de hace dos minutos ya no existen — reanudar dejaría el
@@ -159,6 +205,14 @@ export function GameDetailScreen({
       return !p;
     });
   }, [game.isLive, recovery]);
+
+  /**
+   * El gesto se construye UNA vez (`useMemo` sin deps) para no recrear el
+   * detector en cada render, pero `togglePaused` cambia de identidad. El ref lo
+   * puentea: el gesto llama siempre a la versión vigente.
+   */
+  const togglePausedRef = React.useRef(togglePaused);
+  React.useEffect(() => { togglePausedRef.current = togglePaused; }, [togglePaused]);
   const videoRef = React.useRef<Video>(null);
 
   // Pantalla completa in-app (landscape) + paneles de comentarios.
@@ -333,6 +387,8 @@ export function GameDetailScreen({
             : { flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
         >
           {hasStream ? (
+            <GestureDetector gesture={videoGestures}>
+            <View style={StyleSheet.absoluteFill}>
             <Video
               ref={videoRef}
               /*
@@ -374,6 +430,8 @@ export function GameDetailScreen({
                 else setStreamError(true);
               }}
             />
+            </View>
+            </GestureDetector>
           ) : (
             <>
               <Svg viewBox="0 0 360 200" width="58%" height="58%" style={{ opacity: 0.4 }} testID="no-stream-placeholder">
@@ -409,7 +467,23 @@ export function GameDetailScreen({
             automático no alcanza, tiene que haber una salida a mano en vez de
             obligar a salir y volver a entrar.
           */}
-          {hasStream && game.isLive && (recovery.reconnecting || paused) && (
+          {/*
+            Estado del stream, CENTRADO sobre el video.
+
+            Tres casos distintos, y la diferencia importa:
+             · **reconectando** — la app ya está remontando sola. Spinner y nada
+               que tocar: el cartel existe para que la imagen quieta no parezca
+               la app colgada.
+             · **se cortó** — el reenganche automático se rindió (`stalled`).
+               Botón de recarga GRANDE y al centro, que es lo que se pidió: sin
+               él la única salida era cerrar el visor y volver a entrar.
+             · **en pausa** — fue una decisión del usuario; solo se recuerda.
+
+            ⚠️ `pointerEvents="box-none"` es lo que deja pasar el doble toque y el
+            pellizco al video que está debajo. Con el default, esta capa se comería
+            los gestos en toda la pantalla.
+          */}
+          {hasStream && game.isLive && (recovery.reconnecting || recovery.stalled || paused) && (
             <View
               testID="stream-status"
               pointerEvents="box-none"
@@ -418,32 +492,46 @@ export function GameDetailScreen({
                 alignItems: 'center', justifyContent: 'center', zIndex: 20,
               }}
             >
-              <View style={{
-                flexDirection: 'row', alignItems: 'center', gap: 10,
-                backgroundColor: 'rgba(0,0,0,0.62)', borderRadius: 999,
-                paddingVertical: 9, paddingHorizontal: 14,
-              }}>
-                {recovery.reconnecting && <ActivityIndicator size="small" color={colors.accent} />}
-                <Text style={{ color: '#FFFFFF', fontSize: 13, fontFamily: fonts.bold }}>
-                  {recovery.reconnecting ? 'Reconectando…' : 'En pausa'}
-                </Text>
-                {!recovery.reconnecting && (
+              {recovery.stalled ? (
+                <View style={{ alignItems: 'center', gap: 12 }}>
                   <Pressable
                     onPress={recovery.retryNow}
                     testID="retry-stream"
-                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Volver a cargar la transmisión"
                     style={({ pressed }) => ({
-                      flexDirection: 'row', alignItems: 'center', gap: 5,
-                      opacity: pressed ? 0.7 : 1,
+                      width: 68, height: 68, borderRadius: 34,
+                      backgroundColor: colors.accent,
+                      alignItems: 'center', justifyContent: 'center',
+                      opacity: pressed ? 0.85 : 1,
                     })}
                   >
-                    <RotateCw size={14} color={colors.accent} />
-                    <Text style={{ color: colors.accent, fontSize: 13, fontFamily: fonts.bold }}>
-                      Reintentar
-                    </Text>
+                    <RotateCw size={30} color={colors.ink} strokeWidth={2.4} />
                   </Pressable>
-                )}
-              </View>
+                  <View style={{
+                    backgroundColor: 'rgba(0,0,0,0.62)', borderRadius: 12,
+                    paddingVertical: 8, paddingHorizontal: 14, maxWidth: 260,
+                  }}>
+                    <Text style={{ color: '#FFFFFF', fontSize: 13, fontFamily: fonts.bold, textAlign: 'center' }}>
+                      Se interrumpió la transmisión
+                    </Text>
+                    <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, textAlign: 'center', marginTop: 2 }}>
+                      Puede que haya terminado. Toca para volver a intentar.
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <View style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 10,
+                  backgroundColor: 'rgba(0,0,0,0.62)', borderRadius: 999,
+                  paddingVertical: 9, paddingHorizontal: 14,
+                }}>
+                  {recovery.reconnecting && <ActivityIndicator size="small" color={colors.accent} />}
+                  <Text style={{ color: '#FFFFFF', fontSize: 13, fontFamily: fonts.bold }}>
+                    {recovery.reconnecting ? 'Reconectando…' : 'En pausa'}
+                  </Text>
+                </View>
+              )}
             </View>
           )}
 
@@ -711,38 +799,16 @@ export function GameDetailScreen({
                 </TouchableOpacity>
               )}
 
-              {/* Pausa / reanudar. En un vivo, reanudar REMONTA (ver `togglePaused`). */}
-              {hasStream && (
-                <TouchableOpacity
-                  onPress={togglePaused}
-                  testID="toggle-pause"
-                  style={circleBtn('rgba(0,0,0,0.55)')}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityRole="button"
-                  accessibilityLabel={paused ? 'Reanudar' : 'Pausar'}
-                >
-                  {paused
-                    ? <Play size={18} color="#FFFFFF" />
-                    : <Pause size={18} color="#FFFFFF" />}
-                </TouchableOpacity>
-              )}
-
-              {/* Zoom: llena la pantalla recortando, en vez de dejar franjas negras. */}
-              {hasStream && (
-                <TouchableOpacity
-                  onPress={() => setZoomed((z) => !z)}
-                  testID="toggle-zoom"
-                  style={circleBtn(zoomed ? 'rgba(214,255,126,0.9)' : 'rgba(0,0,0,0.55)')}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityRole="button"
-                  accessibilityLabel={zoomed ? 'Ver la cancha entera' : 'Llenar la pantalla'}
-                >
-                  {zoomed
-                    ? <Shrink size={18} color={colors.ink} />
-                    : <Expand size={18} color="#FFFFFF" />}
-                </TouchableOpacity>
-              )}
-
+              {/*
+                ⚠️ Acá había botones de **pausa** y **zoom**. Se eliminaron el
+                2026-09-02: los dos son gestos que la gente ya trae aprendida de
+                cualquier reproductor de video, y como botones solo sumaban ruido
+                sobre la imagen.
+                  · pausa → **doble toque** en el video
+                  · zoom  → **pellizco** (pinch)
+                No los repongas: la barra tiene que quedar para lo que NO tiene
+                un gesto obvio (comentarios, compartir, pantalla completa).
+              */}
               {hasStream && (
                 <TouchableOpacity
                   onPress={enterFullscreen}
@@ -807,12 +873,32 @@ export function GameDetailScreen({
           para leer o escribir, que era justo lo que había que evitar. */}
       {!fullscreen && portraitPanel === 'players' && (
         <ScrollView
-          // `flexGrow: 0` + `maxHeight`: la hoja mide lo que ocupan los jugadores y
-          // no más. Con `flex: 1` se estiraba hasta el borde inferior y quedaba un
-          // hueco vacío después del último. El tope evita que con muchos jugadores
-          // se coma la pantalla; a partir de ahí, scrollea.
-          style={{ flexGrow: 0, maxHeight: '55%', backgroundColor: colors.bg }}
-          contentContainerStyle={{ padding: 16, gap: 14 }}
+          testID="players-panel"
+          /*
+           * ⚠️ **Capa FLOTANTE sobre el video, no un bloque del layout.**
+           *
+           * Antes era un hermano del contenedor de video en el flujo normal, así
+           * que abrirlo le quitaba alto al video: la transmisión **se movía y se
+           * encogía** cada vez que querías ver quién juega. Ahora va
+           * `position: absolute` anclado abajo — el video no cambia de tamaño ni
+           * un píxel.
+           *
+           * El fondo es translúcido con el color del tema (no un gris fijo): así
+           * se intuye el partido detrás y los textos siguen usando `colors.text`,
+           * que es legible en los dos temas. Un fondo oscuro fijo habría dejado el
+           * texto azul del modo claro ilegible.
+           *
+           * `maxHeight` sigue en 55 %: mide lo que ocupan los jugadores y, si son
+           * muchos, scrollea en vez de comerse la pantalla.
+           */
+          style={{
+            position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 30,
+            flexGrow: 0, maxHeight: '55%',
+            backgroundColor: isDark ? 'rgba(37,64,107,0.93)' : 'rgba(255,255,255,0.94)',
+            borderTopLeftRadius: 18, borderTopRightRadius: 18,
+            borderTopWidth: 1, borderTopColor: colors.line,
+          }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 26, gap: 14 }}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <View style={{ flex: 1 }}>

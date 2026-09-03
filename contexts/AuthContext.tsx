@@ -16,6 +16,7 @@
  * Theme storage key: @torna/theme-mode  (async-storage — separate concern)
  */
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { AppState } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import firebaseAuth from '@react-native-firebase/auth';
@@ -242,6 +243,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  /**
+   * ⚠️ **Un ID token de Firebase dura 1 HORA y eso no se puede configurar.**
+   *
+   * Lo que sí dura es el *refresh token*, que el SDK guarda solo y no vence
+   * hasta que se cierra sesión o se revoca. `getIdToken()` lo usa por debajo
+   * para emitir uno nuevo, y el SDK además refresca en segundo plano.
+   *
+   * El bug era que la app **guardaba un idToken y lo reusaba para siempre**:
+   * pasada la hora, cada request daba 401 y nada lo renovaba ni cerraba la
+   * sesión. Quedaba en un estado zombie — parecía logueada y no funcionaba
+   * nada. Con esto la sesión dura **indefinidamente** (no 2-3 días: hasta que
+   * el usuario cierre sesión), que es el comportamiento que la gente espera de
+   * una app de este tipo.
+   *
+   * `onIdTokenChanged` dispara en cada refresco del SDK: acá se persiste el
+   * token nuevo en SecureStore, que es de donde leen TODOS los clientes de
+   * `api/*`. Sin esto, refrescar en memoria no serviría de nada.
+   */
+  useEffect(() => {
+    const unsubscribe = firebaseAuth().onIdTokenChanged(async (fbUser) => {
+      if (!fbUser) return;
+      try {
+        const fresh = await fbUser.getIdToken();
+        await SecureStore.setItemAsync(TOKEN_KEY, fresh);
+        setToken(fresh);
+      } catch (err) {
+        // Sin red no se puede renovar; el token viejo sigue guardado y el
+        // próximo intento (o el foreground) lo reintenta.
+        console.error('[AuthContext] no se pudo persistir el token renovado:', err);
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+  /**
+   * Al volver del segundo plano, forzar un token fresco.
+   *
+   * El SDK refresca solo, pero con la app suspendida horas ese timer no corre:
+   * al volver, el token guardado puede estar vencido y la primera pantalla que
+   * cargue daría 401. Pedirlo con `true` fuerza la renovación contra el
+   * refresh token.
+   */
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', async (state) => {
+      if (state !== 'active') return;
+      const current = firebaseAuth().currentUser;
+      if (!current) return;
+      try {
+        const fresh = await current.getIdToken(true);
+        await SecureStore.setItemAsync(TOKEN_KEY, fresh);
+        setToken(fresh);
+      } catch {
+        // Best-effort: si falla, cada request sigue con lo que haya guardado.
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   // On mount: restore session from SecureStore and validate with /auth/me
   useEffect(() => {
     let cancelled = false;
@@ -251,15 +310,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const stored = await SecureStore.getItemAsync(TOKEN_KEY);
         if (!stored) return;
 
-        const me = await apiGetMe(stored);
+        /**
+         * ⚠️ **Un 401 acá NO significa "sesión terminada".** Casi siempre es
+         * el idToken guardado que venció (dura 1 h) mientras el refresh token
+         * sigue siendo válido. Antes se borraba la sesión y el usuario tenía
+         * que volver a loguearse cada vez que abría la app pasada una hora.
+         *
+         * Se reintenta con un token fresco; recién si ESO falla se considera
+         * que la sesión murió de verdad.
+         */
+        let activeToken = stored;
+        let me: TornaUser;
+        try {
+          me = await apiGetMe(activeToken);
+        } catch (err) {
+          const current = firebaseAuth().currentUser;
+          if (!current) throw err;
+          activeToken = await current.getIdToken(true);
+          await SecureStore.setItemAsync(TOKEN_KEY, activeToken);
+          me = await apiGetMe(activeToken);
+        }
+
+        const stored2 = activeToken;
         if (!cancelled) {
-          setToken(stored);
+          setToken(stored2);
           setUser(me);
           // Re-identificar en cada arranque hace el registro auto-reparable: si
           // el token de push nunca llegó a guardarse (permiso recién aceptado,
           // reinstalación, backend caído en el login), se corrige acá sin que el
           // usuario tenga que volver a loguearse.
-          void identifyUser(me.id, stored);
+          void identifyUser(me.id, stored2);
         }
       } catch (err) {
         console.error('[AuthContext] restoreSession failed:', err);
