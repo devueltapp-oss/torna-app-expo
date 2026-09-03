@@ -197,6 +197,18 @@ export function MessageLikeButton({
   align?: 'left' | 'right';
 }) {
   const { colors } = useTheme();
+
+  /**
+   * ⚠️ **Sin likes no se dibuja nada.**
+   *
+   * Antes había un corazón vacío bajo CADA mensaje: en una conversación de
+   * treinta mensajes eran treinta corazones grises pidiendo atención, y el chat
+   * se leía peor. El me gusta se da con **doble toque sobre el mensaje** (ver
+   * `useDoubleTap` en las pantallas de chat); el corazón aparece recién cuando
+   * hay algo que mostrar, y entonces sirve de contador y de botón para quitarlo.
+   */
+  if (count === 0 && !liked) return null;
+
   return (
     <Pressable
       onPress={onPress}

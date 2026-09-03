@@ -9,6 +9,7 @@ import { fonts } from '../theme/tokens';
 import { AppHeader, Avatar, MessageLikeButton, JumpToLatestButton } from '../components/ui';
 import { useAuth } from '../contexts/AuthContext';
 import { useDirectChat } from '../hooks/useDirectChat';
+import { useDoubleTap } from '../hooks/useDoubleTap';
 import type { DirectMessage } from '../api/chat';
 
 export interface DirectChatScreenProps {
@@ -157,6 +158,16 @@ function MessageBubble({
   onOpenGame?: (gameId: string) => void;
 }) {
   const displayName = message.name ?? message.username;
+  /**
+   * Doble toque sobre la burbuja = me gusta. El corazón ya no se dibuja bajo
+   * cada mensaje (ver `MessageLikeButton`), así que este gesto es la forma de
+   * darlo. Un toque simple no hace nada: en una lista, un tap suelto se
+   * dispararía sin querer al scrollear.
+   *
+   * La tarjeta "Ver el partido" es un `Pressable` anidado y gana el toque, así
+   * que tocarla abre el visor en vez de likear — que es lo que corresponde.
+   */
+  const handleDoubleTap = useDoubleTap(() => onToggleLike(message.id));
   return (
     <View style={{ gap: 2 }}>
     <View style={{
@@ -164,7 +175,10 @@ function MessageBubble({
       justifyContent: isMine ? 'flex-end' : 'flex-start',
     }}>
       {!isMine && <Avatar name={displayName} size={28} imageUri={message.profilePicture ?? undefined} />}
-      <View style={{
+      <Pressable
+        onPress={handleDoubleTap}
+        testID={`msg-${message.id}`}
+        style={{
         maxWidth: '76%',
         backgroundColor: isMine ? colors.accent : colors.surface,
         borderWidth: isMine ? 0 : 1, borderColor: colors.line,
@@ -209,10 +223,12 @@ function MessageBubble({
         }}>
           {timeLabel(message.createdAt)}
         </Text>
-      </View>
+      </Pressable>
     </View>
       {/* Corazón fuera de la burbuja (adentro competiría con el fondo lima de
-          los mensajes propios). En un DM el total es 0, 1 ó 2. */}
+          los mensajes propios). En un DM el total es 0, 1 ó 2.
+          Solo se dibuja si el mensaje YA tiene likes — se dan con doble toque
+          sobre la burbuja, no con un corazón vacío bajo cada línea. */}
       <View style={{ paddingLeft: isMine ? 0 : 36, paddingRight: isMine ? 2 : 0 }}>
         <MessageLikeButton
           count={message.likesCount ?? 0}

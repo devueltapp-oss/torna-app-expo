@@ -1138,6 +1138,25 @@ POST /chat/message/:messageId/like    → toggle en un DM
 - **Un like por persona por mensaje** — lo garantiza un índice único
   `(messageId, userId)` en la DB, no el cliente. Tocar de nuevo el corazón lo quita
   (toggle). La misma persona sí puede likear muchos mensajes distintos.
+- ⚠️ **Se likea con DOBLE TOQUE sobre la burbuja, y el corazón solo aparece si ya hay
+  likes** (2026-09-02). Antes se dibujaba un corazón vacío bajo **cada** mensaje: en un
+  hilo de treinta mensajes eran treinta corazones grises compitiendo con el texto, para
+  una acción que casi nunca se usa. Ahora `MessageLikeButton` **devuelve `null` si
+  `count === 0 && !liked`** y el gesto lo aporta `hooks/useDoubleTap.ts`, envuelto en un
+  `Pressable` alrededor de la burbuja (`testID="msg-<id>"`) en las dos pantallas de chat.
+  - **No hay callback de toque simple**, a propósito: para tenerlo habría que esperar la
+    ventana entera (300 ms) antes de ejecutarlo, y esa demora se nota. Un toque suelto —el
+    que se da sin querer al scrollear— no hace nada.
+  - ⚠️ **`useDoubleTap` usa un timestamp, no `Gesture.Tap().numberOfTaps(2)`**: un
+    `GestureDetector` por fila dentro de una `FlatList` compite con el scroll de la lista,
+    y el scroll tiene que ganar siempre.
+  - En el DM la tarjeta **"Ver el partido"** es un `Pressable` anidado y gana el toque, así
+    que tocarla abre el visor en vez de likear.
+  - `liked` mantiene el corazón visible aunque el contador venga en 0 — si no, quitar el
+    propio like sería imposible.
+  - Cubierto por `components/__tests__/MessageLikeButton.test.tsx` y
+    `hooks/__tests__/useDoubleTap.test.ts` (que fija sobre todo el falso positivo del
+    toque suelto).
 - `likesCount` = **cuánta gente** likeó ese mensaje (en un grupal puede ser >1; en un DM,
   máximo 2). Se muestra con `<MessageLikeButton/>` (`components/ui.tsx`): un corazón +
   el número. Sin rojo — likeado = corazón lima relleno, si no contorno gris azulado.
