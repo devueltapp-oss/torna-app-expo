@@ -3,7 +3,7 @@ import { View, Text, ScrollView, Pressable, StyleSheet, Image } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, MoreHorizontal, MapPin, Play, Bell, MessageCircle } from 'lucide-react-native';
 import { Svg, Rect, Line } from 'react-native-svg';
-import { Video, ResizeMode } from 'expo-av';
+import { InlineVideo } from '../components/InlineVideo';
 import { useIsFocused } from '@react-navigation/native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
@@ -156,12 +156,11 @@ export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onTogg
               }}>
               <View style={{ height: 118, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                 {player.liveGame.streamUrl && isFocused ? (
-                  <Video
+                  <InlineVideo
                     key={player.liveGame.id}
-                    source={{ uri: player.liveGame.streamUrl }}
+                    uri={player.liveGame.streamUrl}
                     style={StyleSheet.absoluteFill}
-                    resizeMode={ResizeMode.COVER}
-                    shouldPlay isMuted isLooping={false}
+                    contentFit="cover"
                   />
                 ) : (
                   <Svg viewBox="0 0 200 110" width="55%" style={{ opacity: 0.22 }}>

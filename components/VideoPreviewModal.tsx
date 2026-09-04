@@ -5,7 +5,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, MessageCircle, Send, Heart } from 'lucide-react-native';
-import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av';
+import { useEventListener } from 'expo';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import {
@@ -149,7 +150,14 @@ export function VideoPreviewModal({
   highlightId,
 }: VideoPreviewModalProps) {
   const { colors } = useTheme();
-  const videoRef = React.useRef<Video>(null);
+  // `expo-video` (SDK 55, reemplaza a `expo-av`): el player se crea con el hook y no
+  // arranca solo (era `shouldPlay={false}`). Fuente `null` mientras el modal está
+  // cerrado para no tener un player vivo de fondo.
+  const player = useVideoPlayer(visible && url ? url : null, (p) => {
+    p.muted = false;
+    p.loop = false;
+    p.timeUpdateEventInterval = 0.25;
+  });
   // Ancho medido de la barra de progreso, para traducir un tap (locationX) → fracción.
   const seekBarWidth = React.useRef(0);
   const [isPlaying, setIsPlaying] = React.useState(false);
@@ -180,6 +188,7 @@ export function VideoPreviewModal({
     if (visible) {
       setPositionSec(0);
       setIsPlaying(false);
+      try { player.currentTime = 0; } catch { /* aún sin fuente */ }
       setCommentText('');
       setComments([]);
       setLikesCount(0);
@@ -222,29 +231,29 @@ export function VideoPreviewModal({
     }
   }
 
-  function handleStatus(status: AVPlaybackStatus) {
-    if (!status.isLoaded) return;
-    setIsPlaying(status.isPlaying);
-    setIsBuffering(status.isBuffering ?? false);
-    setPositionSec(status.positionMillis / 1000);
-    // ⚠️ Nada de `presentFullscreenPlayer()` acá: la pantalla completa NATIVA
-    // rota a horizontal y no admite superponer el panel de comentarios. Este
-    // modal ya abre en completa in-app, que es la que sirve para un vertical.
-    if (status.durationMillis) setTotalSec(status.durationMillis / 1000);
-  }
+  // Estado del player vía eventos de expo-video (antes: `onPlaybackStatusUpdate`).
+  // ⚠️ Nada de pantalla completa NATIVA acá: rota a horizontal y no admite superponer
+  // el panel de comentarios. Este modal ya abre en completa in-app, la que sirve para
+  // un vertical.
+  useEventListener(player, 'playingChange', ({ isPlaying }) => setIsPlaying(isPlaying));
+  useEventListener(player, 'statusChange', ({ status }) => {
+    setIsBuffering(status === 'loading');
+    if (status === 'readyToPlay' && player.duration > 0) setTotalSec(player.duration);
+  });
+  useEventListener(player, 'timeUpdate', ({ currentTime }) => setPositionSec(currentTime));
 
   function togglePlay() {
-    if (isPlaying) videoRef.current?.pauseAsync();
-    else videoRef.current?.playAsync();
+    if (player.playing) player.pause();
+    else player.play();
   }
 
   /** Salta a una posición del video (0–1 del total) tras tocar la barra de progreso. */
-  async function seekToFraction(frac: number) {
+  function seekToFraction(frac: number) {
     if (totalSec <= 0) return;
     const clamped = Math.max(0, Math.min(1, frac));
     setPositionSec(clamped * totalSec); // feedback inmediato de la UI
     try {
-      await videoRef.current?.setPositionAsync(clamped * totalSec * 1000);
+      player.currentTime = clamped * totalSec;
     } catch { /* video aún no cargado → ignorar */ }
   }
 
@@ -439,16 +448,11 @@ export function VideoPreviewModal({
         <View style={{ flex: 1, backgroundColor: '#000000' }}>
           <Pressable onPress={togglePlay} style={{ width: '100%', height: '100%' }}>
             {visible && url ? (
-              <Video
-                ref={videoRef}
-                source={{ uri: url }}
+              <VideoView
+                player={player}
                 style={{ width: '100%', height: '100%' }}
-                resizeMode={ResizeMode.CONTAIN}
-                shouldPlay={false}
-                isLooping={false}
-                isMuted={false}
-                useNativeControls={false}
-                onPlaybackStatusUpdate={handleStatus}
+                contentFit="contain"
+                nativeControls={false}
               />
             ) : null}
 

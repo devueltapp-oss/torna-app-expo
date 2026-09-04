@@ -21,7 +21,10 @@
  * (avatar/portada). El resto del contenido son highlights creados en la app.
  */
 import * as SecureStore from 'expo-secure-store';
-import * as FileSystem from 'expo-file-system';
+// SDK 55: `expo-file-system` estrenó una API nueva (File/Directory) y movió la
+// vieja —`uploadAsync` con subida binaria/multipart directa, que es la que B2
+// necesita— a `/legacy`. No hay equivalente de `uploadAsync` en la API nueva.
+import * as FileSystem from 'expo-file-system/legacy';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
 const TOKEN_KEY = 'torna_auth_token';

@@ -4,29 +4,36 @@
  *
  * ## El problema
  *
- * `expo-av` avisa por `onError` cuando algo **falla**, pero un HLS en vivo casi
- * nunca falla: **se traba**. Un microcorte de red deja al reproductor atrás de la
- * ventana en vivo; los segmentos que pide ya se borraron del servidor, así que se
- * queda esperando indefinidamente. La imagen queda congelada, `onError` **no**
- * dispara, y sin `onPlaybackStatusUpdate` nadie se entera.
+ * Un HLS en vivo casi nunca "falla": **se traba**. Un microcorte de red deja al
+ * reproductor atrás de la ventana en vivo; los segmentos que pide ya se borraron
+ * del servidor, así que se queda esperando indefinidamente. La imagen queda
+ * congelada y el player **no emite ningún error** — su estado sigue diciendo
+ * `readyToPlay` y `playing`.
  *
  * Por eso la misma URL anda en un tester web y no en la app: **hls.js recupera
  * solo** —recarga la playlist y salta al borde en vivo—, y ExoPlayer/AVPlayer no.
  *
- * ## La estrategia: remontar, no "reanudar"
+ * ## La estrategia: volver a cargar la fuente, no "reanudar"
  *
- * La recuperación es cambiar la `key` del `<Video>` para que React lo **remonte**
- * con una instancia nueva, que vuelve a pedir la playlist y entra por el borde en
- * vivo. Es más brusco que `unloadAsync`/`loadAsync`, pero es lo único
- * confiable: llamar `playAsync()` sobre un reproductor que quedó apuntando a
- * segmentos inexistentes no lo desatasca, y encadenar unload/load tiene carreras
- * con el status que llega en el medio.
+ * La recuperación es bumpear `reloadNonce`; el consumidor reacciona llamando
+ * `player.replace(streamUrl)` (o remontando el `<VideoView>`), lo que hace que el
+ * player vuelva a pedir la playlist y entre por el borde en vivo. Llamar `play()`
+ * sobre un player que quedó apuntando a segmentos inexistentes no lo desatasca.
+ *
+ * ## Cómo detecta (expo-video, SDK 55)
+ *
+ * `expo-video` no tiene un callback de status continuo como el viejo
+ * `onPlaybackStatusUpdate` de `expo-av`. En su lugar el hook corre su **propio
+ * sampler** cada segundo mientras la partida está en vivo y lee del `player`:
+ *  · `player.currentTime` no avanza mientras `player.playing` → congelado
+ *  · `player.status === 'loading'` sostenido → buffering eterno
+ *  · `statusChange` con `status === 'error'` → error de carga
  *
  * ⚠️ **Solo para vivos.** En un video grabado, la posición detenida significa
  * "pausado" o "terminado", no "trabado": aplicar esto lo reiniciaría en bucle.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AVPlaybackStatus } from 'expo-av';
+import type { VideoPlayer } from 'expo-video';
 
 /**
  * Reproduciendo pero sin avanzar un solo milisegundo por este tiempo = trabado.
@@ -53,18 +60,20 @@ const MAX_AUTO_RETRIES = 3;
 
 /**
  * Cuánto tiene que llevar reproduciendo desde el último remonte para dar la
- * recuperación por buena y limpiar el contador de reintentos. Ver la nota en
- * `onPlaybackStatusUpdate`.
+ * recuperación por buena y limpiar el contador de reintentos. Ver la nota en el
+ * sampler.
  */
 const STABLE_MS = 8000;
 
+/** Cada cuánto el sampler lee el estado del player. */
+const SAMPLE_MS = 1000;
+
 export interface LiveStreamRecovery {
-  /** Va en la `key` del `<Video>`: al cambiar, se remonta y reengancha. */
+  /**
+   * Cambia cada vez que hay que reenganchar. El consumidor lo mira para llamar
+   * `player.replace(streamUrl)` (o para ponerlo en la `key` del `<VideoView>`).
+   */
   reloadNonce: number;
-  /** Pasar a `onPlaybackStatusUpdate` del `<Video>`. */
-  onPlaybackStatusUpdate: (status: AVPlaybackStatus) => void;
-  /** Pasar a `onError`. Reintenta en vez de rendirse a la primera. */
-  onError: () => void;
   /** Cuántas veces se reenganchó. Para diagnóstico. */
   recoveries: number;
   /** True mientras se está reenganchando: la UI muestra "Reconectando…". */
@@ -88,36 +97,39 @@ export interface LiveStreamRecovery {
 }
 
 /**
+ * @param player  Instancia de `expo-video` a vigilar. `null` mientras no hay una.
  * @param enabled Solo `true` en partidas EN VIVO.
- * @param hold    Mientras sea `true`, **no se remonta el video**. Ver abajo.
+ * @param hold    Mientras sea `true`, **no se reengancha**. Ver abajo.
  *
- * ⚠️ **`hold` existe por el teclado.** Remontar el `<Video>` crea un
- * `SurfaceView` nuevo y Android le da el foco de ventana, lo que **cierra el
- * teclado**: si el reenganche caía justo mientras alguien escribía un
- * comentario, le cortaba la escritura a mitad. Un comentario dura pocos
- * segundos y el reenganche puede esperar; al revés no — perder lo que estabas
- * tipeando es peor que ver la imagen trabada un rato más.
+ * ⚠️ **`hold` existe por el teclado.** Volver a cargar la fuente puede recrear el
+ * `SurfaceView` y Android le da el foco de ventana, lo que **cierra el teclado**:
+ * si el reenganche caía justo mientras alguien escribía un comentario, le cortaba
+ * la escritura a mitad. Un comentario dura pocos segundos y el reenganche puede
+ * esperar; al revés no.
  *
  * La detección **sigue corriendo** durante el hold: solo se posterga el
- * remonte, así que apenas se suelta el foco reengancha en el siguiente ciclo.
+ * reenganche, así que apenas se suelta el foco reengancha en el siguiente ciclo.
  */
-export function useLiveStreamRecovery(enabled: boolean, hold = false): LiveStreamRecovery {
+export function useLiveStreamRecovery(
+  player: VideoPlayer | null,
+  enabled: boolean,
+  hold = false,
+): LiveStreamRecovery {
   const [reloadNonce, setReloadNonce] = useState(0);
   const [recoveries, setRecoveries] = useState(0);
   const [reconnecting, setReconnecting] = useState(false);
   const [stalled, setStalled] = useState(false);
   /** Reintentos automáticos consecutivos. Se resetea al recuperar de verdad. */
   const autoRetriesRef = useRef(0);
-  // Espejo de `stalled` para poder leerlo dentro del handler de status sin
-  // meterlo en sus dependencias (se llama varias veces por segundo).
+  // Espejo de `stalled` para poder leerlo dentro del sampler sin meterlo en sus
+  // dependencias.
   const stalledRef = useRef(false);
   // `hold` en un ref: lo lee `recover`, que se memoiza y no debe recrearse cada
   // vez que el composer gana o pierde el foco.
   const holdRef = useRef(hold);
   useEffect(() => { holdRef.current = hold; }, [hold]);
 
-  // Refs y no estado: se escriben en cada status (varias veces por segundo) y
-  // no deben provocar un render.
+  // Refs y no estado: se escriben en cada sample y no deben provocar un render.
   const lastPositionRef = useRef(-1);
   const positionSinceRef = useRef(Date.now());
   const bufferingSinceRef = useRef<number | null>(null);
@@ -134,14 +146,11 @@ export function useLiveStreamRecovery(enabled: boolean, hold = false): LiveStrea
   }, [enabled, reset]);
 
   /**
-   * Remonta el `<Video>` y enciende el cartel de "Reconectando…".
+   * Bumpea `reloadNonce` (el consumidor recarga la fuente) y enciende el cartel
+   * de "Reconectando…".
    *
    * ⚠️ El cartel **no se apaga por tiempo**: queda encendido hasta que el video
-   * vuelve de verdad o hasta que se agota el último reintento. Antes duraba 3,5 s
-   * por intento, así que entre un intento y el siguiente la pantalla se quedaba
-   * congelada **sin ninguna señal** — parecía colgada. Ahora la secuencia se lee
-   * entera: spinner mientras se intenta, y recién al rendirse el botón de
-   * recargar.
+   * vuelve de verdad o hasta que se agota el último reintento.
    */
   const doRecover = useCallback(() => {
     lastRetryRef.current = Date.now();
@@ -157,8 +166,7 @@ export function useLiveStreamRecovery(enabled: boolean, hold = false): LiveStrea
    * le da al usuario el botón de recarga con una explicación.
    */
   const recover = useCallback(() => {
-    // Escribiendo: se posterga el remonte para no cerrarle el teclado. Ver la
-    // nota de `hold` en la firma del hook.
+    // Escribiendo: se posterga el reenganche para no cerrarle el teclado.
     if (holdRef.current) return;
     if (Date.now() - lastRetryRef.current < MIN_RETRY_MS) return;
     if (autoRetriesRef.current >= MAX_AUTO_RETRIES) {
@@ -184,20 +192,27 @@ export function useLiveStreamRecovery(enabled: boolean, hold = false): LiveStrea
     doRecover();
   }, [doRecover]);
 
-  const onPlaybackStatusUpdate = useCallback(
-    (status: AVPlaybackStatus) => {
-      if (!enabled) return;
+  // Sampler: cada segundo lee el estado del player y decide si reenganchar.
+  useEffect(() => {
+    if (!enabled || !player) { reset(); return undefined; }
 
-      if (!status.isLoaded) {
-        // `error` acá es un fallo de carga: el `onError` del componente ya lo
-        // maneja, no hace falta duplicar el reintento.
+    const id = setInterval(() => {
+      let status: string;
+      let playing: boolean;
+      let currentTime: number;
+      try {
+        status = player.status;
+        playing = player.playing;
+        currentTime = player.currentTime;
+      } catch {
+        // El player se liberó entre el tick y acá.
         return;
       }
 
       const now = Date.now();
 
-      // (a) Buffereando demasiado tiempo seguido.
-      if (status.isBuffering) {
+      // (a) Buffering sostenido.
+      if (status === 'loading') {
         bufferingSinceRef.current ??= now;
         if (now - bufferingSinceRef.current > BUFFERING_MS) recover();
       } else {
@@ -206,31 +221,26 @@ export function useLiveStreamRecovery(enabled: boolean, hold = false): LiveStrea
 
       // (b) Dice que reproduce, pero la posición no se mueve.
       //
-      // ⚠️ El chequeo va contra `isPlaying`, no contra `shouldPlay`: si el
-      // usuario pausó a propósito, la posición detenida es lo correcto y
-      // remontar le arrancaría el video solo.
-      if (status.isPlaying) {
-        const pos = status.positionMillis ?? 0;
+      // ⚠️ Va contra `player.playing`, no contra un "shouldPlay": si el usuario
+      // pausó a propósito, la posición detenida es lo correcto y reenganchar le
+      // arrancaría el video solo.
+      if (playing) {
+        const pos = Math.round(currentTime * 1000);
         if (pos !== lastPositionRef.current) {
           /*
            * Se limpia el contador de reintentos solo si el video lleva
            * `STABLE_MS` reproduciendo desde el último remonte.
            *
            * ⚠️ **No alcanza con "la posición cambió".** Tras un remonte,
-           * `reset()` deja `lastPosition` en -1, así que el PRIMER status —aunque
+           * `reset()` deja `lastPosition` en -1, así que el PRIMER sample —aunque
            * traiga la misma posición congelada de antes— se ve como un avance. Sin
            * la ventana de estabilidad, cada remonte se auto-declaraba exitoso, el
            * contador nunca llegaba al tope y `stalled` no se activaba jamás con un
            * stream realmente caído: el botón de recarga no habría aparecido nunca.
-           *
-           * Con la ventana, un microcorte del que sí se vuelve resetea el
-           * contador (para que tres a lo largo de un partido no acaben mostrando
-           * el botón con el video andando perfecto) y una traba real no.
            */
           if (now - lastRetryRef.current > STABLE_MS) {
             if (autoRetriesRef.current !== 0) autoRetriesRef.current = 0;
             if (stalledRef.current) { stalledRef.current = false; setStalled(false); }
-            // Volvió de verdad: se apaga el "Reconectando…".
             setReconnecting((v) => (v ? false : v));
           }
           lastPositionRef.current = pos;
@@ -241,13 +251,19 @@ export function useLiveStreamRecovery(enabled: boolean, hold = false): LiveStrea
       } else {
         positionSinceRef.current = now;
       }
-    },
-    [enabled, recover],
-  );
+    }, SAMPLE_MS);
 
-  const onError = useCallback(() => {
-    if (enabled) recover();
-  }, [enabled, recover]);
+    return () => clearInterval(id);
+  }, [enabled, player, recover, reset]);
 
-  return { reloadNonce, onPlaybackStatusUpdate, onError, recoveries, reconnecting, stalled, retryNow };
+  // Error de carga del player: reintenta remontando en vez de rendirse.
+  useEffect(() => {
+    if (!enabled || !player) return undefined;
+    const sub = player.addListener('statusChange', ({ status }) => {
+      if (status === 'error') recover();
+    });
+    return () => sub.remove();
+  }, [enabled, player, recover]);
+
+  return { reloadNonce, recoveries, reconnecting, stalled, retryNow };
 }

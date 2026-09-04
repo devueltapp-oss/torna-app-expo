@@ -1,5 +1,45 @@
 /* Setup de Jest: mocks de módulos nativos que las pantallas/clientes tocan. */
-require('@testing-library/react-native/extend-expect');
+// `@testing-library/react-native` v13 extiende `expect` solo al importarse; el
+// subpath `/extend-expect` se eliminó.
+require('@testing-library/react-native');
+
+// expo-video (SDK 55): módulo nativo. Mock mínimo — `useVideoPlayer` devuelve un
+// player inerte y `<VideoView>` no renderiza nada. Los tests de recuperación de
+// stream vigilan un objeto propio, no éste.
+jest.mock('expo-video', () => {
+  const React = require('react');
+  const player = {
+    play: jest.fn(),
+    pause: jest.fn(),
+    replace: jest.fn(),
+    replay: jest.fn(),
+    seekBy: jest.fn(),
+    addListener: jest.fn(() => ({ remove: jest.fn() })),
+    removeAllListeners: jest.fn(),
+    generateThumbnailsAsync: jest.fn(async () => []),
+    muted: false,
+    loop: false,
+    playing: false,
+    currentTime: 0,
+    duration: 0,
+    bufferedPosition: 0,
+    status: 'idle',
+    timeUpdateEventInterval: 0,
+  };
+  return {
+    useVideoPlayer: jest.fn(() => player),
+    createVideoPlayer: jest.fn(() => player),
+    VideoView: React.forwardRef((_props, _ref) => null),
+    isPictureInPictureSupported: jest.fn(() => false),
+  };
+});
+
+// `useEventListener` de `expo`: en tests no adjuntamos listeners nativos.
+jest.mock('expo', () => ({
+  ...jest.requireActual('expo'),
+  useEvent: jest.fn(() => ({})),
+  useEventListener: jest.fn(),
+}));
 
 // expo-secure-store: los clientes de `api/*` leen el token desde acá.
 jest.mock('expo-secure-store', () => ({

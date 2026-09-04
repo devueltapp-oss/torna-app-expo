@@ -59,7 +59,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Svg, Rect, Line } from 'react-native-svg';
-import { Video, ResizeMode } from 'expo-av';
+import { useEventListener } from 'expo';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import {
@@ -133,6 +134,22 @@ export function GameDetailScreen({
   const [camIdx, setCamIdx] = React.useState(0);
   const activeCam = game.cameras[camIdx];
   const [streamError, setStreamError] = React.useState(false);
+  const [paused, setPaused] = React.useState(false);
+
+  // Reutiliza la URL ya validada por la preview del Home (GET /game/live) si la cámara
+  // activa del detalle (GET /game/:id) todavía no trae stream o el fetch falló.
+  const streamSrc = activeCam?.streamUrl || fallbackStreamUrl;
+
+  // Player de expo-video (SDK 55, reemplaza a `expo-av`). Instancia única para los
+  // tres tamaños (card / absolute-fill / fullscreen): solo cambia el estilo del
+  // contenedor, así el stream no se reinicia al expandir o encoger. El cambio de
+  // cámara y el reenganche se hacen con `player.replace()`, no remontando.
+  const player = useVideoPlayer(streamSrc ?? null, (p) => {
+    p.loop = false;
+    p.muted = false;
+    p.timeUpdateEventInterval = 1;
+    p.play();
+  });
   /**
    * Reenganche automático de la transmisión en vivo. Solo se arma con la partida
    * EN VIVO: en un grabado, la posición detenida significa "pausado" o
@@ -144,7 +161,30 @@ export function GameDetailScreen({
    * el foco de ventana y **se cierra el teclado a mitad de la frase**.
    */
   const [composing, setComposing] = React.useState(false);
-  const recovery = useLiveStreamRecovery(game.isLive, composing);
+  const recovery = useLiveStreamRecovery(player, game.isLive, composing);
+
+  // Volver a cargar la fuente cuando cambia la cámara (nuevo `streamSrc`) o cuando
+  // el reenganche lo pide (`reloadNonce`). `replace` hace que el player vuelva a
+  // pedir la playlist y entre por el borde en vivo.
+  React.useEffect(() => {
+    if (!streamSrc) return;
+    player.replace(streamSrc);
+    if (!paused) player.play();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamSrc, recovery.reloadNonce]);
+
+  // Pausa/reanuda. En un vivo, reanudar se maneja en `togglePaused` (remonta).
+  React.useEffect(() => {
+    if (paused) player.pause();
+    else player.play();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paused]);
+
+  // Error de carga en un GRABADO: es definitivo, se muestra el cartel. En un vivo
+  // lo maneja `useLiveStreamRecovery` (reintenta).
+  useEventListener(player, 'statusChange', ({ status }) => {
+    if (status === 'error' && !game.isLive) setStreamError(true);
+  });
 
   /**
    * Zoom del video: `false` = CONTAIN (se ve la cancha entera, con franjas
@@ -204,7 +244,6 @@ export function GameDetailScreen({
    * los segmentos de hace dos minutos ya no existen — reanudar dejaría el
    * reproductor pidiendo cosas borradas, que es justo la traba que arreglamos.
    */
-  const [paused, setPaused] = React.useState(false);
   const togglePaused = React.useCallback(() => {
     setPaused((p) => {
       if (p && game.isLive) recovery.retryNow();
@@ -219,7 +258,6 @@ export function GameDetailScreen({
    */
   const togglePausedRef = React.useRef(togglePaused);
   React.useEffect(() => { togglePausedRef.current = togglePaused; }, [togglePaused]);
-  const videoRef = React.useRef<Video>(null);
 
   // Pantalla completa in-app (landscape) + paneles de comentarios.
   const [fullscreen, setFullscreen] = React.useState(false);
@@ -281,10 +319,6 @@ export function GameDetailScreen({
   // grabación no hay "gente mirando ahora" que contar.
   const viewers = useViewerPing(game.id, !!game.id && game.isLive);
   const showViewers = viewers !== null && viewers >= MIN_VIEWERS_TO_SHOW;
-
-  // Reutiliza la URL ya validada por la preview del Home (GET /game/live) si la cámara
-  // activa del detalle (GET /game/:id) todavía no trae stream o el fetch falló.
-  const streamSrc = activeCam?.streamUrl || fallbackStreamUrl;
 
   if (__DEV__) {
     console.log('[STREAM DEBUG] GameDetail cameras=', game.cameras.length,
@@ -395,46 +429,24 @@ export function GameDetailScreen({
           {hasStream ? (
             <GestureDetector gesture={videoGestures}>
             <View style={StyleSheet.absoluteFill}>
-            <Video
-              ref={videoRef}
-              /*
-               * ⚠️ `reloadNonce` en la `key` es lo que reengancha una transmisión
-               * trabada: al cambiar, React REMONTA el `<Video>` y la instancia
-               * nueva vuelve a pedir la playlist entrando por el borde en vivo.
-               *
-               * Un HLS en vivo casi nunca "falla": se traba. Un microcorte deja
-               * al reproductor atrás de la ventana en vivo, los segmentos que
-               * pide ya no existen y se queda esperando para siempre — con la
-               * imagen congelada y sin disparar `onError`. Es la razón por la que
-               * la misma URL anda en un tester web (hls.js recupera solo) y no
-               * acá. Ver `useLiveStreamRecovery`.
-               */
-              key={`${activeCam?.id ?? game.id}:${recovery.reloadNonce}`}
-              source={{ uri: streamSrc! }}
+            {/*
+              El reenganche de una transmisión trabada NO remonta este `<VideoView>`:
+              lo hace `useLiveStreamRecovery` bumpeando `reloadNonce`, y el efecto de
+              arriba llama `player.replace(streamSrc)` — el player vuelve a pedir la
+              playlist y entra por el borde en vivo. Un HLS en vivo casi nunca
+              "falla": se traba (microcorte → segmentos que ya no existen → espera
+              eterna, imagen congelada, sin evento de error). Ver `useLiveStreamRecovery`.
+
+              `contentFit`: 'contain' por defecto — la fuente es 16:9 (cancha
+              apaisada) y las cajas ya no lo son, así que con 'cover' fijo se
+              perdería media cancha por recorte. 'cover' solo si el usuario pide
+              zoom (pellizco) — ver `zoomed`.
+            */}
+            <VideoView
+              player={player}
               style={StyleSheet.absoluteFill}
-              /*
-               * CONTAIN por defecto: la fuente es 16:9 (cancha apaisada) y las
-               * cajas ya no lo son, así que con COVER fijo se perdería media
-               * cancha por recorte. COVER solo si el usuario pide zoom — ver
-               * `zoomed`. Las franjas negras son el precio de ver la cancha
-               * entera; quien prefiere llenar la pantalla ahora puede elegirlo.
-               */
-              resizeMode={zoomed ? ResizeMode.COVER : ResizeMode.CONTAIN}
-              shouldPlay={!paused}
-              isLooping={false}
-              isMuted={false}
-              progressUpdateIntervalMillis={1000}
-              onPlaybackStatusUpdate={recovery.onPlaybackStatusUpdate}
-              /*
-               * En un VIVO, un error es casi siempre transitorio (segmento que
-               * caducó, corte de red): se reintenta remontando. El cartel de
-               * "no se pudo cargar" queda para los grabados, donde un error sí
-               * es definitivo y reintentar en bucle no arregla nada.
-               */
-              onError={() => {
-                if (game.isLive) recovery.onError();
-                else setStreamError(true);
-              }}
+              contentFit={zoomed ? 'cover' : 'contain'}
+              nativeControls={false}
             />
             </View>
             </GestureDetector>

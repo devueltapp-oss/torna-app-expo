@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Pressable, TouchableOpacity } from 'react-native';
-import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av';
+import { useEventListener } from 'expo';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { Maximize2 } from 'lucide-react-native';
 import { useTheme } from '../../../theme';
 
@@ -43,7 +44,17 @@ export const Player = React.forwardRef<PlayerHandle, PlayerProps>(function Playe
     hideControls = false, fullscreen = false, renderOverlay,
   } = props;
 
-  const videoRef = React.useRef<Video>(null);
+  // expo-video (SDK 55). El player se crea una vez; arranca en `startAt` y solo
+  // reproduce si `autoPlay`. La instancia nativa se vuelve a crear si cambia
+  // `recordingUrl` (el hook llama `replace` solo).
+  const viewRef = React.useRef<VideoView>(null);
+  const player = useVideoPlayer(recordingUrl, (p) => {
+    p.muted = muted;
+    p.loop = false;
+    p.timeUpdateEventInterval = 0.25;
+    p.currentTime = startAt;
+    if (autoPlay) p.play();
+  });
   const [isPlaying, setIsPlaying] = React.useState(autoPlay);
   const [positionSec, setPositionSec] = React.useState(startAt);
   const [totalSec, setTotalSec] = React.useState(durationSeconds);
@@ -51,43 +62,34 @@ export const Player = React.forwardRef<PlayerHandle, PlayerProps>(function Playe
   const upper = endAt ?? totalSec;
 
   React.useImperativeHandle(ref, () => ({
-    seek: (sec) => videoRef.current?.setPositionAsync(sec * 1000),
-    pause: () => videoRef.current?.pauseAsync(),
-    resume: () => videoRef.current?.playAsync(),
-    enterFullscreen: () => videoRef.current?.presentFullscreenPlayer(),
-    exitFullscreen: () => videoRef.current?.dismissFullscreenPlayer(),
-  }), []);
+    seek: (sec) => { player.currentTime = sec; },
+    pause: () => player.pause(),
+    resume: () => player.play(),
+    enterFullscreen: () => { viewRef.current?.enterFullscreen(); },
+    exitFullscreen: () => { viewRef.current?.exitFullscreen(); },
+  }), [player]);
 
-  function handleStatus(status: AVPlaybackStatus) {
-    if (!status.isLoaded) {
-      onBuffer?.(true);
-      return;
+  useEventListener(player, 'statusChange', ({ status }) => {
+    onBuffer?.(status === 'loading');
+    if (status === 'readyToPlay' && player.duration > 0) {
+      setTotalSec(player.duration);
+      onLoad?.(player.duration);
     }
-    onBuffer?.(false);
-    setIsPlaying(status.isPlaying);
-
-    const posSec = status.positionMillis / 1000;
-    setPositionSec(posSec);
-    onProgress?.(posSec);
-
-    if (status.durationMillis) {
-      const dur = status.durationMillis / 1000;
-      setTotalSec(dur);
-      onLoad?.(dur);
+  });
+  useEventListener(player, 'playingChange', ({ isPlaying }) => setIsPlaying(isPlaying));
+  useEventListener(player, 'timeUpdate', ({ currentTime }) => {
+    setPositionSec(currentTime);
+    onProgress?.(currentTime);
+    // Loop del rango [startAt, endAt]: al llegar al fin vuelve al inicio y para.
+    if (endAt !== undefined && player.playing && currentTime >= endAt) {
+      player.pause();
+      player.currentTime = startAt;
     }
-
-    if (endAt !== undefined && status.isPlaying && posSec >= endAt) {
-      videoRef.current?.pauseAsync();
-      videoRef.current?.setPositionAsync(startAt * 1000);
-    }
-  }
+  });
 
   function togglePlay() {
-    if (isPlaying) {
-      videoRef.current?.pauseAsync();
-    } else {
-      videoRef.current?.playAsync();
-    }
+    if (player.playing) player.pause();
+    else player.play();
   }
 
   const pct = upper > startAt ? Math.min(1, (positionSec - startAt) / (upper - startAt)) : 0;
@@ -97,16 +99,12 @@ export const Player = React.forwardRef<PlayerHandle, PlayerProps>(function Playe
       aspectRatio: 16 / 9, borderRadius: 18, overflow: 'hidden',
       backgroundColor: colors.ink2, borderWidth: 1, borderColor: colors.line,
     }}>
-      <Video
-        ref={videoRef}
-        source={{ uri: recordingUrl }}
+      <VideoView
+        ref={viewRef}
+        player={player}
         style={{ width: '100%', height: '100%' }}
-        resizeMode={ResizeMode.CONTAIN}
-        shouldPlay={autoPlay}
-        isLooping={false}
-        isMuted={muted}
-        useNativeControls={false}
-        onPlaybackStatusUpdate={handleStatus}
+        contentFit="contain"
+        nativeControls={false}
       />
 
       {label ? (
@@ -121,7 +119,7 @@ export const Player = React.forwardRef<PlayerHandle, PlayerProps>(function Playe
 
       {!hideControls && (
         <TouchableOpacity
-          onPress={() => videoRef.current?.presentFullscreenPlayer()}
+          onPress={() => viewRef.current?.enterFullscreen()}
           style={{
             position: 'absolute',
             top: 10,

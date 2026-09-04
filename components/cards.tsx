@@ -7,7 +7,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, Image, StyleSheet, Platform } from 'react-native';
 import { Svg, Rect, Line } from 'react-native-svg';
-import { Video, ResizeMode } from 'expo-av';
+import { InlineVideo } from './InlineVideo';
 import { Camera, Heart, MessageCircle, Play, WifiOff } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
@@ -72,16 +72,13 @@ export function LiveGameCard({ game, onPress, tornaLogo, isActive }: {
         <View style={{ height: 118, position: 'relative', backgroundColor: colors.ink }}>
           {game.streamUrl && !streamError && isActive !== false ? (
             <>
-              <Video
+              <InlineVideo
                 key={game.id}
-                source={{ uri: game.streamUrl }}
+                uri={game.streamUrl}
                 style={StyleSheet.absoluteFill}
-                resizeMode={ResizeMode.COVER}
-                shouldPlay isMuted isLooping={false}
+                contentFit="cover"
                 onError={() => setStreamError(true)}
-                onPlaybackStatusUpdate={(status) => {
-                  if (status.isLoaded) setIsPlaying(status.isPlaying);
-                }}
+                onPlayingChange={setIsPlaying}
               />
               {!isPlaying && (
                 <View style={{
@@ -168,7 +165,6 @@ export function LiveGameTile({ game, onPress, onDoubleTap, tornaLogo, isActive }
 }) {
   const { colors } = useTheme();
   const [streamError, setStreamError] = useState(false);
-  const videoRef = React.useRef<Video>(null);
   const lastTap = React.useRef(0);
   const tapTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -198,13 +194,11 @@ export function LiveGameTile({ game, onPress, onDoubleTap, tornaLogo, isActive }
       }}>
         <View style={{ position: 'relative', height: 100, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' }}>
           {game.streamUrl && !streamError && isActive !== false ? (
-            <Video
-              ref={videoRef}
+            <InlineVideo
               key={game.id}
-              source={{ uri: game.streamUrl }}
+              uri={game.streamUrl}
               style={StyleSheet.absoluteFill}
-              resizeMode={ResizeMode.COVER}
-              shouldPlay isMuted isLooping={false}
+              contentFit="cover"
               onError={() => setStreamError(true)}
             />
           ) : (

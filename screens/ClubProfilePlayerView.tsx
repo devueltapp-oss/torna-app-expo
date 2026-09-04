@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Svg, Rect, Line } from 'react-native-svg';
-import { Video, ResizeMode } from 'expo-av';
+import { InlineVideo } from '../components/InlineVideo';
 import { ChevronLeft, MoreHorizontal, MapPin, Play, Camera, MessageCircle } from 'lucide-react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { useTheme } from '../theme';
@@ -130,8 +130,7 @@ export function ClubProfilePlayerView({
                 style={{ width: 200, borderRadius: 14, overflow: 'hidden', backgroundColor: colors.ink, borderWidth: 2, borderColor: colors.live }}>
                 <View style={{ height: 118, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                   {g.streamUrl && isFocused ? (
-                    <Video key={g.id} source={{ uri: g.streamUrl }} style={StyleSheet.absoluteFill}
-                      resizeMode={ResizeMode.COVER} shouldPlay isMuted isLooping={false}/>
+                    <InlineVideo key={g.id} uri={g.streamUrl} style={StyleSheet.absoluteFill} contentFit="cover"/>
                   ) : (
                     <Svg viewBox="0 0 200 110" width="55%" style={{ opacity: 0.22 }}>
                       <Rect x={20} y={15} width={160} height={80} stroke={colors.accent} strokeWidth={1.5} fill="none"/>
