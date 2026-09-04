@@ -55,7 +55,7 @@ import React from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet, TouchableOpacity,
   StatusBar, BackHandler, useWindowDimensions, TextInput, FlatList,
-  ActivityIndicator,
+  ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Svg, Rect, Line } from 'react-native-svg';
@@ -64,7 +64,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import {
-  Scissors, Send,
+  Scissors, Send, Forward,
   Maximize2, Minimize2, MessageCircle, X, RotateCw,
 } from 'lucide-react-native';
 import { useTheme } from '../theme';
@@ -412,7 +412,17 @@ export function GameDetailScreen({
           el chip del club, y el lugar del menú lo ocupa Compartir, que sí funciona. */}
       {/* HLS player — la MISMA instancia de <Video> en los tres tamaños: solo cambia
           el estilo del contenedor, así el stream no se reinicia al expandir/encoger. */}
-      <View
+      {/* `KeyboardAvoidingView` y no `View`: en iOS no hay equivalente al
+          `adjustResize` de Android — sin esto el teclado se dibuja ENCIMA de la
+          barra de comentarios (`position:absolute, bottom:0`) en vez de
+          empujarla, y ni el campo ni los botones de enviar (nativo o de la app)
+          quedan alcanzables. `behavior:'padding'` reduce el alto de este
+          contenedor lo que mide el teclado, así el `bottom:0` de la barra
+          termina arriba de él. En Android no hace falta (el manifest ya
+          resuelve el resize), así que ahí queda en `undefined` para no doblar
+          el ajuste. */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={fullscreen
           ? { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 50 }
           // El video se queda con TODO el alto libre, haya panel o no: el panel de
@@ -855,7 +865,7 @@ export function GameDetailScreen({
                   accessibilityLabel="Compartir el partido"
                   testID="share-game"
                 >
-                  <Send size={18} color="#FFFFFF" />
+                  <Forward size={18} color="#FFFFFF" />
                 </TouchableOpacity>
               )}
 
@@ -926,7 +936,7 @@ export function GameDetailScreen({
             />
           </View>
         )}
-      </View>
+      </KeyboardAvoidingView>
 
       {/* Ya no hay panel de comentarios en portrait: viven sobre el video y se
           escribe en la barra de abajo. El panel obligaba a encoger el partido
