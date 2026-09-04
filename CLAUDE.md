@@ -1389,25 +1389,25 @@ PATCH /notification/read-all        → { updated }
 
 | | |
 |---|---|
-| **Framework** | Expo SDK 51 · React Native 0.74 · React 18.2 · TypeScript 5.3 strict |
+| **Framework** | Expo SDK 55 · React Native 0.83 · React 19.2 · TypeScript 5.9 strict · **New Architecture ON** (obligatoria desde SDK 52) |
 | **Plataformas** | iOS (principal) · Android |
 | **Navegación** | `@react-navigation/native` v6 + `native-stack` |
 | **Estilos** | StyleSheet inline + tokens de `theme/tokens.ts` (NO styled-components, NO Tailwind) |
 | **Iconos** | `lucide-react-native` (size 22 default, stroke 2) |
 | **Tipografía** | Helvetica (manual de marca) — TODO migrar H1 a Coolvetica |
 | **SVG** | `react-native-svg` (`<Svg>`, `<Rect>`, `<Line>`, `<Path>`) |
-| **Video / HLS** | `expo-av` ~14.0.7 (reproductor HLS). **Fullscreen**: in-app, NO el nativo, en `GameDetailScreen` (landscape, ver abajo) y en `VideoPreviewModal` (que desde 2026-09-02 **solo** existe en pantalla completa: se le quitó la vista chica y el botón de minimizar). En `GameDetailScreen` es la **misma instancia** de `<Video>` (solo cambia el estilo del contenedor: card ↔ absolute-fill), nunca un `Modal` con un segundo `<Video>`. `ReelViewScreen` y el `Player` del editor sí siguen usando el nativo `videoRef.current.presentFullscreenPlayer()`. Regla: **si hay que superponer algo sobre el video (comentarios), tiene que ser fullscreen in-app** — el nativo no admite overlays |
-| **Orientación** | La app está bloqueada en **portrait** (`app.json` + `android:screenOrientation="portrait"` en el manifest). La **única** excepción es la pantalla completa del stream (`GameDetailScreen`), que rota a landscape con `expo-screen-orientation` ~7.0.5: `lockAsync(LANDSCAPE)` al entrar y `PORTRAIT_UP` al salir / al desmontar / con el botón atrás. En Android `setRequestedOrientation` en runtime **pisa** el valor del manifest, y el manifest ya trae `configChanges` con `orientation\|screenSize`, así que la activity no se recrea. ⚠️ **En iOS no alcanza**: `UISupportedInterfaceOrientations` es un límite duro y `orientation: "portrait"` en `app.json` lo escribe solo-portrait (el mod `withOrientation` pisa lo que pongas en `ios.infoPlist`). Para habilitarlo en iOS hay que pasar `orientation` a `"default"` y bloquear `PORTRAIT_UP` globalmente al arrancar la app |
+| **Video / HLS** | **`expo-video` ~55.0.21** (`useVideoPlayer` + `<VideoView>`; `expo-av` se eliminó en SDK 54). API por eventos: `statusChange` / `playingChange` / `timeUpdate`, no `onPlaybackStatusUpdate`. `resizeMode` → `contentFit` ('cover'/'contain'/'fill'). Las tiles chicas de fondo usan `components/InlineVideo.tsx`. **Fullscreen**: in-app, NO el nativo, en `GameDetailScreen` (landscape) y en `VideoPreviewModal` (solo pantalla completa). En `GameDetailScreen` es **un solo `player`** para los tres tamaños (card ↔ absolute-fill ↔ fullscreen): solo cambia el estilo del contenedor, y el cambio de cámara / reenganche se hace con `player.replace(streamSrc)`, **no** remontando el `<VideoView>`. El `Player` del editor usa el ref del `<VideoView>` (`enterFullscreen()`). Regla: **si hay que superponer algo sobre el video (comentarios), tiene que ser fullscreen in-app** — el nativo no admite overlays |
+| **Orientación** | La app está bloqueada en **portrait** (`app.json` + `android:screenOrientation="portrait"` en el manifest). La **única** excepción es la pantalla completa del stream (`GameDetailScreen`), que rota a landscape con `expo-screen-orientation` ~55.0.x: `lockAsync(LANDSCAPE)` al entrar y `PORTRAIT_UP` al salir / al desmontar / con el botón atrás. En Android `setRequestedOrientation` en runtime **pisa** el valor del manifest, y el manifest ya trae `configChanges` con `orientation\|screenSize`, así que la activity no se recrea. ⚠️ **En iOS no alcanza**: `UISupportedInterfaceOrientations` es un límite duro y `orientation: "portrait"` en `app.json` lo escribe solo-portrait (el mod `withOrientation` pisa lo que pongas en `ios.infoPlist`). Para habilitarlo en iOS hay que pasar `orientation` a `"default"` y bloquear `PORTRAIT_UP` globalmente al arrancar la app |
 | **Mapas** | Sin mapa embebido ni librería de mapas. La ubicación se referencia con un botón **"Buscar en Maps"** (`components/MapsButton.tsx`) que abre **Google Maps** (URL universal `maps/search/?api=1&query=lat,lng`) vía `Linking`. Antes había Leaflet en `react-native-webview` + MapTiler; se quitó para no requerir dev-client ni API key |
-| **Ubicación** | Las ubicaciones de club se abren en **Google Maps** vía `MapsButton` (`Linking`), usando lat/lng del club (pin exacto) o el nombre como fallback — sin mapa embebido. `expo-location` ~17.0.1 volvió el 2026-09-01, con **un solo uso**: el aviso de partidas abiertas cercanas (`lib/location.ts` + `hooks/useNearbyLocation.ts`). Permiso **solo foreground** (`NSLocationWhenInUse`); nada de background |
-| **Subida de archivos** | `expo-file-system` ~17.0.1 (`uploadAsync` binario → B2 presigned) |
-| **Gestos** | `react-native-gesture-handler` ~2.16.1 (swipe entre cámaras, editor) |
-| **Fuentes** | `expo-font` ~12.0.0 (carga de .ttf custom) |
-| **Notificaciones** | `react-native-onesignal` ~5.2.10 + `onesignal-expo-plugin` (push; registro vía `notificationID`). Ver "Notificaciones push (OneSignal)" arriba |
+| **Ubicación** | Las ubicaciones de club se abren en **Google Maps** vía `MapsButton` (`Linking`), usando lat/lng del club (pin exacto) o el nombre como fallback — sin mapa embebido. `expo-location` ~55.1.x volvió el 2026-09-01, con **un solo uso**: el aviso de partidas abiertas cercanas (`lib/location.ts` + `hooks/useNearbyLocation.ts`). Permiso **solo foreground** (`NSLocationWhenInUse`); nada de background |
+| **Subida de archivos** | `expo-file-system` ~55.0.x — import desde **`expo-file-system/legacy`** (`uploadAsync` binario/multipart → B2 presigned). SDK 54 estrenó la API nueva File/Directory y movió `uploadAsync` a `/legacy`; no hay equivalente en la nueva. Ver `api/profile.ts` |
+| **Gestos** | `react-native-gesture-handler` ~2.30.x (swipe entre cámaras, editor) |
+| **Fuentes** | `expo-font` ~55.0.x (carga de .ttf custom) |
+| **Notificaciones** | `react-native-onesignal` ~5.5.x + `onesignal-expo-plugin` (push; registro vía `notificationID`). Ver "Notificaciones push (OneSignal)" arriba |
 | **Procesamiento de video** | **Server-side** en el backend (`POST /highlights/from-recording`: FFmpeg byte-range → B2). La app ya **no** usa `ffmpeg-kit-react-native` (crasheaba y estaba fuera de `package.json`). |
 | **Splash / icon** | `assets/torna-icon.png` (1024×1024) · fondo `#2d4c75` |
 | **Bundle IDs** | iOS: `io.torna` · Android package: `io.torna` |
-| **Auth** | `@react-native-firebase/auth` v20 (SDK 51-compatible; v21+ es ESM y rompe `@expo/config-plugins@8`) · `@react-native-google-signin` v13 · `expo-apple-authentication` |
+| **Auth** | `@react-native-firebase/{app,auth}` **v22** · `@react-native-google-signin/google-signin` **v15** · `expo-apple-authentication`. `AuthContext.tsx` usa la **API namespaced** de RNFirebase (`firebaseAuth().signInWith…`, `firebaseAuth.GoogleAuthProvider`): v22 la mantiene, solo tira warnings de deprecación apuntando a la modular. Migrar a la modular es cleanup aparte, no bloquea |
 | **Storage** | `expo-secure-store` (auth tokens) · `@react-native-async-storage` (tema) |
 
 ---
@@ -1522,7 +1522,7 @@ expo/
 ├── App.tsx                 # Stack navigator + role-aware containers
 ├── index.ts                # registerRootComponent
 ├── app.json                # config Expo (name, icon, splash, bundle IDs)
-├── package.json            # deps SDK 51
+├── package.json            # deps SDK 55
 ├── tsconfig.json
 ├── babel.config.js
 ├── assets/
@@ -1557,7 +1557,7 @@ expo/
 │   ├── HomeScreen.tsx               # player home
 │   ├── ClubHomeScreen.tsx           # club admin home
 │   ├── GamesScreen.tsx
-│   ├── GameDetailScreen.tsx         # visor HLS con expo-av (TODO: swipe entre cámaras)
+│   ├── GameDetailScreen.tsx         # visor HLS con expo-video (TODO: swipe entre cámaras)
 │   ├── CourtsScreen.tsx
 │   ├── PlayersScreen.tsx
 │   ├── ProfileScreen.tsx            # club profile + password
@@ -1900,7 +1900,7 @@ npm start                   # arranca sin warnings en Metro
    - `reservation_create`, `reservation_cancel`, `match_join`
    - `follow_club`, `follow_player`
 
-10. **HLS player** — **PARCIALMENTE RESUELTO**: `expo-av` está integrado en `GameDetailScreen`. Funciona con stream HLS real; muestra un SVG placeholder si no hay `streamUrl`. Para producción verificar soporte de DRM y bajo-latencia.
+10. **HLS player** — **PARCIALMENTE RESUELTO**: `expo-video` integrado en `GameDetailScreen`. Funciona con stream HLS real; muestra un SVG placeholder si no hay `streamUrl`. Para producción verificar soporte de DRM y bajo-latencia.
 
 11. ~~**Mini mapa** SVG decorativo~~ → ~~Leaflet/MapTiler en WebView~~ **RESUELTO (sin mapa
     embebido)**: la ubicación se referencia con `components/MapsButton.tsx` — un botón
