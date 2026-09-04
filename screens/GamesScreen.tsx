@@ -173,6 +173,8 @@ export function GamesScreen({
         data={filtered} keyExtractor={g => g.id}
         renderItem={({ item }) => <GameListItem game={item} onPress={onOpenGame} />}
         contentContainerStyle={{ padding: 16, gap: 8 }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         ListEmptyComponent={
           <EmptyState
             title="Sin partidos en este filtro"

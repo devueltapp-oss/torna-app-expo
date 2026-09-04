@@ -11,7 +11,9 @@
  *    parejas, o una sola sección "Jugadores" si la partida no declaró equipos.
  */
 import React from 'react';
+import { Keyboard } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider } from '../../theme';
 import { GameDetailScreen, GameDetailData, MIN_VIEWERS_TO_SHOW } from '../GameDetailScreen';
 
@@ -65,11 +67,16 @@ const game: GameDetailData = {
   cameras: [{ id: 'cam1', number: 1, label: 'Principal', state: 'available', streamUrl: 'https://x/y.m3u8' } as any],
 };
 
-function renderScreen(props: Partial<React.ComponentProps<typeof GameDetailScreen>> = {}) {
+function renderScreen(props: Partial<React.ComponentProps<typeof GameDetailScreen>> = {}, bottomInset = 0) {
   return render(
-    <ThemeProvider initial="light">
-      <GameDetailScreen game={game} {...props} />
-    </ThemeProvider>,
+    <SafeAreaProvider initialMetrics={{
+      frame: { x: 0, y: 0, width: 360, height: 800 },
+      insets: { top: 0, left: 0, right: 0, bottom: bottomInset },
+    }}>
+      <ThemeProvider initial="light">
+        <GameDetailScreen game={game} {...props} />
+      </ThemeProvider>
+    </SafeAreaProvider>,
   );
 }
 
@@ -167,6 +174,18 @@ describe('GameDetailScreen — panel de jugadores (portrait)', () => {
     // "Ana" también firma un comentario del overlay y sería ambiguo.)
     expect(getByText('Beto')).toBeTruthy();
     expect(getByText('Dani')).toBeTruthy();
+  });
+
+  it('abrir el panel con el teclado abierto lo cierra (si no, el panel queda atrás del teclado)', () => {
+    const dismissSpy = jest.spyOn(Keyboard, 'dismiss');
+    const { getByTestId } = renderScreen();
+
+    // Enfocar la barra de comentarios simula el teclado abierto (`composing=true`).
+    fireEvent(getByTestId('compose-bar'), 'focus');
+    fireEvent.press(getByTestId('toggle-players'));
+
+    expect(dismissSpy).toHaveBeenCalled();
+    dismissSpy.mockRestore();
   });
 });
 
@@ -417,5 +436,35 @@ describe('GameDetailScreen — controles del video', () => {
     // Anclado abajo y por encima del video.
     expect(style.bottom).toBe(0);
     expect(style.zIndex).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Bug real en Android: la barra de "Escribe algo..." y los botones de al lado
+ * son `position: absolute, bottom: 0` sobre un video que llega a propósito
+ * hasta el borde real de la pantalla (el `SafeAreaView` de arriba no incluye
+ * `edges: ['bottom']`). Con Android edge-to-edge (obligatorio desde API 35,
+ * que esta app ya targetea con Expo SDK 55) ese borde queda TAPADO por la
+ * barra de navegación del sistema — antes el OS reservaba ese espacio solo.
+ * El fix suma el inset real (`useSafeAreaInsets().bottom`) a la posición.
+ */
+describe('GameDetailScreen — barra de abajo y el inset del sistema (Android)', () => {
+  it('con gestos de Android (inset 24), la barra de escribir se corre ese mismo alto', () => {
+    const { getByTestId } = renderScreen({}, 24);
+    expect(getByTestId('compose-bar-row').props.style.bottom).toBe(24);
+  });
+
+  it('sin inset (3 botones, o iOS con home button), se mantiene pegada al borde', () => {
+    const { getByTestId } = renderScreen({}, 0);
+    expect(getByTestId('compose-bar-row').props.style.bottom).toBe(0);
+  });
+
+  it('en pantalla completa (landscape) el inset no se aplica: ahí no hay barra de abajo', () => {
+    const { getByTestId } = renderScreen({}, 24);
+    fireEvent.press(getByTestId('toggle-fullscreen'));
+    // La barra de escribir no existe en fullscreen — solo confirma que no
+    // revienta y que el resto de los overlays de abajo (chips, panel) también
+    // ignoran el inset ahí, ver el panel de jugadores más abajo.
+    expect(() => getByTestId('compose-bar')).toThrow();
   });
 });

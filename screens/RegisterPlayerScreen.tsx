@@ -160,6 +160,7 @@ export function RegisterPlayerScreen({ onBack }: RegisterPlayerScreenProps) {
           gap: 18,
         }}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         {/* Back */}
         <Pressable

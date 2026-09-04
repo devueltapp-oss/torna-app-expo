@@ -107,7 +107,11 @@ export function PlayerSearchOverlay({ slotLabel, players = [], onSearch, onSelec
         </Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 16, gap: 8 }}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 16, gap: 8 }}
+      >
         {filtered.length === 0 ? (
           <View style={{ paddingHorizontal: 12, paddingVertical: 40, alignItems: 'center' }}>
             <Text style={{ color: colors.muted2, fontSize: 13, textAlign: 'center', lineHeight: 18 }}>

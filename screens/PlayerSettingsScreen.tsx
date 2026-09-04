@@ -219,7 +219,7 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
         left={<Pressable onPress={back}><ChevronLeft size={22} color={colors.text}/></Pressable>}
       />
 
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: onChangeTab ? 96 : 24 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{ paddingBottom: onChangeTab ? 96 : 24 }}>
         {section === 'overview' && (
           <OverviewSection
             colors={colors} name={name} username={username} avatar={avatar}

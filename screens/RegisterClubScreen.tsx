@@ -64,7 +64,7 @@ export function RegisterClubScreen({
         <View style={{ width: 22 }} />
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 20, gap: 12 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{ padding: 20, gap: 12 }}>
         <View style={{
           flexDirection: 'row', gap: 10, alignItems: 'flex-start',
           backgroundColor: colors.warnBg, padding: 12, borderRadius: 12,

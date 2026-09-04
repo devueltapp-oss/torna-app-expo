@@ -55,9 +55,9 @@ import React from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet, TouchableOpacity,
   StatusBar, BackHandler, useWindowDimensions, TextInput, FlatList,
-  ActivityIndicator, KeyboardAvoidingView, Platform,
+  ActivityIndicator, KeyboardAvoidingView, Platform, Keyboard,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Svg, Rect, Line } from 'react-native-svg';
 import { useEventListener } from 'expo';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -162,6 +162,13 @@ export function GameDetailScreen({
    */
   const [composing, setComposing] = React.useState(false);
   const recovery = useLiveStreamRecovery(player, game.isLive, composing);
+  /**
+   * Puente para `videoGestures` (se arma una sola vez con `useMemo([])`, ver su
+   * comentario): el gesto de deslizar hacia abajo necesita saber si el teclado
+   * está abierto AHORA, no el valor de `composing` del momento en que se creó.
+   */
+  const composingRef = React.useRef(composing);
+  React.useEffect(() => { composingRef.current = composing; }, [composing]);
 
   // Volver a cargar la fuente cuando cambia la cámara (nuevo `streamSrc`) o cuando
   // el reenganche lo pide (`reloadNonce`). `replace` hace que el player vuelva a
@@ -234,8 +241,23 @@ export function GameDetailScreen({
         else if (e.scale < 0.88) setZoomed(false);
       });
 
-    // Simultáneos: pellizcar no debe cancelar el doble toque ni al revés.
-    return Gesture.Simultaneous(doubleTap, pinch);
+    /**
+     * Deslizar hacia abajo sobre el video cierra el teclado mientras se
+     * comenta. iOS no tiene un botón nativo para bajar el teclado (Android sí,
+     * en el propio teclado) — sin este gesto, en iPhone quedaba sin forma de
+     * cerrarlo salvo enviando el comentario. Solo hace algo si `composing` es
+     * `true` (`composingRef`, no el `composing` de cuando se armó el gesto):
+     * mirando video sin escribir, este gesto no hace nada.
+     */
+    const swipeDownDismissKeyboard = Gesture.Pan()
+      .onEnd((e) => {
+        if (composingRef.current && e.translationY > 60 && e.velocityY > 0) {
+          Keyboard.dismiss();
+        }
+      });
+
+    // Simultáneos: pellizcar y deslizar no deben cancelar el doble toque ni al revés.
+    return Gesture.Simultaneous(doubleTap, pinch, swipeDownDismissKeyboard);
   }, []);
 
   /**
@@ -261,6 +283,20 @@ export function GameDetailScreen({
 
   // Pantalla completa in-app (landscape) + paneles de comentarios.
   const [fullscreen, setFullscreen] = React.useState(false);
+  /**
+   * ⚠️ La barra de escribir, los chips de cámara, los comentarios flotantes y
+   * el panel de jugadores son `position: absolute, bottom: 0/62/...` sobre el
+   * video, que a propósito llega hasta el borde real de la pantalla (el
+   * `SafeAreaView` de arriba usa `edges: ['top']`, sin `'bottom'`). Con Android
+   * edge-to-edge (obligatorio desde API 35, que esta app ya targetea con Expo
+   * SDK 55) ese borde real queda DEBAJO de la barra de navegación del sistema
+   * — antes el OS reservaba ese espacio solo, ahora no. Resultado: la barra de
+   * "Escribe algo..." y los botones de al lado quedaban tapados por los
+   * botones/gestos nativos de Android. En landscape (fullscreen) no aplica:
+   * ahí no hay controles anclados abajo, solo arriba.
+   */
+  const insets = useSafeAreaInsets();
+  const bottomInset = fullscreen ? 0 : insets.bottom;
   const [overlayComments, setOverlayComments] = React.useState(false);
   /**
    * Portrait: el video ocupa TODA la pantalla y los paneles (comentarios /
@@ -269,8 +305,16 @@ export function GameDetailScreen({
    */
   const [portraitPanel, setPortraitPanel] = React.useState<PortraitPanel>(null);
   const togglePanel = React.useCallback(
-    (panel: Exclude<PortraitPanel, null>) =>
-      setPortraitPanel((cur) => (cur === panel ? null : panel)),
+    (panel: Exclude<PortraitPanel, null>) => {
+      // El teclado nativo se dibuja ENCIMA de todo, incluido este panel (que es
+      // `position: absolute, bottom: 0` sin espacio reservado para él): abrir
+      // "jugadores" con el teclado abierto lo dejaba tapado, atrás del teclado,
+      // en vez de mostrarlo. Cerrar el teclado antes de abrir el panel es lo
+      // que lo trae al frente.
+      Keyboard.dismiss();
+      composerRef.current?.blur();
+      setPortraitPanel((cur) => (cur === panel ? null : panel));
+    },
     [],
   );
 
@@ -422,7 +466,7 @@ export function GameDetailScreen({
           resuelve el resize), así que ahí queda en `undefined` para no doblar
           el ajuste. */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={fullscreen
           ? { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 50 }
           // El video se queda con TODO el alto libre, haya panel o no: el panel de
@@ -738,7 +782,7 @@ export function GameDetailScreen({
               testID="comments-overlay"
               style={{
                 position: 'absolute', left: 0, right: 0,
-                bottom: game.cameras.length > 1 ? 100 : 62,
+                bottom: (game.cameras.length > 1 ? 100 : 62) + bottomInset,
                 // 25% y no 42%: ocupaba casi media pantalla y competía con el
                 // partido. Lo que importa es lo último que se dijo, no el historial
                 // — para leer todo está el scroll de la propia capa.
@@ -779,11 +823,14 @@ export function GameDetailScreen({
               desde aquí, sin salir del partido, y las acciones quedan a mano
               derecha (pulgar). */}
           {!fullscreen && (
-            <View style={{
-              position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 10,
-              flexDirection: 'row', alignItems: 'center', gap: 8,
-              paddingHorizontal: 12, paddingBottom: 12, paddingTop: 10,
-            }}>
+            <View
+              testID="compose-bar-row"
+              style={{
+                position: 'absolute', left: 0, right: 0, bottom: bottomInset, zIndex: 10,
+                flexDirection: 'row', alignItems: 'center', gap: 8,
+                paddingHorizontal: 12, paddingBottom: 12, paddingTop: 10,
+              }}
+            >
               {/* Se escribe ACÁ MISMO, sobre el video. Antes esto abría un panel que
                   encogía el partido: escribir te sacaba de lo que estabas mirando. */}
               <TextInput
@@ -896,7 +943,7 @@ export function GameDetailScreen({
 
           {/* Cámaras: chips superpuestos, justo encima de la barra de abajo. */}
           {!fullscreen && game.cameras.length > 1 && (
-            <View style={{ position: 'absolute', left: 0, right: 0, bottom: 62, zIndex: 10 }}>
+            <View style={{ position: 'absolute', left: 0, right: 0, bottom: 62 + bottomInset, zIndex: 10 }}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ gap: 8, paddingHorizontal: 12 }}>
                 {game.cameras.map((cam, i) => {
@@ -962,7 +1009,7 @@ export function GameDetailScreen({
            * muchos, scrollea en vez de comerse la pantalla.
            */
           style={{
-            position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 30,
+            position: 'absolute', left: 0, right: 0, bottom: bottomInset, zIndex: 30,
             flexGrow: 0, maxHeight: '55%',
             backgroundColor: isDark ? 'rgba(37,64,107,0.93)' : 'rgba(255,255,255,0.94)',
             borderTopLeftRadius: 18, borderTopRightRadius: 18,

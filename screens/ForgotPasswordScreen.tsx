@@ -91,6 +91,7 @@ export function ForgotPasswordScreen({ prefillEmail, onBack }: ForgotPasswordScr
           gap: 20,
         }}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         {/* Back */}
         <Pressable

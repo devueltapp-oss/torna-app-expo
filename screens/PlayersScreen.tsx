@@ -36,6 +36,8 @@ export function PlayersScreen({ players, onChangeTab, activeTab = 'chats', role 
         data={filtered} keyExtractor={p => p.id}
         renderItem={({ item }) => <PlayerListItem player={item} onPress={() => onOpenPlayerProfile?.(item.id)}/>}
         contentContainerStyle={{ padding: 16, gap: 8 }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         ListEmptyComponent={
           <EmptyState title="Sin jugadores" message="Cuando alguien siga a tu club, aparecerá aquí." />
         }

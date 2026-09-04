@@ -197,6 +197,7 @@ export function CompleteProfileScreen({
           gap: 20,
         }}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         {/* Back button */}
         <Pressable

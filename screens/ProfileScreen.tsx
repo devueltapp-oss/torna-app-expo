@@ -142,7 +142,7 @@ export function ProfileScreen({ profile, onSave, onChangePassword, onChangeTab, 
         })}
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{ padding: 16, gap: 12 }}>
         {tab === 'profile' ? (
           <>
             <Input label="Nombre del club" value={form.name} onChangeText={set('name')} />

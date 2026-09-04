@@ -77,7 +77,7 @@ export function GameChatScreen({ gameId, title, readOnly = false, onBack }: Game
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
       >
         {loading && messages.length === 0 ? (
@@ -101,6 +101,7 @@ export function GameChatScreen({ gameId, title, readOnly = false, onBack }: Game
               keyExtractor={(m) => m.id}
               contentContainerStyle={{ padding: 16, gap: 10 }}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
               // Android recicla celdas con transform y las deja en blanco.
               removeClippedSubviews={false}
               scrollEventThrottle={32}

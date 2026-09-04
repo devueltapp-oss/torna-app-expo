@@ -159,6 +159,7 @@ export function GameCommentsPanel({
           keyExtractor={(c) => c.id}
           contentContainerStyle={{ padding: 16, gap: overlay ? 12 : 20 }}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
           // Android recicla celdas con transform y las deja en blanco.
           removeClippedSubviews={false}
@@ -227,7 +228,7 @@ export function GameCommentsPanel({
           </View>
         </Pressable>
       ) : (
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={{
           flexDirection: 'row', alignItems: 'center', gap: 10,
           paddingHorizontal: 16, paddingVertical: overlay ? 8 : 12,

@@ -150,7 +150,7 @@ export function MyLibraryScreen({
       {/* Modal de edición de descripción */}
       <Modal visible={editing !== null} transparent animationType="fade" onRequestClose={() => setEditing(null)}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}
         >
           <Pressable style={{ flex: 1 }} onPress={() => setEditing(null)}/>

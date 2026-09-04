@@ -81,7 +81,11 @@ export function ReserveClubPickerScreen({
         }
       />
 
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        contentContainerStyle={{ padding: 16, gap: 16 }}
+      >
         {/* Buscador */}
         <View>
           <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text, marginBottom: 8 }}>
