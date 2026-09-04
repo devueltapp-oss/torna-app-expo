@@ -3,9 +3,11 @@ import { View, Text, ScrollView, Image, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Lock, MapPin } from 'lucide-react-native';
 import { useTheme } from '../theme';
-import { Button, Input } from '../components/ui';
+import { Button, Input, SectionHeader } from '../components/ui';
+import { ConfirmSheet } from '../components/ConfirmSheet';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import { useAuth } from '../contexts/AuthContext';
+import { deleteMyAccount } from '../api/profile';
 import { friendlyPasswordError } from './PlayerSettingsScreen';
 
 const tornaLogo = require('../assets/torna-icon.png');
@@ -58,7 +60,7 @@ function PasswordChecklist({ next, confirm }: { next: string; confirm: string })
 
 export function ProfileScreen({ profile, onSave, onChangePassword, onChangeTab, activeTab = 'profile', role = 'club' }: Props) {
   const { colors } = useTheme();
-  const { changePassword } = useAuth();
+  const { changePassword, logout } = useAuth();
   const [tab, setTab] = React.useState<'profile' | 'security'>('profile');
   const [form, setForm] = React.useState<ClubProfile>(profile);
   const [pwCurrent, setPwCurrent] = React.useState('');
@@ -67,6 +69,29 @@ export function ProfileScreen({ profile, onSave, onChangePassword, onChangeTab, 
   const [pwSubmitting, setPwSubmitting] = React.useState(false);
   const [pwError, setPwError] = React.useState<string | null>(null);
   const set = (k: keyof ClubProfile) => (v: string) => setForm(s => ({ ...s, [k]: v }));
+
+  // Eliminar cuenta — mismo flujo que PlayerSettingsScreen (ver su comentario):
+  // un club es un User igual que un player, así que `DELETE /user/me` +
+  // `logout()` aplican sin cambios. La única diferencia es del lado del
+  // backend: un club con canchas o partidas pendientes recibe 409 (ver
+  // `deleteMyAccount` en `api/profile.ts`), y ese mensaje se muestra tal cual.
+  const [deleteSheet, setDeleteSheet] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+
+  async function handleDeleteAccount() {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteMyAccount();
+      setDeleteSheet(false);
+      await logout();
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : 'No se pudo eliminar la cuenta. Intenta de nuevo.');
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   const pwRulesOk = PASSWORD_RULES(pwNext, pwConfirm).every(r => r.ok);
   const canSubmitPw = !!pwCurrent && pwRulesOk && !pwSubmitting;
@@ -145,11 +170,44 @@ export function ProfileScreen({ profile, onSave, onChangePassword, onChangeTab, 
               onPress={canSubmitPw ? handleChangePassword : undefined}>
               Actualizar contraseña
             </Button>
+
+            {/* Zona de peligro — separada de "Actualizar contraseña" a propósito,
+                mismo criterio que PlayerSettingsScreen: borrar la cuenta no es un
+                ajuste de seguridad más. */}
+            <View style={{ marginTop: 12 }}>
+              <SectionHeader title="Zona de peligro"/>
+            </View>
+            <Pressable
+              onPress={() => setDeleteSheet(true)}
+              testID="settings-delete-account"
+              style={({ pressed }) => ({
+                paddingVertical: 14, paddingHorizontal: 4, opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <Text style={{ fontSize: 14, fontWeight: '700', color: colors.destructive }}>
+                Eliminar cuenta
+              </Text>
+            </Pressable>
           </>
         )}
       </ScrollView>
 
       {onChangeTab && <BottomTabBar role={role} active={activeTab} onChange={onChangeTab}/>}
+
+      <ConfirmSheet
+        visible={deleteSheet}
+        title="Eliminar la cuenta del club"
+        message={
+          'Esta acción es irreversible. Si el club todavía tiene canchas o partidas ' +
+          'pendientes, primero hay que resolverlas.' +
+          (deleteError ? `\n\n${deleteError}` : '')
+        }
+        confirmLabel="Eliminar cuenta"
+        destructive
+        loading={deleting}
+        onConfirm={handleDeleteAccount}
+        onCancel={() => { if (!deleting) { setDeleteSheet(false); setDeleteError(null); } }}
+      />
     </SafeAreaView>
   );
 }

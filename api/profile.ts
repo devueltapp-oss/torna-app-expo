@@ -209,3 +209,33 @@ export async function uploadFrontPage(uid: string, assetUri: string): Promise<st
   await patchMe({ frontPage: url }, token, 'No se pudo guardar la foto de portada.');
   return url;
 }
+
+/**
+ * Elimina la cuenta del usuario autenticado. `DELETE /user/me` — borrado REAL y en
+ * cascada (highlights, comentarios, likes, follows, clips, y borra el usuario de
+ * Firebase Auth), NO el soft-delete de `POST /me/deactivate`. Requerido por la
+ * guideline 5.1.1(v) de Apple: toda app que permite crear cuenta debe permitir
+ * borrarla desde adentro, sin depender de un email a soporte.
+ *
+ * Un club con canchas o partidas SCHEDULED/WAITING/LIVE pendientes recibe **409**:
+ * el backend bloquea el borrado para no dejar canchas huérfanas
+ * (`PadelCourt.clubId` es `ON DELETE SET NULL`).
+ */
+export async function deleteMyAccount(): Promise<void> {
+  const token = await getToken();
+  const res = await fetch(`${API_URL}/user/me`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    let message = 'No se pudo eliminar la cuenta.';
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed?.message === 'string') message = parsed.message;
+    } catch {
+      /* body no-JSON → se usa el mensaje default */
+    }
+    throw new Error(message);
+  }
+}

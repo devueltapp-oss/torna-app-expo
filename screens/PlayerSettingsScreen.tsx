@@ -18,10 +18,11 @@ import { fonts } from '../theme/tokens';
 import { useNearbyLocation } from '../hooks/useNearbyLocation';
 import { Avatar, Button, Input, AppHeader, SectionHeader } from '../components/ui';
 import { ImageViewerModal } from '../components/ImageViewerModal';
+import { ConfirmSheet } from '../components/ConfirmSheet';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import { LevelPickerSheet, levelLabel } from '../components/LevelPickerSheet';
 import { useAuth } from '../contexts/AuthContext';
-import { uploadProfilePicture, uploadFrontPage, updateMyCategory, updateMyProfile } from '../api/profile';
+import { uploadProfilePicture, uploadFrontPage, updateMyCategory, updateMyProfile, deleteMyAccount } from '../api/profile';
 import type { ProfileOwner } from '../data/types';
 
 type Section = 'overview' | 'profile' | 'password';
@@ -41,7 +42,7 @@ export interface PlayerSettingsScreenProps {
 
 export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onChangeTab }: PlayerSettingsScreenProps) {
   const { colors, mode, setMode } = useTheme();
-  const { user, updateProfilePicture, updateFrontPage, changePassword } = useAuth();
+  const { user, updateProfilePicture, updateFrontPage, changePassword, logout } = useAuth();
   const [section, setSection] = React.useState<Section>('overview');
   const [name, setName]         = React.useState(owner.name);
   const [username, setUsername] = React.useState(owner.username);
@@ -122,6 +123,35 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
     }
   }
 
+  /**
+   * Eliminar cuenta — App Store 5.1.1(v): toda app que permite crear cuenta debe
+   * permitir borrarla desde adentro, sin pasar por soporte.
+   *
+   * `deleteMyAccount()` es el borrado REAL (`DELETE /user/me`, cascada en el
+   * backend), no `POST /me/deactivate` (soft-delete con `reason`, no cumple la
+   * guideline). Al confirmar, se reusa el MISMO `logout()` que "Cerrar sesión":
+   * limpia SecureStore, OneSignal (`clearIdentity`) y la ubicación de cercanía
+   * (`forgetLocationOnLogout`) — el `AuthProvider` limpia `user` y `Root` cambia
+   * sola al stack de login, sin necesidad de navegar a mano.
+   */
+  const [deleteSheet, setDeleteSheet] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+
+  async function handleDeleteAccount() {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteMyAccount();
+      setDeleteSheet(false);
+      await logout();
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : 'No se pudo eliminar la cuenta. Intenta de nuevo.');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   // Foto de perfil — única imagen subible. Sube a B2 y persiste vía PATCH /user/me.
   const [avatar, setAvatar] = React.useState<string | undefined>(user?.profilePicture);
   const [uploadingPhoto, setUploadingPhoto] = React.useState(false);
@@ -198,6 +228,7 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
             onChangePassword={() => setSection('password')}
             onViewPhoto={() => avatar && setViewer(true)}
             onSignOut={onSignOut}
+            onDeleteAccount={() => setDeleteSheet(true)}
             nearby={nearby}
           />
         )}
@@ -235,6 +266,21 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
       {onChangeTab && <BottomTabBar role="player" active={activeTab ?? 'profile'} onChange={onChangeTab}/>}
 
       <ImageViewerModal visible={viewer} uri={avatar} onClose={() => setViewer(false)}/>
+
+      <ConfirmSheet
+        visible={deleteSheet}
+        title="Eliminar tu cuenta"
+        message={
+          'Esta acción es irreversible: se van a borrar tus highlights, comentarios y likes, ' +
+          'y te vas a dar de baja de tus partidas.' +
+          (deleteError ? `\n\n${deleteError}` : '')
+        }
+        confirmLabel="Eliminar cuenta"
+        destructive
+        loading={deleting}
+        onConfirm={handleDeleteAccount}
+        onCancel={() => { if (!deleting) { setDeleteSheet(false); setDeleteError(null); } }}
+      />
     </SafeAreaView>
   );
 }
@@ -243,7 +289,7 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
 
 function OverviewSection({
   colors, name, username, avatar, mode, onChangeMode,
-  onEditProfile, onChangePassword, onViewPhoto, onSignOut, nearby,
+  onEditProfile, onChangePassword, onViewPhoto, onSignOut, onDeleteAccount, nearby,
 }: {
   colors: ReturnType<typeof useTheme>['colors'];
   name: string; username: string; avatar?: string;
@@ -251,6 +297,7 @@ function OverviewSection({
   onEditProfile: () => void; onChangePassword: () => void;
   onViewPhoto: () => void;
   onSignOut?: () => void;
+  onDeleteAccount: () => void;
   nearby: ReturnType<typeof useNearbyLocation>;
 }) {
   return (
@@ -309,6 +356,19 @@ function OverviewSection({
         <SectionHeader title="Sesión"/>
       </View>
       <SettingsRow label="Cerrar sesión" value="" onPress={onSignOut}/>
+
+      {/*
+        ZONA DE PELIGRO — sección aparte, no debajo de "Sesión": borrar la cuenta
+        no es lo mismo que cerrarla, y agruparlas invitaba a tocar la fila
+        equivocada. El rojo (`colors.destructive`, la única excepción del manual
+        de 3 colores) va en la fila que dispara el flujo Y en el botón de
+        confirmar del `ConfirmSheet` — las dos son el mismo affordance
+        destructivo, no texto decorativo.
+      */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 18 }}>
+        <SectionHeader title="Zona de peligro"/>
+      </View>
+      <SettingsRow label="Eliminar cuenta" value="" onPress={onDeleteAccount} danger/>
 
       <Text style={{ paddingHorizontal: 18, paddingTop: 20, fontSize: 11, color: colors.muted2 }}>
         Torna v1.0.0
@@ -615,18 +675,24 @@ export function friendlyPasswordError(err: any): string {
   return 'No se pudo actualizar la contraseña. Intenta de nuevo.';
 }
 
-function SettingsRow({ label, value, onPress }: {
+function SettingsRow({ label, value, onPress, danger }: {
   label: string; value: string; onPress?: () => void;
+  /** Fila de zona de peligro (eliminar cuenta): label en `colors.destructive`. */
+  danger?: boolean;
 }) {
   const { colors } = useTheme();
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => ({
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      paddingHorizontal: 16, paddingVertical: 14,
-      backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.line,
-      opacity: pressed ? 0.7 : 1,
-    })}>
-      <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text }}>{label}</Text>
+    <Pressable
+      onPress={onPress}
+      testID={danger ? 'settings-delete-account' : undefined}
+      style={({ pressed }) => ({
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        paddingHorizontal: 16, paddingVertical: 14,
+        backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.line,
+        opacity: pressed ? 0.7 : 1,
+      })}
+    >
+      <Text style={{ fontSize: 14, fontWeight: '700', color: danger ? colors.destructive : colors.text }}>{label}</Text>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         {value ? (
           <Text style={{ fontSize: 13, color: colors.muted2, maxWidth: 160 }} numberOfLines={1}>{value}</Text>
