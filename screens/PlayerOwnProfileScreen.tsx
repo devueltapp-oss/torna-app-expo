@@ -1,23 +1,38 @@
 /**
- * PlayerOwnProfileScreen — vista pública del PROPIO perfil. Estilo
- * IG/TikTok con header de stats + tabs (Highlights / Partidos / Fotos)
- * + grid 3-col. Solo muestra items con isPublic = true.
+ * PlayerOwnProfileScreen — vista pública del PROPIO perfil.
  *
- *   Header: avatar + 3 stats (posts / seguidores / siguiendo) + bio
- *   Tabs:   ▶ HIGHLIGHTS  |  ◫ PARTIDOS  |  ▦ FOTOS
- *   Grid:   3 columnas con thumbnails (ContentThumb)
+ * Mismo lenguaje visual que `PlayerProfilePublicView` (el perfil de OTRO
+ * jugador) a propósito — hero azul con motivo de cancha, avatar con anillo
+ * blanco, nombre/username/nivel en la misma línea, pestañas + grid 3-col con
+ * `ContentThumb`. Antes eran dos pantallas con estilos distintos (una barra
+ * plana acá, un hero con foto de fondo allá) que hacían sentir la app como
+ * dos apps distintas para la misma cosa (ver un perfil).
  *
- *   Botón 🔒 (Lock)     → MyLibraryScreen (biblioteca privada)
- *   Botón ⚙ (Settings) → PlayerSettingsScreen
+ * Lo que NO se comparte, a propósito — son acciones que solo tienen sentido
+ * sobre tu propia cuenta y nadie más puede tocar:
+ *   - Botón 🔒 → MyLibraryScreen (biblioteca privada)
+ *   - Botón ⚙ → PlayerSettingsScreen
+ * En el perfil ajeno esos dos huecos (arriba-izq/arriba-der del hero) los
+ * ocupan, en cambio, "volver" y nada (se sacó un botón de "···" que no hacía
+ * nada — ver `PlayerProfilePublicView`).
  *
- * Entry point: tab "Perfil" del BottomTabBar cuando el rol es player.
+ * Diferencias que SÍ quedan, porque los datos son distintos por naturaleza:
+ *   - Acá hay 3 stats (posts/seguidores/siguiendo); en el ajeno, 2 (no te
+ *     seguís a vos mismo). Nadie sigue/notifica/mensajea su propio perfil,
+ *     así que esa fila de acciones no existe acá.
+ *   - Acá hay pestañas "Highlights"/"Partidos" con datos reales tuyos. El
+ *     ajeno usa el mismo `TabStrip`, pero con una sola pestaña ("Highlights"):
+ *     esta pantalla no trae el historial de partidos de OTRO jugador todavía
+ *     (`usePlayerMatches` solo se usa para la biblioteca propia hoy). Agregar
+ *     esa pestaña es una tarea aparte, con su propio wiring de datos.
  */
 import React from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Lock, Settings } from 'lucide-react-native';
+import { Svg, Rect, Line } from 'react-native-svg';
 import { useTheme } from '../theme';
-import { Avatar, Button, CategoryBadge } from '../components/ui';
+import { Avatar, TabStrip } from '../components/ui';
 import { ImageViewerModal } from '../components/ImageViewerModal';
 import { ContentThumb } from '../components/ContentThumb';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
@@ -52,7 +67,6 @@ export function PlayerOwnProfileScreen({
   const [tab, setTab] = React.useState<TabKey>('highlights');
   const [viewer, setViewer] = React.useState(false);
 
-
   const publicHl     = highlights.filter(h => h.isPublic);
   const publicMatch  = matches.filter(m => m.isPublic);
   const totalPosts   = publicHl.length + publicMatch.length;
@@ -63,68 +77,68 @@ export function PlayerOwnProfileScreen({
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
-      {/* Top bar — @username + lock + settings */}
-      <View style={{
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        paddingHorizontal: 16, paddingVertical: 8,
-      }}>
-        {/* ⛔ Al lado del usuario había una flecha hacia abajo (un `ChevronRight`
-            rotado) que **no hacía nada**: prometía un desplegable —cambiar de
-            cuenta, como en otras apps— que acá no existe. Se eliminó. */}
-        <Text style={{ fontSize: 17, fontWeight: '800', color: colors.text }}>{owner.username}</Text>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <IconButton onPress={onOpenLibrary} colors={colors} dot>
-            <Lock size={18} color={colors.text}/>
-          </IconButton>
-          <IconButton onPress={onOpenSettings} colors={colors}>
-            <Settings size={18} color={colors.text}/>
-          </IconButton>
-        </View>
-      </View>
+      <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
+        {/* Hero — mismo tratamiento que el perfil ajeno (ver PlayerProfilePublicView) */}
+        <View style={{ backgroundColor: colors.ink, padding: 16, paddingBottom: 18, overflow: 'hidden' }}>
+          <Svg viewBox="0 0 390 220" width="100%" height="100%" preserveAspectRatio="xMidYMid slice"
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.14 }}>
+            <Rect x={40} y={40} width={310} height={140} stroke={colors.accent} strokeWidth={2} fill="none"/>
+            <Line x1={195} y1={40} x2={195} y2={180} stroke={colors.accent} strokeWidth={2}/>
+          </Svg>
 
-      <ScrollView>
-        {/* Avatar + stats row */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18, paddingHorizontal: 16, paddingBottom: 16 }}>
-          <Pressable onPress={() => owner.profilePicture && setViewer(true)}>
-            <Avatar name={owner.name} size={80} imageUri={owner.profilePicture}/>
-          </Pressable>
-          <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-around' }}>
-            <StatBlock value={totalPosts} label="posts" colors={colors}/>
-            <StatBlock value={owner.followers} label="seguidores" colors={colors} onPress={onOpenFollowers}/>
-            <StatBlock value={owner.following} label="siguiendo" colors={colors} onPress={onOpenFollowing}/>
+          {/* Acá no va "volver" (esto es un tab raíz, no una pantalla apilada):
+              el lugar de los dos íconos de arriba lo ocupan las únicas acciones
+              que existen solo sobre la cuenta propia. */}
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+            <HeroIconButton onPress={onOpenLibrary} dot>
+              <Lock size={16} color="#FFFFFF"/>
+            </HeroIconButton>
+            <HeroIconButton onPress={onOpenSettings}>
+              <Settings size={16} color="#FFFFFF"/>
+            </HeroIconButton>
+          </View>
+
+          <View style={{ flexDirection: 'row', gap: 14, marginTop: 18, alignItems: 'flex-end' }}>
+            <Pressable onPress={() => owner.profilePicture && setViewer(true)}>
+              <View style={{ borderRadius: 36, overflow: 'hidden' }}>
+                <Avatar name={owner.name} size={72} imageUri={owner.profilePicture} ringColor="#FFFFFF"/>
+              </View>
+            </Pressable>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={{ fontSize: 20, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.4 }} numberOfLines={1}>
+                {owner.name}
+              </Text>
+              {/*
+                ⛔ Bajo el nombre va **username + nivel**, nada más.
+
+                Antes se pintaba `club · ciudad`, pero la ciudad venía de
+                `User.region` — un dato viejo cargado a mano (a alguien de
+                Ciudad Guayana le decía "caracas") que la app ya no edita: el
+                único uso de la ubicación es el aviso de partidas cercanas,
+                que es aproximado y no se muestra. `ProfileOwner.club` además
+                llega siempre vacío en la app.
+              */}
+              <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 2 }} numberOfLines={1}>
+                {[owner.username, owner.category ? `CAT. ${owner.category}` : null]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </Text>
+            </View>
+          </View>
+
+          {/* Stats — posts/seguidores/siguiendo, mismo tratamiento blanco-sobre-azul
+              que los conteos del perfil ajeno (ahí solo hay 2: nadie se sigue a
+              sí mismo, así que no hay fila de "Seguir/Notificar/Mensaje" acá). */}
+          <View style={{ flexDirection: 'row', gap: 22, marginTop: 16 }}>
+            <HeroStat value={totalPosts} label="POSTS"/>
+            <Pressable onPress={onOpenFollowers}>
+              <HeroStat value={owner.followers} label="SEGUIDORES"/>
+            </Pressable>
+            <Pressable onPress={onOpenFollowing}>
+              <HeroStat value={owner.following} label="SIGUIENDO"/>
+            </Pressable>
           </View>
         </View>
-
-        {/* Bio */}
-        <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
-          <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text }}>{owner.name}</Text>
-          {/*
-            ⛔ Bajo el nombre va **solo el nivel de juego**.
-
-            Antes se pintaba `club · ciudad`, pero la ciudad venía de
-            `User.region` — un dato viejo cargado a mano (a alguien de Ciudad
-            Guayana le decía "caracas") que la app ya no edita: el único uso de
-            la ubicación es el aviso de partidas cercanas, que es aproximado y
-            no se muestra. Enseñar una ciudad que el usuario no puede corregir es
-            peor que no mostrar nada.
-
-            El club tampoco: `ProfileOwner.club` llega siempre vacío en la app.
-          */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
-            <CategoryBadge category={owner.category} />
-          </View>
-        </View>
-
-        {/*
-          ⚠️ Acá había dos botones y se eliminaron el 2026-09-02:
-           · **Editar perfil** — duplicaba el ⚙ del header, que lleva al mismo
-             lugar (Ajustes → Editar perfil).
-           · **Compartir** — no tenía handler: era un botón que no hacía NADA.
-             Compartir un perfil necesita una URL pública, que todavía no existe
-             (mismo motivo por el que no se puede compartir un partido fuera de
-             la app). Cuando exista, se repone con algo detrás.
-          Sin ellos la ficha respira y las pestañas quedan más arriba.
-        */}
 
         {/* Tabs — ⚠️ **sin número debajo** (2026-09-02). El contenido de cada
             pestaña ya está a un toque y el grid lo muestra entero: el contador
@@ -182,78 +196,36 @@ export function PlayerOwnProfileScreen({
 
 /* ───────────── Helpers ───────────── */
 
-function IconButton({ children, onPress, colors, dot }: {
+/** Mismo botón translúcido que "volver"/"···" en el hero del perfil ajeno. */
+function HeroIconButton({ children, onPress, dot }: {
   children: React.ReactNode;
   onPress?: () => void;
-  colors: ReturnType<typeof useTheme>['colors'];
   dot?: boolean;
 }) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => ({
-      width: 36, height: 36, borderRadius: 12, backgroundColor: colors.bg2,
+      width: 34, height: 34, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.14)',
       alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.7 : 1,
     })}>
       {children}
       {dot ? (
         <View style={{
-          position: 'absolute', top: 6, right: 6, width: 6, height: 6, borderRadius: 3,
-          backgroundColor: colors.accent,
+          position: 'absolute', top: 5, right: 5, width: 6, height: 6, borderRadius: 3,
+          backgroundColor: '#D6FF7E',
         }}/>
       ) : null}
     </Pressable>
   );
 }
 
-function StatBlock({ value, label, colors, onPress }: {
-  value: number; label: string; colors: ReturnType<typeof useTheme>['colors'];
-  onPress?: () => void;
-}) {
-  const content = (
-    <>
-      <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{value}</Text>
-      <Text style={{ fontSize: 11, color: colors.muted2 }}>{label}</Text>
-    </>
-  );
-  if (onPress) {
-    return (
-      <Pressable onPress={onPress} style={({ pressed }) => ({ alignItems: 'center', opacity: pressed ? 0.6 : 1 })}>
-        {content}
-      </Pressable>
-    );
-  }
-  return <View style={{ alignItems: 'center' }}>{content}</View>;
-}
-
-interface TabStripProps {
-  /** Sin `count`: el número bajo cada pestaña se eliminó — ver la nota en el render. */
-  tabs: { id: string; label: string }[];
-  active: string;
-  onChange: (id: string) => void;
-}
-
-function TabStrip({ tabs, active, onChange }: TabStripProps) {
-  const { colors } = useTheme();
+/** Mismo tratamiento que los conteos de seguidores/seguidos del perfil ajeno. */
+function HeroStat({ value, label }: { value: number; label: string }) {
   return (
-    <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.line, marginTop: 4 }}>
-      {tabs.map(tab => {
-        const on = tab.id === active;
-        return (
-          <Pressable key={tab.id} onPress={() => onChange(tab.id)} style={{
-            flex: 1, paddingVertical: 12, alignItems: 'center', gap: 4, position: 'relative',
-          }}>
-            <Text style={{
-              fontSize: 11, fontWeight: '800', letterSpacing: 1.2,
-              color: on ? colors.text : colors.muted2,
-            }}>{tab.label}</Text>
-            {on ? (
-              <View style={{
-                position: 'absolute', bottom: -1, left: '20%', right: '20%',
-                height: 2, borderRadius: 1, backgroundColor: colors.accent,
-              }}/>
-            ) : null}
-          </Pressable>
-        );
-      })}
+    <View>
+      <Text style={{ fontSize: 18, fontWeight: '800', color: '#FFFFFF' }}>{value}</Text>
+      <Text style={{ fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.7)', letterSpacing: 0.8 }}>
+        {label}
+      </Text>
     </View>
   );
 }
