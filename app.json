@@ -46,7 +46,6 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.Tornapp",
-      "buildNumber": "8",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
