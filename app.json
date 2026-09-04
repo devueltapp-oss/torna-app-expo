@@ -45,7 +45,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "io.torna",
+      "bundleIdentifier": "com.Tornapp",
       "buildNumber": "8",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
@@ -96,10 +96,10 @@
               "appExtensions": [
                 {
                   "targetName": "OneSignalNotificationServiceExtension",
-                  "bundleIdentifier": "io.torna.OneSignalNotificationServiceExtension",
+                  "bundleIdentifier": "com.Tornapp.OneSignalNotificationServiceExtension",
                   "entitlements": {
                     "com.apple.security.application-groups": [
-                      "group.io.torna.onesignal"
+                      "group.com.Tornapp.onesignal"
                     ]
                   }
                 }
