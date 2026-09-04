@@ -28,6 +28,7 @@ export interface ButtonProps {
   fullWidth?: boolean;
   loading?: boolean;
   style?: StyleProp<ViewStyle>;
+  testID?: string;
 }
 
 export function Button(p: ButtonProps) {
@@ -48,6 +49,7 @@ export function Button(p: ButtonProps) {
   const c = v[p.variant || 'primary'];
   return (
     <Pressable
+      testID={p.testID}
       onPress={p.variant === 'disabled' || p.loading ? undefined : p.onPress}
       style={({ pressed }) => [
         {
@@ -642,5 +644,47 @@ export function VisibilityCard(p: VisibilityCardProps) {
         {p.selected ? <View style={{ width: 6, height: 6, backgroundColor: colors.accent, borderRadius: 3 }}/> : null}
       </View>
     </Pressable>
+  );
+}
+
+/* ─────────────────────────────  TabStrip  ───────────────────────────── */
+
+export interface TabStripProps {
+  /** Sin `count`: un número bajo cada pestaña repite lo que ya se ve en el grid. */
+  tabs: { id: string; label: string }[];
+  active: string;
+  onChange: (id: string) => void;
+}
+
+/**
+ * Fila de pestañas del perfil (Highlights/Partidos). Se usa igual en el
+ * perfil propio (2 pestañas) y en el perfil ajeno (una sola, sin datos de
+ * partidos de otro jugador todavía) — reusar el mismo componente es lo que
+ * hace que las dos pantallas se vean como la misma UI y no dos parecidas.
+ */
+export function TabStrip({ tabs, active, onChange }: TabStripProps) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.line, marginTop: 4 }}>
+      {tabs.map(tab => {
+        const on = tab.id === active;
+        return (
+          <Pressable key={tab.id} onPress={() => onChange(tab.id)} style={{
+            flex: 1, paddingVertical: 12, alignItems: 'center', gap: 4, position: 'relative',
+          }}>
+            <Text style={{
+              fontSize: 11, fontWeight: '800', letterSpacing: 1.2,
+              color: on ? colors.text : colors.muted2,
+            }}>{tab.label}</Text>
+            {on ? (
+              <View style={{
+                position: 'absolute', bottom: -1, left: '20%', right: '20%',
+                height: 2, borderRadius: 1, backgroundColor: colors.accent,
+              }}/>
+            ) : null}
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }

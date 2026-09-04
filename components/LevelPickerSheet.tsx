@@ -19,10 +19,11 @@
  * van en **dos líneas propias**, así no hay nada que truncar.
  */
 import React from 'react';
-import { Modal, View, Text, Pressable, ScrollView } from 'react-native';
+import { Modal, View, Text, Pressable, ScrollView, Animated } from 'react-native';
 import { Check } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
+import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss';
 
 export interface PlayLevel { value: number; label: string; hint: string }
 
@@ -56,6 +57,10 @@ export interface LevelPickerSheetProps {
 
 export function LevelPickerSheet({ visible, value, onSelect, onClose }: LevelPickerSheetProps) {
   const { colors } = useTheme();
+  // Solo en el handle (no en toda la hoja): abajo hay un ScrollView con las
+  // opciones, y un PanResponder sobre toda la hoja le pelearía el gesto de
+  // scroll — ver el comentario de `useSwipeToDismiss`.
+  const { translateY, panHandlers } = useSwipeToDismiss(onClose);
 
   /** Elegir cierra: no hay "aceptar" que confirmar sobre una sola decisión. */
   const pick = (v: number | null) => { onSelect(v); onClose(); };
@@ -67,32 +72,40 @@ export function LevelPickerSheet({ visible, value, onSelect, onClose }: LevelPic
         onPress={onClose}
         testID="level-sheet-backdrop"
       >
-        <Pressable
-          onPress={() => {}}
+        <Animated.View
           style={{
             position: 'absolute', bottom: 0, left: 0, right: 0, maxHeight: '80%',
             backgroundColor: colors.bg,
             borderTopLeftRadius: 20, borderTopRightRadius: 20,
             paddingTop: 14, paddingBottom: 28,
+            transform: [{ translateY }],
           }}
         >
-          <View style={{
-            alignSelf: 'center', width: 40, height: 4, borderRadius: 2,
-            backgroundColor: colors.line, marginBottom: 16,
-          }} />
+          <Pressable onPress={() => {}}>
+          {/* El gesto de cerrar va SOLO en esta zona (handle + título), no en
+              toda la hoja: el `ScrollView` de las opciones es HERMANO de este
+              `View`, no descendiente — así un arrastre que empieza en la
+              lista nunca le pregunta a este PanResponder si lo quiere, y el
+              scroll no se pelea con el swipe-to-dismiss. */}
+          <View {...panHandlers}>
+            <View style={{
+              alignSelf: 'center', width: 40, height: 4, borderRadius: 2,
+              backgroundColor: colors.line, marginBottom: 16,
+            }} />
 
-          <Text style={{
-            fontFamily: fonts.bold, fontSize: 18, color: colors.text,
-            letterSpacing: -0.3, paddingHorizontal: 20, marginBottom: 4,
-          }}>
-            Nivel de juego
-          </Text>
-          <Text style={{
-            fontSize: 13, color: colors.muted2, lineHeight: 18,
-            paddingHorizontal: 20, marginBottom: 12,
-          }}>
-            El 1 es el nivel más alto.
-          </Text>
+            <Text style={{
+              fontFamily: fonts.bold, fontSize: 18, color: colors.text,
+              letterSpacing: -0.3, paddingHorizontal: 20, marginBottom: 4,
+            }}>
+              Nivel de juego
+            </Text>
+            <Text style={{
+              fontSize: 13, color: colors.muted2, lineHeight: 18,
+              paddingHorizontal: 20, marginBottom: 12,
+            }}>
+              El 1 es el nivel más alto.
+            </Text>
+          </View>
 
           <ScrollView contentContainerStyle={{ paddingBottom: 8 }}>
             <LevelRow
@@ -112,7 +125,8 @@ export function LevelPickerSheet({ visible, value, onSelect, onClose }: LevelPic
               />
             ))}
           </ScrollView>
-        </Pressable>
+          </Pressable>
+        </Animated.View>
       </Pressable>
     </Modal>
   );

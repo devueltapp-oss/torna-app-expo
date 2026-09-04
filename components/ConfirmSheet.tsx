@@ -13,11 +13,17 @@
  *
  * `destructive` pinta el botón de confirmar en `colors.destructive` (ver la nota
  * del token en `theme/tokens.ts`: es la única excepción al manual de 3 colores).
+ *
+ * ⚠️ La barrita de arriba (drag handle) ahora SÍ cierra deslizándola hacia
+ * abajo (`useSwipeToDismiss`) — antes era decorativa en los dos sistemas, no
+ * "algo que andaba en iOS y no en Android": nunca tuvo un gesto real en
+ * ninguno de los dos.
  */
 import React from 'react';
-import { Modal, View, Text, Pressable, ActivityIndicator } from 'react-native';
+import { Modal, View, Text, Pressable, Animated, ActivityIndicator } from 'react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
+import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss';
 
 export interface ConfirmSheetProps {
   visible: boolean;
@@ -47,6 +53,7 @@ export function ConfirmSheet({
   const { colors, radii } = useTheme();
   const confirmBg = destructive ? colors.destructive : colors.accent;
   const confirmFg = destructive ? colors.destructiveFg : colors.primaryFg;
+  const { translateY, panHandlers } = useSwipeToDismiss(loading ? () => {} : onCancel);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
@@ -55,15 +62,22 @@ export function ConfirmSheet({
         onPress={loading ? undefined : onCancel}
         testID="confirm-sheet-backdrop"
       >
-        <Pressable
-          onPress={() => {}}
+        <Animated.View
+          {...panHandlers}
           style={{
             position: 'absolute', bottom: 0, left: 0, right: 0,
             backgroundColor: colors.bg,
             borderTopLeftRadius: 20, borderTopRightRadius: 20,
             paddingHorizontal: 20, paddingTop: 14, paddingBottom: 34,
+            transform: [{ translateY }],
           }}
         >
+          <Pressable onPress={() => {}}>
+          {/* Drag handle: el `PanResponder` está en el contenedor de arriba
+              (`Animated.View`), así que arrastrar desde cualquier parte de la
+              hoja también cierra — no hace falta acotarlo a esta barrita. Se
+              activa solo con arrastre vertical claro (`dy > 4`), así que no
+              compite con los toques normales de los botones de abajo. */}
           <View style={{
             alignSelf: 'center', width: 40, height: 4, borderRadius: 2,
             backgroundColor: colors.line, marginBottom: 18,
@@ -121,7 +135,8 @@ export function ConfirmSheet({
               )}
             </Pressable>
           </View>
-        </Pressable>
+          </Pressable>
+        </Animated.View>
       </Pressable>
     </Modal>
   );

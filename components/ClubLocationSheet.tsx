@@ -14,6 +14,7 @@
 import React from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Modal,
   Pressable,
   ScrollView,
@@ -26,6 +27,7 @@ import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { Button } from './ui';
 import { useClubLocation } from '../hooks/useClubLocation';
+import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss';
 import type { AddressSuggestion } from '../api/geo';
 
 export interface ClubLocationSheetProps {
@@ -37,6 +39,7 @@ export interface ClubLocationSheetProps {
 export function ClubLocationSheet({ visible, onClose, onSaved }: ClubLocationSheetProps) {
   const { colors } = useTheme();
   const club = useClubLocation(visible);
+  const { translateY, panHandlers } = useSwipeToDismiss(onClose);
 
   const handleSave = async () => {
     if (await club.save()) {
@@ -48,22 +51,27 @@ export function ClubLocationSheet({ visible, onClose, onSaved }: ClubLocationShe
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={{ flex: 1, backgroundColor: 'rgba(45,76,117,0.45)' }} onPress={onClose}>
-        <Pressable
+        <Animated.View
           style={{
             position: 'absolute', bottom: 0, left: 0, right: 0,
             maxHeight: '85%',
             backgroundColor: colors.bg,
             borderTopLeftRadius: 20, borderTopRightRadius: 20,
             paddingHorizontal: 16, paddingTop: 14, paddingBottom: 34,
+            transform: [{ translateY }],
           }}
-          onPress={() => {}}
         >
-          <View style={{
-            alignSelf: 'center', width: 40, height: 4, borderRadius: 2,
-            backgroundColor: colors.line, marginBottom: 16,
-          }} />
+          <Pressable onPress={() => {}}>
+          {/* Handle hermano del ScrollView: el gesto de cerrar no compite con
+              el scroll del formulario (ni con el input de dirección). */}
+          <View {...panHandlers}>
+            <View style={{
+              alignSelf: 'center', width: 40, height: 4, borderRadius: 2,
+              backgroundColor: colors.line, marginBottom: 16,
+            }} />
+          </View>
 
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 14 }}>
+          <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={{ gap: 14 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <MapPin size={20} color={colors.accent} />
               <Text style={{ fontSize: 17, fontFamily: fonts.bold, color: colors.text }}>
@@ -178,7 +186,8 @@ export function ClubLocationSheet({ visible, onClose, onSaved }: ClubLocationShe
               <Text style={{ fontSize: 13, color: colors.muted2 }}>Ahora no</Text>
             </Pressable>
           </ScrollView>
-        </Pressable>
+          </Pressable>
+        </Animated.View>
       </Pressable>
     </Modal>
   );

@@ -17,11 +17,12 @@
  * que no ofrecerlo. El botón se suma acá cuando exista esa URL.
  */
 import React from 'react';
-import { Modal, View, Text, Pressable, FlatList, ActivityIndicator, TextInput } from 'react-native';
+import { Modal, View, Text, Pressable, FlatList, ActivityIndicator, TextInput, Animated } from 'react-native';
 import { Check, Search, Send } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { Avatar } from './ui';
+import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss';
 import type { InboxItem } from '../api/chat';
 
 /** Alguien a quien se le puede mandar el partido. Sale del inbox o de la búsqueda. */
@@ -64,6 +65,7 @@ export function ShareGameSheet({
   sendLabel,
 }: ShareGameSheetProps) {
   const { colors, radii } = useTheme();
+  const { translateY, panHandlers } = useSwipeToDismiss(onClose);
   const [selected, setSelected] = React.useState<string[]>([]);
   const [sending, setSending] = React.useState(false);
   const [query, setQuery] = React.useState('');
@@ -125,27 +127,33 @@ export function ShareGameSheet({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={{ flex: 1, backgroundColor: 'rgba(45,76,117,0.45)' }} onPress={onClose}>
-        <Pressable
-          onPress={() => {}}
+        <Animated.View
           style={{
             position: 'absolute', bottom: 0, left: 0, right: 0,
             backgroundColor: colors.bg,
             borderTopLeftRadius: 20, borderTopRightRadius: 20,
             paddingHorizontal: 16, paddingTop: 14, paddingBottom: 28,
             maxHeight: '75%',
+            transform: [{ translateY }],
           }}
         >
-          <View style={{
-            alignSelf: 'center', width: 40, height: 4, borderRadius: 2,
-            backgroundColor: colors.line, marginBottom: 16,
-          }} />
+          <Pressable onPress={() => {}}>
+          {/* Gesto de cerrar solo acá (handle + título): el `FlatList` de
+              gente es hermano de este `View`, no descendiente, así el scroll
+              no se pelea con el swipe-to-dismiss. */}
+          <View {...panHandlers}>
+            <View style={{
+              alignSelf: 'center', width: 40, height: 4, borderRadius: 2,
+              backgroundColor: colors.line, marginBottom: 16,
+            }} />
 
-          <Text style={{ fontFamily: fonts.bold, fontSize: 18, color: colors.text, letterSpacing: -0.3 }}>
-            {title}
-          </Text>
-          <Text style={{ fontSize: 13, color: colors.muted2, marginTop: 4, marginBottom: 12 }}>
-            {subtitle}
-          </Text>
+            <Text style={{ fontFamily: fonts.bold, fontSize: 18, color: colors.text, letterSpacing: -0.3 }}>
+              {title}
+            </Text>
+            <Text style={{ fontSize: 13, color: colors.muted2, marginTop: 4, marginBottom: 12 }}>
+              {subtitle}
+            </Text>
+          </View>
 
           {onSearch && (
             <View style={{
@@ -184,6 +192,7 @@ export function ShareGameSheet({
               data={people}
               keyExtractor={(it) => it.id}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
               showsVerticalScrollIndicator={false}
               renderItem={({ item }) => {
                 const id = item.id;
@@ -250,7 +259,8 @@ export function ShareGameSheet({
               )}
             </Pressable>
           )}
-        </Pressable>
+          </Pressable>
+        </Animated.View>
       </Pressable>
     </Modal>
   );

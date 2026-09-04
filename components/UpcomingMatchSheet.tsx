@@ -1,11 +1,12 @@
 import React from 'react';
-import { Modal, View, Text, Pressable, Image, ScrollView, Alert } from 'react-native';
+import { Modal, View, Text, Pressable, Image, ScrollView, Alert, Animated } from 'react-native';
 import { Bell, Check, ChevronRight, MessageCircle, UserPlus, X } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { Avatar, Button, CategoryBadge, HostBadge, StatusBadge } from './ui';
 import { ApplyMatchSheet } from './ApplyMatchSheet';
 import { acceptApplication, rejectApplication, watchGame, unwatchGame } from '../api/games';
+import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss';
 import type { GameApplication, InvitablePlayer, UpcomingGameData, UpcomingGamePlayer } from '../data/types';
 
 export interface UpcomingMatchSheetProps {
@@ -53,6 +54,7 @@ export function UpcomingMatchSheet({
   onInvite,
 }: UpcomingMatchSheetProps) {
   const { colors } = useTheme();
+  const { translateY, panHandlers } = useSwipeToDismiss(onClose);
   const [watching, setWatching] = React.useState(false);
   const [hasApplied, setHasApplied] = React.useState(false);
   const [isWatching, setIsWatching] = React.useState(false);
@@ -145,16 +147,21 @@ export function UpcomingMatchSheet({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={{ flex: 1, backgroundColor: 'rgba(45,76,117,0.45)' }} onPress={onClose}>
-        <Pressable
+        <Animated.View
           style={{
             position: 'absolute', bottom: 0, left: 0, right: 0,
             backgroundColor: colors.bg,
             borderTopLeftRadius: 20, borderTopRightRadius: 20,
             paddingHorizontal: 16, paddingTop: 14, paddingBottom: 34,
+            transform: [{ translateY }],
           }}
-          onPress={() => {}}
         >
-          <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.line, marginBottom: 16 }} />
+          <Pressable onPress={() => {}}>
+          {/* El handle es hermano del ScrollView de `SheetContent`: el gesto
+              de cerrar vive solo acá y no compite con su scroll. */}
+          <View {...panHandlers}>
+            <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.line, marginBottom: 16 }} />
+          </View>
           {game && (
             <SheetContent
               game={game}
@@ -175,7 +182,8 @@ export function UpcomingMatchSheet({
               onInvite={onInvite}
             />
           )}
-        </Pressable>
+          </Pressable>
+        </Animated.View>
       </Pressable>
 
       {game && (

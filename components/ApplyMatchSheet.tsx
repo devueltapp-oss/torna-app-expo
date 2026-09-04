@@ -1,11 +1,12 @@
 import React from 'react';
-import { Modal, View, Text, Pressable, ScrollView, Alert } from 'react-native';
+import { Modal, View, Text, Pressable, ScrollView, Alert, Animated } from 'react-native';
 import { Plus } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { Avatar, Button, Switch } from './ui';
 import { PlayerSearchOverlay } from './PlayerSearchOverlay';
 import { applyToGame } from '../api/games';
+import { useSwipeToDismiss } from '../hooks/useSwipeToDismiss';
 import type { InvitablePlayer, UpcomingGameData } from '../data/types';
 
 export interface ApplyMatchSheetProps {
@@ -23,6 +24,7 @@ export interface ApplyMatchSheetProps {
 
 export function ApplyMatchSheet({ visible, game, invitablePlayers, suggestedPartners, onSearchPartner, onClose, onApplied }: ApplyMatchSheetProps) {
   const { colors } = useTheme();
+  const { translateY, panHandlers } = useSwipeToDismiss(onClose);
   const [withPartner, setWithPartner] = React.useState(false);
   const [partner, setPartner] = React.useState<InvitablePlayer | null>(null);
   const [searchOpen, setSearchOpen] = React.useState(false);
@@ -52,16 +54,21 @@ export function ApplyMatchSheet({ visible, game, invitablePlayers, suggestedPart
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={{ flex: 1, backgroundColor: 'rgba(45,76,117,0.55)' }} onPress={onClose}>
-        <Pressable
+        <Animated.View
           style={{
             position: 'absolute', bottom: 0, left: 0, right: 0,
             backgroundColor: colors.bg,
             borderTopLeftRadius: 20, borderTopRightRadius: 20,
             paddingHorizontal: 16, paddingTop: 14, paddingBottom: 34,
+            transform: [{ translateY }],
           }}
-          onPress={() => {}}
         >
-          <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.line, marginBottom: 16 }} />
+          <Pressable onPress={() => {}}>
+          {/* El handle es hermano del ScrollView de abajo: el gesto de cerrar
+              vive solo acá y no compite con el scroll del formulario. */}
+          <View {...panHandlers}>
+            <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.line, marginBottom: 16 }} />
+          </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 16 }}>
             <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: 18, letterSpacing: -0.3 }}>
@@ -135,6 +142,7 @@ export function ApplyMatchSheet({ visible, game, invitablePlayers, suggestedPart
               <Button
                 variant={withPartner && !partner ? 'disabled' : 'primary'}
                 fullWidth
+                testID="apply-confirm"
                 onPress={withPartner && !partner ? undefined : handleConfirm}
               >
                 {submitting
@@ -148,7 +156,8 @@ export function ApplyMatchSheet({ visible, game, invitablePlayers, suggestedPart
               </Pressable>
             </View>
           </ScrollView>
-        </Pressable>
+          </Pressable>
+        </Animated.View>
       </Pressable>
 
       {searchOpen && (
