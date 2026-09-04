@@ -466,15 +466,17 @@ export function NotificationBell({ count = 0, onPress }: {
  * Used by ReserveStep3 ("Buscar rivales") and ApplyMatchSheet ("Voy con compañero").
  */
 
-export function Switch({ value, onChange, disabled }: {
+export function Switch({ value, onChange, disabled, testID }: {
   value: boolean;
   onChange?: (v: boolean) => void;
   disabled?: boolean;
+  testID?: string;
 }) {
   const { colors } = useTheme();
   return (
     <Pressable
       role="switch"
+      testID={testID}
       accessibilityState={{ checked: value, disabled }}
       onPress={disabled ? undefined : () => onChange?.(!value)}
       style={{

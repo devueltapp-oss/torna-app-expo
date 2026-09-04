@@ -428,7 +428,7 @@ export function VideoPreviewModal({
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
+      presentationStyle="fullScreen"
       onRequestClose={onClose}
     >
       {/*
@@ -442,7 +442,20 @@ export function VideoPreviewModal({
         rota a horizontal y no admite superponer el panel de comentarios.
 
         Se sale con la **X de arriba a la izquierda**, que cierra el modal.
-      */}
+
+        ⚠️ **`presentationStyle` tiene que ser `fullScreen` en LOS DOS, no
+        `pageSheet` en iOS.** `pageSheet` le agrega a iOS su propio "grabber"
+        (la barrita de arrastre nativa) en la franja de arriba de la hoja, que
+        compite por el toque con la X (`top:14`) y con el gesto de swipe-down
+        para cerrar — y ese swipe no dispara `onClose` (dispara `onDismiss`,
+        que acá no estaba manejado), así que el estado del padre (`previewVideo`)
+        quedaba en `true` con la hoja ya cerrada por iOS: la próxima vez que se
+        tocaba un ítem de la biblioteca, `visible` pasaba de `true` a `true` y
+        el modal no volvía a aparecer. Sin la X funcionando y sin back de
+        hardware (eso es solo Android, vía `onRequestClose`), en iPhone no
+        quedaba ninguna salida. `fullScreen` en los dos evita el grabber y el
+        swipe nativo — la única salida es la X, y esa sí siempre llama a
+        `onClose`. */}
       <SafeAreaView style={{ flex: 1, backgroundColor: '#000000' }} edges={[]}>
 
         <View style={{ flex: 1, backgroundColor: '#000000' }}>
@@ -510,6 +523,7 @@ export function VideoPreviewModal({
                   testID="close-highlight"
                   accessibilityRole="button"
                   accessibilityLabel="Cerrar"
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                   style={{
                     width: 40, height: 40, borderRadius: 20,
                     backgroundColor: 'rgba(0,0,0,0.5)',

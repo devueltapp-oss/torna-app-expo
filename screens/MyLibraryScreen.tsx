@@ -8,23 +8,27 @@
  *     1. Mis partidos completos   — cada uno con chip Privado/Público + "Crear highlight →"
  *     2. Mis highlights           — clips recortados con chip
  *
- * Toggle de visibilidad por item: tap en el chip (`VisibilityPill`) flippea isPublic
- * y lo delega al padre vía `onToggleVisibility`.
+ * Toggle de visibilidad por item: UN switch (no chip + botón separados, que eran
+ * dos controles para la misma acción) flippea isPublic y lo delega al padre vía
+ * `onToggleVisibility`.
  *   - Highlights: persiste en el backend con `PATCH /highlights/:id/toggle` (sin body;
  *     invierte `isEnabled` = visibilidad). Wiring en `App.tsx` (`toggleVisibility`):
  *     flip optimista + revert si la request falla.
  *   - Partidos (matches): no tienen visibilidad en el backend → el toggle es solo
  *     cosmético/local (no hay endpoint).
+ *
+ * Tocar la miniatura (`ContentThumb`, con su ícono de play ya dibujado) abre el
+ * reproductor directo — no hay un botón "Reproducir" aparte: era la misma acción
+ * dos veces.
  */
 import React from 'react';
 import { View, Text, Pressable, ScrollView, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronDown, Lock, Scissors, Play, Trophy, Globe, Pencil, X } from 'lucide-react-native';
+import { ChevronLeft, ChevronDown, Lock, Scissors, Trophy, Pencil, X } from 'lucide-react-native';
 import { useTheme } from '../theme';
-import { Button, Input, AppHeader } from '../components/ui';
+import { Button, Input, AppHeader, Switch } from '../components/ui';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import { ContentThumb } from '../components/ContentThumb';
-import { VisibilityPill } from '../components/VisibilityPill';
 import type {
   LibraryItem, LibraryMatch, LibraryHighlight,
 } from '../data/types';
@@ -98,7 +102,7 @@ export function MyLibraryScreen({
               Solo tú puedes ingresar a esta sección
             </Text>
             <Text style={{ fontSize: 11, color: colors.muted2, lineHeight: 15 }}>
-              Toca el chip de visibilidad para hacer público un ítem. {totalPublic} público{totalPublic === 1 ? '' : 's'} ahora.
+              Usa el switch para hacer público un ítem. {totalPublic} público{totalPublic === 1 ? '' : 's'} ahora.
             </Text>
           </View>
         </View>
@@ -232,13 +236,24 @@ function MatchRow({ match, onCreateHighlight, onRegisterResult, onToggleVisibili
       flexDirection: 'row', gap: 12, padding: 10, borderRadius: 14,
       backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line,
     }}>
-      <View style={{ width: 96 }}>
+      {/* Tocar la miniatura abre el reproductor: mismo ícono de play que ya
+          dibuja `ContentThumb`, ahora tocable en vez de decorativo. */}
+      <Pressable
+        onPress={onOpen}
+        accessibilityRole="button"
+        accessibilityLabel="Reproducir partido"
+        testID="library-thumb-match"
+        style={{ width: 96 }}
+      >
         <ContentThumb kind="match" durationLabel={match.durationLabel} aspect="wide"/>
-      </View>
+      </Pressable>
 
       <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <VisibilityPill isPublic={match.isPublic} onPress={onToggleVisibility}/>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Switch value={match.isPublic} onChange={onToggleVisibility} testID={`visibility-switch-${match.id}`}/>
+          <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text2 }}>
+            {match.isPublic ? 'Público' : 'Privado'}
+          </Text>
         </View>
         <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text, lineHeight: 17 }}>
           {match.title}
@@ -259,13 +274,6 @@ function MatchRow({ match, onCreateHighlight, onRegisterResult, onToggleVisibili
           }}>
             <Scissors size={12} color={colors.ink}/>
             <Text style={{ color: colors.ink, fontWeight: '800', fontSize: 11 }}>Crear highlight</Text>
-          </Pressable>
-          <Pressable onPress={onOpen} style={{
-            flexDirection: 'row', alignItems: 'center', gap: 4,
-            borderWidth: 1, borderColor: colors.line, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
-          }}>
-            <Play size={11} color={colors.text2}/>
-            <Text style={{ color: colors.text2, fontWeight: '700', fontSize: 11 }}>Reproducir</Text>
           </Pressable>
           {match.resultRegistered ? (
             <View style={{
@@ -304,18 +312,29 @@ function ItemRow({ item, onToggleVisibility, onEdit, onOpen }: {
       flexDirection: 'row', gap: 12, padding: 10, borderRadius: 14,
       backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line,
     }}>
-      <View style={{ width: 96 }}>
+      {/* Tocar la miniatura abre el reproductor: mismo ícono de play que ya
+          dibuja `ContentThumb`, ahora tocable en vez de decorativo. */}
+      <Pressable
+        onPress={onOpen}
+        accessibilityRole="button"
+        accessibilityLabel="Reproducir highlight"
+        testID="library-thumb-highlight"
+        style={{ width: 96 }}
+      >
         <ContentThumb
           kind={item.kind}
           durationLabel={item.durationLabel}
           aspect="wide"
           imageUri={item.kind === 'highlight' ? item.thumbnailUrl : undefined}
         />
-      </View>
+      </Pressable>
 
       <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <VisibilityPill isPublic={item.isPublic} onPress={onToggleVisibility}/>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Switch value={item.isPublic} onChange={onToggleVisibility} testID={`visibility-switch-${item.id}`}/>
+          <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text2 }}>
+            {item.isPublic ? 'Público' : 'Privado'}
+          </Text>
         </View>
         <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text, lineHeight: 17 }}>{item.title}</Text>
         {/* El UUID del partido NO se muestra (regla: ningún ID en pantalla).
@@ -331,32 +350,6 @@ function ItemRow({ item, onToggleVisibility, onEdit, onOpen }: {
         )}
 
         <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-          {/* Acción explícita de publicar/despublicar. El chip de arriba es solo el
-              badge de estado; este botón etiquetado es la acción descubrible. */}
-          {item.isPublic ? (
-            <Pressable onPress={onToggleVisibility} style={{
-              flexDirection: 'row', alignItems: 'center', gap: 4,
-              borderWidth: 1, borderColor: colors.line, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
-            }}>
-              <Lock size={11} color={colors.text2}/>
-              <Text style={{ color: colors.text2, fontWeight: '700', fontSize: 11 }}>Hacer privado</Text>
-            </Pressable>
-          ) : (
-            <Pressable onPress={onToggleVisibility} style={{
-              flexDirection: 'row', alignItems: 'center', gap: 4,
-              backgroundColor: colors.accent, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
-            }}>
-              <Globe size={12} color={colors.ink}/>
-              <Text style={{ color: colors.ink, fontWeight: '800', fontSize: 11 }}>Hacer público</Text>
-            </Pressable>
-          )}
-          <Pressable onPress={onOpen} style={{
-            flexDirection: 'row', alignItems: 'center', gap: 4,
-            borderWidth: 1, borderColor: colors.line, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
-          }}>
-            <Play size={11} color={colors.text2}/>
-            <Text style={{ color: colors.text2, fontWeight: '700', fontSize: 11 }}>Reproducir</Text>
-          </Pressable>
           {onEdit && (
             <Pressable onPress={onEdit} style={{
               flexDirection: 'row', alignItems: 'center', gap: 4,
