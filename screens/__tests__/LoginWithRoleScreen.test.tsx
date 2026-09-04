@@ -15,11 +15,12 @@ import { ThemeProvider } from '../../theme';
 import { LoginWithRoleScreen } from '../LoginWithRoleScreen';
 
 const mockLoginWithEmailPassword = jest.fn();
+const mockLoginWithGoogle = jest.fn();
 
 jest.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({
     loginWithEmailPassword: mockLoginWithEmailPassword,
-    loginWithGoogle: jest.fn(),
+    loginWithGoogle: mockLoginWithGoogle,
     loginWithApple: jest.fn(),
     isLoading: false,
   }),
@@ -40,6 +41,7 @@ function fillCredentials(getByPlaceholderText: any) {
 
 beforeEach(() => {
   mockLoginWithEmailPassword.mockReset();
+  mockLoginWithGoogle.mockReset();
 });
 
 describe('LoginWithRoleScreen — login por email', () => {
@@ -109,5 +111,50 @@ describe('LoginWithRoleScreen — login por email', () => {
     fireEvent.press(getByText('Olvidé mi contraseña'));
 
     expect(onForgot).toHaveBeenCalledWith('raulsncz@gmail.com');
+  });
+});
+
+/**
+ * Login con Google — bug real: `GoogleSignin.signIn()` (v15) devuelve
+ * `{ type: 'cancelled', data: null }` cuando el usuario cierra el selector de
+ * cuenta sin elegir ninguna, y `AuthContext.loginWithGoogle` (antes de este fix)
+ * hacía `data!.idToken` sin chequear — reventaba con
+ * "Cannot read property 'idToken' of null" en vez de simplemente no hacer nada.
+ * `loginWithGoogle` ahora traduce ese caso a `new Error('SIGN_IN_CANCELLED')`,
+ * y esta pantalla no debe mostrarlo como error.
+ */
+describe('LoginWithRoleScreen — login con Google', () => {
+  it('cancelar el selector de Google NO muestra ningún error', async () => {
+    mockLoginWithGoogle.mockRejectedValue(new Error('SIGN_IN_CANCELLED'));
+    const onLogin = jest.fn();
+    const { getByText, queryByText } = renderScreen({ onLogin });
+
+    fireEvent.press(getByText('Continuar con Google'));
+
+    await waitFor(() => expect(mockLoginWithGoogle).toHaveBeenCalledTimes(1));
+    expect(queryByText('Ocurrió un error inesperado. Intenta de nuevo.')).toBeNull();
+    expect(onLogin).not.toHaveBeenCalled();
+  });
+
+  it('un error real de Google SÍ se muestra', async () => {
+    mockLoginWithGoogle.mockRejectedValue(new Error('network error'));
+    const { getByText } = renderScreen();
+
+    fireEvent.press(getByText('Continuar con Google'));
+
+    await waitFor(() => expect(getByText('Sin conexión a internet. Verifica tu red e intenta de nuevo.')).toBeTruthy());
+  });
+
+  it('login exitoso con Google → onLogin con el rol', async () => {
+    mockLoginWithGoogle.mockResolvedValue({
+      status: 'authenticated',
+      user: { id: 'u1', email: 'a@b.com', username: 'raul', isClub: false },
+    });
+    const onLogin = jest.fn();
+    const { getByText } = renderScreen({ onLogin });
+
+    fireEvent.press(getByText('Continuar con Google'));
+
+    await waitFor(() => expect(onLogin).toHaveBeenCalledWith('player'));
   });
 });

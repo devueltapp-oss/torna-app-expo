@@ -95,7 +95,12 @@ export function LoginWithRoleScreen({ onLogin, onRegister, onNeedsRegistration, 
         onNeedsRegistration?.(result, provider);
       }
     } catch (err: any) {
-      setError(friendlyError(err));
+      // Cancelar el selector de cuenta de Google no es un error: es como
+      // tocar "Cancelar" en un diálogo. Mostrar "Ocurrió un error inesperado"
+      // ahí asusta por algo que la persona hizo a propósito.
+      if (err?.message !== 'SIGN_IN_CANCELLED') {
+        setError(friendlyError(err));
+      }
     } finally {
       setSocialLoading(null);
     }
@@ -112,6 +117,7 @@ export function LoginWithRoleScreen({ onLogin, onRegister, onNeedsRegistration, 
           gap: 18,
         }}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         {/* Logo */}
         <View style={{ alignItems: 'center', marginBottom: 8 }}>

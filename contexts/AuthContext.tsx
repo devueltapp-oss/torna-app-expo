@@ -18,7 +18,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { AppState } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, isSuccessResponse } from '@react-native-google-signin/google-signin';
 import firebaseAuth from '@react-native-firebase/auth';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { identifyUser, clearIdentity } from '../services/notifications';
@@ -461,8 +461,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       webClientId: '83738503515-bit0pprnegn1eg2r3eodqshfgk64eh4d.apps.googleusercontent.com',
     });
     await GoogleSignin.hasPlayServices();
-    const { data } = await GoogleSignin.signIn();
-    const googleCredential = firebaseAuth.GoogleAuthProvider.credential(data!.idToken);
+    const response = await GoogleSignin.signIn();
+    // ⚠️ v15 de la lib devuelve `{ type: 'cancelled', data: null }` cuando el
+    // usuario cierra el selector de cuenta sin elegir ninguna — NO lanza. El
+    // `data!.idToken` de antes confiaba ciegamente en que `data` nunca fuera
+    // null (el `!` es solo un aviso a TypeScript, no hace nada en runtime) y
+    // reventaba con "Cannot read property 'idToken' of null" apenas alguien
+    // cancelaba, en vez de simplemente volver a la pantalla de login.
+    if (!isSuccessResponse(response)) {
+      throw new Error('SIGN_IN_CANCELLED');
+    }
+    const googleCredential = firebaseAuth.GoogleAuthProvider.credential(response.data.idToken);
     const userCredential = await firebaseAuth().signInWithCredential(googleCredential);
     const firebaseIdToken = await userCredential.user.getIdToken();
     return _socialLogin(firebaseIdToken);
