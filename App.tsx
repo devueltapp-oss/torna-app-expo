@@ -648,17 +648,25 @@ function ReserveBlocksContainer({ route, navigation }: { route: any; navigation:
 function ReserveInviteScreen({ route, navigation }: { route: any; navigation: any }) {
   const { courtId, courtLabel, date, slotStart, slotEnd, durationMinutes } = route.params || ({} as any);
   const submitting = React.useRef(false);
+  // Nivel del host para precargar el campo "Nivel" — es un fetch propio porque
+  // esta pantalla es un componente aparte (no ve el `owner` de MainPlayer).
+  const { user } = useAuth();
+  const { player: ownProfile } = useUserProfile(user?.id);
+  // Compañero/rivales: gente que seguís o te sigue como sugerencia por defecto
+  // (sin clubs — ver el comentario de `usePartnerSearch`), y esa misma lista
+  // rankeada arriba al buscar por nombre. Antes esta pantalla pegaba directo a
+  // `searchUsers` sin sugerencias: el overlay quedaba vacío hasta escribir.
+  const { connections: invitableConnections, searchPartners } = usePartnerSearch(user?.id);
   return (
     <ReserveStep3Screen
-      onSearchPlayers={async (q): Promise<{ id: string; name: string; username: string }[]> => {
-        const res = await searchUsers(q);
-        return res.map((u) => ({ id: u.id, name: u.name ?? u.username, username: atHandle(u.username) }));
-      }}
+      invitablePlayers={invitableConnections}
+      onSearchPlayers={searchPartners}
       summary={{
         title: courtLabel || 'Cancha',
         subtitle: `${date} · ${slotStart}–${slotEnd} · ${durationMinutes} min`,
         priceLabel: 'Pago en el club',
       }}
+      hostCategory={ownProfile?.category ?? null}
       onBack={() => navigation.goBack()}
       onConfirm={async (payload) => {
         if (submitting.current) return;

@@ -7,7 +7,9 @@
  * todos los usuarios que NO son clubs.
  *
  * Cómo se cumple:
- *   - `connections`: followers + following del usuario (deduplicados). Se usan
+ *   - `connections`: followers + following del usuario, deduplicados y **sin
+ *     clubs** (un club es un `User` como cualquiera, así que puede aparecer en
+ *     tus follows — acá no sirve: no se elige un club de compañero). Se usan
  *     como sugerencias por defecto en el overlay cuando el input está vacío.
  *   - `searchPartners(q)`: pega a `GET /user/search` (que ya excluye clubs y al
  *     propio usuario) y **rankea** los resultados dejando las conexiones arriba,
@@ -47,8 +49,10 @@ export function usePartnerSearch(userId?: string): PartnerSearch {
       .then(([following, followers]) => {
         if (cancelled) return;
         // Following primero (mis elegidos) y luego followers; dedupe por id.
+        // Sin clubs: acá se elige compañero/rival de carne y hueso.
         const byId = new Map<string, InvitablePlayer>();
         [...following, ...followers].forEach((u) => {
+          if (u.isClub) return;
           if (!byId.has(u.id)) {
             byId.set(u.id, { id: u.id, name: u.name, username: atHandle(u.username) });
           }
