@@ -48,7 +48,7 @@ describe('ProfileScreen (club) — eliminar cuenta', () => {
     expect(queryByTestId('settings-delete-account')).toBeNull();
 
     fireEvent.press(getByText('Seguridad'));
-    expect(getByText('Eliminar cuenta')).toBeTruthy();
+    expect(getByText('Eliminar mi cuenta')).toBeTruthy();
   });
 
   it('confirmar borra la cuenta del club y reusa logout()', async () => {

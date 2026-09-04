@@ -275,7 +275,7 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
           'y te vas a dar de baja de tus partidas.' +
           (deleteError ? `\n\n${deleteError}` : '')
         }
-        confirmLabel="Eliminar cuenta"
+        confirmLabel="Eliminar mi cuenta"
         destructive
         loading={deleting}
         onConfirm={handleDeleteAccount}
@@ -368,7 +368,7 @@ function OverviewSection({
       <View style={{ paddingHorizontal: 16, paddingTop: 18 }}>
         <SectionHeader title="Zona de peligro"/>
       </View>
-      <SettingsRow label="Eliminar cuenta" value="" onPress={onDeleteAccount} danger/>
+      <SettingsRow label="Eliminar mi cuenta" value="" onPress={onDeleteAccount} danger/>
 
       <Text style={{ paddingHorizontal: 18, paddingTop: 20, fontSize: 11, color: colors.muted2 }}>
         Torna v1.0.0

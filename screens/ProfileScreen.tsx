@@ -185,7 +185,7 @@ export function ProfileScreen({ profile, onSave, onChangePassword, onChangeTab, 
               })}
             >
               <Text style={{ fontSize: 14, fontWeight: '700', color: colors.destructive }}>
-                Eliminar cuenta
+                Eliminar mi cuenta
               </Text>
             </Pressable>
           </>
@@ -202,7 +202,7 @@ export function ProfileScreen({ profile, onSave, onChangePassword, onChangeTab, 
           'pendientes, primero hay que resolverlas.' +
           (deleteError ? `\n\n${deleteError}` : '')
         }
-        confirmLabel="Eliminar cuenta"
+        confirmLabel="Eliminar mi cuenta"
         destructive
         loading={deleting}
         onConfirm={handleDeleteAccount}

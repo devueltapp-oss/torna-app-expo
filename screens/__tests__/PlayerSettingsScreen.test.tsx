@@ -64,7 +64,7 @@ describe('PlayerSettingsScreen — eliminar cuenta', () => {
   it('la fila vive en su propia sección, separada de "Cerrar sesión"', () => {
     const { getByText } = renderScreen();
     expect(getByText('Zona de peligro')).toBeTruthy();
-    expect(getByText('Eliminar cuenta')).toBeTruthy();
+    expect(getByText('Eliminar mi cuenta')).toBeTruthy();
     expect(getByText('Cerrar sesión')).toBeTruthy();
   });
 
