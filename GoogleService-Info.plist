@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>83738503515-5pdsdh9gumdctbpci6upucgpa41brbkc.apps.googleusercontent.com</string>
+	<string>83738503515-rcsmu4aakb5lreqr3qip7htjutrltgbl.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.83738503515-5pdsdh9gumdctbpci6upucgpa41brbkc</string>
+	<string>com.googleusercontent.apps.83738503515-rcsmu4aakb5lreqr3qip7htjutrltgbl</string>
 	<key>API_KEY</key>
 	<string>AIzaSyD6ztKeJUT2QTb1kMhyDuhlfgxY52Mug7g</string>
 	<key>GCM_SENDER_ID</key>
@@ -13,7 +13,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>io.torna</string>
+	<string>com.Tornapp</string>
 	<key>PROJECT_ID</key>
 	<string>torna-7a62f</string>
 	<key>STORAGE_BUCKET</key>
@@ -29,6 +29,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:83738503515:ios:155b21198c85dbb2d2127e</string>
+	<string>1:83738503515:ios:e8c5bb2ad53de7cbd2127e</string>
 </dict>
 </plist>
