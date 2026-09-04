@@ -16,7 +16,7 @@
     "preview": {
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "ios": { "simulator": false, "image": "macos-sequoia-15.3-xcode-16.2" },
+      "ios": { "simulator": false },
       "env": {
         "APP_ENV": "preview",
         "EXPO_PUBLIC_API_URL": "https://api.torna.io",
@@ -25,7 +25,7 @@
     },
     "production": {
       "android": { "buildType": "app-bundle" },
-      "ios": { "image": "macos-sequoia-15.3-xcode-16.2" },
+      "ios": { "image": "latest" },
       "env": {
         "APP_ENV": "production",
         "EXPO_PUBLIC_API_URL": "https://api.torna.io",

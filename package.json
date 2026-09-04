@@ -68,5 +68,13 @@
     "react-test-renderer": "19.2.0",
     "typescript": "~5.9.2"
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": ["react-native-create-thumbnail"],
+        "listUnknownPackages": false
+      }
+    }
+  }
 }
