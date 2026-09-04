@@ -13,12 +13,7 @@
       "backgroundColor": "#0F1E47"
     },
     "plugins": [
-      [
-        "expo-av",
-        {
-          "microphonePermission": "Torna necesita el micrófono para reproducir audio de los partidos en vivo."
-        }
-      ],
+      "expo-video",
       "expo-secure-store",
       [
         "expo-location",
@@ -28,16 +23,24 @@
           "isAndroidBackgroundLocationEnabled": false
         }
       ],
-      ["onesignal-expo-plugin", { "mode": "production" }],
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "production"
+        }
+      ],
       "@react-native-firebase/app",
       "@react-native-google-signin/google-signin",
       "expo-apple-authentication",
       [
         "expo-build-properties",
         {
-          "ios": { "useFrameworks": "static" }
+          "ios": {
+            "useFrameworks": "static"
+          }
         }
-      ]
+      ],
+      "expo-font"
     ],
     "ios": {
       "supportsTablet": true,
@@ -46,7 +49,6 @@
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSMicrophoneUsageDescription": "Torna necesita el micrófono para reproducir audio de los partidos en vivo.",
         "NSPhotoLibraryUsageDescription": "Torna accede a tu galería para subir fotos y videos.",
         "NSPhotoLibraryAddUsageDescription": "Torna guarda clips en tu galería.",
         "NSLocationWhenInUseUsageDescription": "Torna usa tu ubicación para avisarte de partidas abiertas cerca tuyo. No se muestra a nadie ni se comparte con otros jugadores."
