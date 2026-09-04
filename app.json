@@ -3,7 +3,7 @@
     "name": "Torna",
     "slug": "tornapp",
     "owner": "teamtornas-organization",
-    "version": "1.0.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/torna-icon.png",
     "userInterfaceStyle": "automatic",
@@ -46,7 +46,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "io.torna",
-      "buildNumber": "4",
+      "buildNumber": "8",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
