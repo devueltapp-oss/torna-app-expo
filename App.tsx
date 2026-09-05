@@ -77,6 +77,7 @@ import type { CourtData, PlayerData } from './components/cards';
 import { updateHighlightMeta } from './api/highlights';
 import { fetchClubCourts, fetchCourtSlots, createReservation } from './api/clubs';
 import type { CourtSlots } from './lib/reservation';
+import { formatClubDate } from './lib/clubTime';
 import type { DayOption } from './screens';
 import type {
   LibraryItem, LibraryMatch, LibraryHighlight,
@@ -663,7 +664,13 @@ function ReserveInviteScreen({ route, navigation }: { route: any; navigation: an
       onSearchPlayers={searchPartners}
       summary={{
         title: courtLabel || 'Cancha',
-        subtitle: `${date} · ${slotStart}–${slotEnd} · ${durationMinutes} min`,
+        // Fecha (línea 1) y horas del bloque (línea 2) separadas — antes iban
+        // concatenadas en una sola línea y no se entendía a primera vista.
+        // `formatClubDate` (mismo helper que usan `useMyGames`/`useOpenGames`)
+        // formatea en UTC: `date` es un YYYY-MM-DD sin hora, y sin fijar la
+        // zona un dispositivo en huso negativo podía leer el día anterior.
+        date: formatClubDate(date) || date,
+        time: `${slotStart}–${slotEnd} · ${durationMinutes} min`,
         priceLabel: 'Pago en el club',
       }}
       hostCategory={ownProfile?.category ?? null}

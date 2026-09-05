@@ -11,7 +11,7 @@ import { render, fireEvent, act } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme';
 import { ReserveStep3Screen } from '../ReserveStep3Screen';
 
-const summary = { title: 'Cancha 1', subtitle: 'Hoy · 18:00–19:30', priceLabel: '$20' };
+const summary = { title: 'Cancha 1', date: 'Hoy', time: '18:00–19:30', priceLabel: '$20' };
 
 function renderScreen(props: Partial<React.ComponentProps<typeof ReserveStep3Screen>> = {}) {
   const onConfirm = jest.fn();
