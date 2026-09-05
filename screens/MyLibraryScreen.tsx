@@ -22,7 +22,7 @@
  * dos veces.
  */
 import React from 'react';
-import { View, Text, Pressable, ScrollView, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, Pressable, ScrollView, Modal, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronDown, Lock, Scissors, Trophy, Pencil, X } from 'lucide-react-native';
 import { useTheme } from '../theme';
@@ -154,10 +154,25 @@ export function MyLibraryScreen({
           style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}
         >
           <Pressable style={{ flex: 1 }} onPress={() => setEditing(null)}/>
-          <View style={{
-            backgroundColor: colors.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20,
-            padding: 20, paddingBottom: 32, gap: 14,
-          }}>
+          {/*
+            `Pressable` y no `View`: además del backdrop de arriba (que cierra TODO
+            el modal), tocar un hueco *dentro* de la hoja —el título, el hint del
+            contador, el padding entre elementos— tiene que poder cerrar el
+            teclado sin descartar la edición. Antes esos huecos no tenían ningún
+            handler: en iOS, con un `TextInput multiline` (sin `blurOnSubmit` ni
+            Return que envíe), esa era la ÚNICA forma de cerrar el teclado que le
+            quedaba a la pantalla, y no existía — el teclado quedaba pegado.
+            El `Input`/`Button`/`X` de adentro son touchables propios y capturan
+            su toque primero, así que este `onPress` solo dispara en el espacio
+            vacío. Ver también el accessory "Listo" que suma `Input` para
+            multilínea (`components/ui.tsx`).
+          */}
+          <Pressable
+            onPress={Keyboard.dismiss}
+            style={{
+              backgroundColor: colors.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+              padding: 20, paddingBottom: 32, gap: 14,
+            }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <Text style={{ fontSize: 17, fontWeight: '800', color: colors.text }}>Descripción del highlight</Text>
               <Pressable onPress={() => setEditing(null)} hitSlop={8}>
@@ -189,7 +204,7 @@ export function MyLibraryScreen({
                 </Button>
               </View>
             </View>
-          </View>
+          </Pressable>
         </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
