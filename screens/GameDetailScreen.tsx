@@ -55,7 +55,7 @@ import React from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet, TouchableOpacity,
   StatusBar, BackHandler, useWindowDimensions, TextInput, FlatList,
-  ActivityIndicator, KeyboardAvoidingView, Platform, Keyboard,
+  ActivityIndicator, KeyboardAvoidingView, Platform, Keyboard, Animated, Easing,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Svg, Rect, Line } from 'react-native-svg';
@@ -248,16 +248,33 @@ export function GameDetailScreen({
      * cerrarlo salvo enviando el comentario. Solo hace algo si `composing` es
      * `true` (`composingRef`, no el `composing` de cuando se armó el gesto):
      * mirando video sin escribir, este gesto no hace nada.
+     *
+     * El mismo `Pan` también cierra el visor con un swipe RÁPIDO de derecha a
+     * izquierda — el mismo gesto de "volver" que la X de arriba a la derecha,
+     * disponible en toda la superficie del video (2026-09-04). Solo en
+     * portrait (`fullscreenRef`, no `fullscreen`: el gesto se arma una vez con
+     * `useMemo([])` y necesita el valor vigente) — en fullscreen la salida es
+     * "Minimizar" (volver a portrait), no cerrar el partido. Exige velocidad
+     * (`velocityX`) además de distancia para no confundirlo con un scroll lento
+     * ni con el swipe-down de arriba (que además viaja casi vertical).
      */
-    const swipeDownDismissKeyboard = Gesture.Pan()
+    const swipeGestures = Gesture.Pan()
       .onEnd((e) => {
         if (composingRef.current && e.translationY > 60 && e.velocityY > 0) {
           Keyboard.dismiss();
+          return;
+        }
+        if (
+          !fullscreenRef.current
+          && e.translationX < -70 && e.velocityX < -600
+          && Math.abs(e.translationY) < 60
+        ) {
+          onBackRef.current?.();
         }
       });
 
     // Simultáneos: pellizcar y deslizar no deben cancelar el doble toque ni al revés.
-    return Gesture.Simultaneous(doubleTap, pinch, swipeDownDismissKeyboard);
+    return Gesture.Simultaneous(doubleTap, pinch, swipeGestures);
   }, []);
 
   /**
@@ -281,8 +298,17 @@ export function GameDetailScreen({
   const togglePausedRef = React.useRef(togglePaused);
   React.useEffect(() => { togglePausedRef.current = togglePaused; }, [togglePaused]);
 
+  /** Puente para el swipe-back del video (ver `videoGestures`): siempre la
+   *  versión vigente de `onBack`, aunque el gesto se haya armado una vez. */
+  const onBackRef = React.useRef(onBack);
+  React.useEffect(() => { onBackRef.current = onBack; }, [onBack]);
+
   // Pantalla completa in-app (landscape) + paneles de comentarios.
   const [fullscreen, setFullscreen] = React.useState(false);
+  /** Mismo puente que `onBackRef`, para que el swipe-back del video (portrait
+   *  únicamente) lea el valor vigente de `fullscreen`. */
+  const fullscreenRef = React.useRef(fullscreen);
+  React.useEffect(() => { fullscreenRef.current = fullscreen; }, [fullscreen]);
   /**
    * ⚠️ La barra de escribir, los chips de cámara, los comentarios flotantes y
    * el panel de jugadores son `position: absolute, bottom: 0/62/...` sobre el
@@ -297,6 +323,86 @@ export function GameDetailScreen({
    */
   const insets = useSafeAreaInsets();
   const bottomInset = fullscreen ? 0 : insets.bottom;
+
+  /**
+   * ⚠️ **Sincroniza la barra de comentarios con la animación NATIVA del
+   * teclado (2026-09-04, ajustado el mismo día — ver el `Animated.Value` de
+   * abajo).** Antes este contenedor era un `KeyboardAvoidingView` con
+   * `behavior="padding"`: internamente dispara un `LayoutAnimation` al
+   * recibir `keyboardWillShow`, que corre en un commit de layout aparte del
+   * que anima el teclado del propio OS — resultado, dos animaciones que no
+   * arrancan juntas (el teclado sube y la barra "salta" detrás, con un
+   * desfase visible). Acá se escucha `keyboardWillShow`/`keyboardWillHide`
+   * directo y se anima un `Animated.Value` con el MISMO `duration`/`easing`
+   * que reporta el evento del teclado (ver `iosKeyboardEasing`), sin ningún
+   * `setState` de por medio (el `Animated.timing` arranca directo en el
+   * callback del listener).
+   *
+   * ⚠️ **Ese primer arreglo dejó un desfase corto pero perceptible**: video,
+   * barra y comentarios suben juntos, pero un cuadro o dos detrás del teclado.
+   * Causa: TODO ese contenido compartía un solo `paddingBottom` animado, y
+   * `paddingBottom` es una prop de LAYOUT — la API `Animated` clásica solo
+   * puede correrla con `useNativeDriver:false` (hilo de JS), así que cada
+   * cuadro cruzaba el bridge y Yoga volvía a calcular el layout de TODO lo de
+   * adentro (video + `FlatList` de comentarios + `ScrollView` de cámaras).
+   * Con `react-native-reanimated` (`useAnimatedKeyboard()`, hilo de UI, cero
+   * bridge) esto no pasaría — pero reanimated **no está instalado** en este
+   * proyecto (ver el comentario de `videoGestures`/`runOnJS` más arriba;
+   * agregarlo es un cambio de dependencia + pod install que excede este
+   * arreglo). La mitigación sin reanimated: separar qué necesita encogerse
+   * de verdad (el video — ver `iosKeyboardOffset`, sigue en el hilo de JS)
+   * de qué solo necesita desplazarse (comentarios/barra/chips de cámara, de
+   * tamaño fijo — ver `iosKeyboardOffsetNative`, con `useNativeDriver:true`,
+   * en el hilo de UI). El video sigue pudiendo notarse un pelo detrás en
+   * cuadros muy cargados; el resto queda pegado al teclado sin ese costo.
+   *
+   * Solo iOS: en Android el resize ya lo resuelve `adjustResize` del
+   * manifest (ver el comentario grande más abajo), así que ahí se sigue
+   * usando el `KeyboardAvoidingView` normal (`behavior="height"`), sin tocar
+   * nada de esto.
+   */
+  const iosKeyboardOffset = React.useRef(new Animated.Value(0)).current;
+  /**
+   * ⚠️ **Segundo `Animated.Value`, en el hilo de UI (2026-09-04).** `iosKeyboardOffset`
+   * de arriba anima `paddingBottom` — una prop de LAYOUT, que la API `Animated`
+   * clásica solo puede correr con `useNativeDriver:false` (hilo de JS): cada cuadro
+   * cruza el bridge y fuerza un recálculo de Yoga de TODO lo que hay adentro del
+   * contenedor (video + `FlatList` de comentarios + `ScrollView` de cámaras), que es
+   * pesado y es lo que se atrasa un cuadro o dos detrás del teclado nativo.
+   *
+   * La barra de escribir, los comentarios flotantes y los chips de cámara NO
+   * necesitan encogerse — son `position:absolute, bottom:N` de tamaño fijo, así
+   * que su desplazamiento es una traslación pura. Eso SÍ lo puede correr
+   * `useNativeDriver:true` (`transform`), en el hilo de UI, sin tocar el bridge y
+   * sin relayout — el mismo mecanismo con el que `useAnimatedKeyboard` de
+   * `react-native-reanimated` resuelve esto sin desfase, pero con la API clásica
+   * (reanimated NO está instalado en este proyecto — ver el comentario de
+   * `videoGestures`/`runOnJS` más arriba). Solo el video sigue pagando el costo de
+   * layout por cuadro; el resto del chrome queda perfectamente pegado al teclado.
+   */
+  const iosKeyboardOffsetNative = React.useRef(new Animated.Value(0)).current;
+  React.useEffect(() => {
+    if (Platform.OS !== 'ios') return undefined;
+    const animateTo = (toValue: number, event: { duration?: number; easing?: string }) => {
+      const duration = event.duration && event.duration > 10 ? event.duration : 250;
+      const easing = iosKeyboardEasing(event.easing);
+      // Arrancan las DOS en el mismo callback del evento nativo, sin ningún
+      // `setState` de por medio: es lo que mantiene la barra pegada al teclado
+      // sin un salto extra de render antes de que la animación empiece.
+      Animated.timing(iosKeyboardOffset, { toValue, duration, easing, useNativeDriver: false }).start();
+      Animated.timing(iosKeyboardOffsetNative, { toValue, duration, easing, useNativeDriver: true }).start();
+    };
+    const show = Keyboard.addListener('keyboardWillShow', (e) => animateTo(e.endCoordinates?.height ?? 0, e));
+    const hide = Keyboard.addListener('keyboardWillHide', (e) => animateTo(0, e));
+    return () => { show.remove(); hide.remove(); };
+  }, [iosKeyboardOffset, iosKeyboardOffsetNative]);
+  /** Transform que sigue al teclado en el hilo de UI (ver comentario de arriba).
+   *  `null` en Android: ahí el desplazamiento lo sigue resolviendo por completo
+   *  el `KeyboardAvoidingView` de abajo, sin tocar esto. */
+  const iosBottomBarTransform = Platform.OS === 'ios'
+    ? { transform: [{ translateY: Animated.multiply(iosKeyboardOffsetNative, -1) }] }
+    : null;
+
   const [overlayComments, setOverlayComments] = React.useState(false);
   /**
    * Portrait: el video ocupa TODA la pantalla y los paneles (comentarios /
@@ -446,6 +552,29 @@ export function GameDetailScreen({
     [game.club, game.clubAvatar, game.players],
   );
 
+  /**
+   * Contenedor del video + overlays, con el teclado sincronizado (ver
+   * `iosKeyboardOffset`/`iosKeyboardOffsetNative` más arriba):
+   *  - **iOS**: este wrapper YA NO anima nada — es una `View` simple. El
+   *    `paddingBottom` que antes vivía acá se movió a un `Animated.View` propio
+   *    alrededor SOLO del video (ver más abajo), así el resto del chrome (barra
+   *    de escribir, comentarios, chips de cámara) no paga ese relayout.
+   *  - **Android**: sigue siendo el `KeyboardAvoidingView` de RN
+   *    (`behavior="height"`); ahí el resize ya lo resuelve `adjustResize` del
+   *    manifest y no se reportó el desfase.
+   */
+  const keyboardWrapperStyle = fullscreen
+    ? { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 50 }
+    // El video se queda con TODO el alto libre, haya panel o no: el panel de
+    // jugadores mide lo que ocupa su contenido, así que lo que sobra es video.
+    // Antes el video se encogía a 16:9 fijo y el panel se quedaba con el
+    // resto, dejando un hueco vacío enorme abajo del último jugador.
+    : { flex: 1, backgroundColor: '#000' };
+  const KeyboardWrapper = Platform.OS === 'ios' ? View : KeyboardAvoidingView;
+  const keyboardWrapperProps = Platform.OS === 'ios'
+    ? { style: keyboardWrapperStyle }
+    : { behavior: 'height' as const, style: keyboardWrapperStyle };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={fullscreen ? [] : ['top']}>
       <StatusBar hidden={fullscreen} />
@@ -456,30 +585,38 @@ export function GameDetailScreen({
           el chip del club, y el lugar del menú lo ocupa Compartir, que sí funciona. */}
       {/* HLS player — la MISMA instancia de <Video> en los tres tamaños: solo cambia
           el estilo del contenedor, así el stream no se reinicia al expandir/encoger. */}
-      {/* `KeyboardAvoidingView` y no `View`: en iOS no hay equivalente al
-          `adjustResize` de Android — sin esto el teclado se dibuja ENCIMA de la
-          barra de comentarios (`position:absolute, bottom:0`) en vez de
-          empujarla, y ni el campo ni los botones de enviar (nativo o de la app)
-          quedan alcanzables. `behavior:'padding'` reduce el alto de este
-          contenedor lo que mide el teclado, así el `bottom:0` de la barra
-          termina arriba de él. En Android no hace falta (el manifest ya
-          resuelve el resize), así que ahí queda en `undefined` para no doblar
-          el ajuste. */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={fullscreen
-          ? { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 50 }
-          // El video se queda con TODO el alto libre, haya panel o no: el panel de
-          // jugadores mide lo que ocupa su contenido, así que lo que sobra es video.
-          // Antes el video se encogía a 16:9 fijo y el panel se quedaba con el
-          // resto, dejando un hueco vacío enorme abajo del último jugador.
-          : { flex: 1, backgroundColor: '#000' }}
-      >
+      {/* En iOS no hay equivalente al `adjustResize` de Android — sin esto el
+          teclado se dibuja ENCIMA de la barra de comentarios
+          (`position:absolute, bottom:0`) en vez de empujarla, y ni el campo ni
+          los botones de enviar (nativo o de la app) quedan alcanzables. Ver
+          `iosKeyboardOffset`/`keyboardWrapperProps` más arriba: el
+          `paddingBottom` (animado a mano en iOS, o vía `KeyboardAvoidingView`
+          en Android) reduce el alto de este contenedor lo que mide el
+          teclado, así el `bottom:0` de la barra termina arriba de él. */}
+      <KeyboardWrapper {...keyboardWrapperProps}>
         <View
           style={fullscreen
             ? { flex: 1, backgroundColor: '#000', position: 'relative', alignItems: 'center', justifyContent: 'center' }
             : { flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
         >
+          {/*
+            ⚠️ Este `Animated.View` es lo ÚNICO que sigue animando `paddingBottom`
+            (ver `iosKeyboardOffset`): es el único elemento de acá adentro que
+            necesita ENCOGERSE de verdad (el video es `absoluteFill`, estirado
+            entre el top y el bottom del contenedor) en vez de solo desplazarse.
+            Antes este padding vivía en el `KeyboardWrapper` de arriba, así que
+            CADA cuadro de la animación recalculaba el layout de todo lo que
+            hay abajo (la `FlatList` de comentarios, el `ScrollView` de
+            cámaras) — de ahí el desfase perceptible. Aislado acá, ese costo de
+            layout por cuadro es solo el del video.
+          */}
+          <Animated.View
+            style={[
+              StyleSheet.absoluteFill,
+              { alignItems: 'center', justifyContent: 'center' },
+              Platform.OS === 'ios' ? { paddingBottom: iosKeyboardOffset } : null,
+            ]}
+          >
           {hasStream ? (
             <GestureDetector gesture={videoGestures}>
             <View style={StyleSheet.absoluteFill}>
@@ -640,6 +777,7 @@ export function GameDetailScreen({
               )}
             </View>
           )}
+          </Animated.View>
 
           {/* Identidad, arriba a la izquierda: club + estado. Es el equivalente al
               chip del anfitrión en un live: quién transmite, y el "Seguir" al lado.
@@ -778,7 +916,11 @@ export function GameDetailScreen({
               sombra para que se lea sobre cualquier imagen. Es lo que permite mirar
               el partido y seguir el chat a la vez. */}
           {!fullscreen && commentsVisible && overlayComentarios.length > 0 && (
-            <View
+            // `Animated.View` (no `View`): en iOS lleva el `transform` nativo de
+            // `iosBottomBarTransform` — es tamaño fijo, así que subir con el
+            // teclado es una traslación pura, sin relayout (ver el comentario de
+            // `iosKeyboardOffsetNative`).
+            <Animated.View
               testID="comments-overlay"
               style={{
                 position: 'absolute', left: 0, right: 0,
@@ -787,6 +929,7 @@ export function GameDetailScreen({
                 // partido. Lo que importa es lo último que se dijo, no el historial
                 // — para leer todo está el scroll de la propia capa.
                 maxHeight: '25%', zIndex: 5,
+                ...iosBottomBarTransform,
               }}
             >
               <FlatList<GameComment>
@@ -815,7 +958,7 @@ export function GameDetailScreen({
                   </View>
                 )}
               />
-            </View>
+            </Animated.View>
           )}
 
           {/* Barra de abajo: escribir + acciones. Es lo que hace que el visor se
@@ -823,12 +966,19 @@ export function GameDetailScreen({
               desde aquí, sin salir del partido, y las acciones quedan a mano
               derecha (pulgar). */}
           {!fullscreen && (
-            <View
+            // `Animated.View` por el mismo motivo que `comments-overlay`: en iOS
+            // sube pegada al teclado vía `transform` nativo, sin esperar al
+            // `paddingBottom` (JS) del video. `bottom`/el resto de propiedades
+            // quedan como propiedades planas del mismo objeto (no un array) para
+            // no romper `compose-bar-row`.props.style.bottom, que fija el test del
+            // inset de Android.
+            <Animated.View
               testID="compose-bar-row"
               style={{
                 position: 'absolute', left: 0, right: 0, bottom: bottomInset, zIndex: 10,
                 flexDirection: 'row', alignItems: 'center', gap: 8,
                 paddingHorizontal: 12, paddingBottom: 12, paddingTop: 10,
+                ...iosBottomBarTransform,
               }}
             >
               {/* Se escribe ACÁ MISMO, sobre el video. Antes esto abría un panel que
@@ -938,12 +1088,17 @@ export function GameDetailScreen({
                   <Maximize2 size={18} color="#FFFFFF" />
                 </TouchableOpacity>
               )}
-            </View>
+            </Animated.View>
           )}
 
           {/* Cámaras: chips superpuestos, justo encima de la barra de abajo. */}
           {!fullscreen && game.cameras.length > 1 && (
-            <View style={{ position: 'absolute', left: 0, right: 0, bottom: 62 + bottomInset, zIndex: 10 }}>
+            // Mismo motivo que `comments-overlay`/`compose-bar-row`: traslación
+            // pura vía `transform` nativo en iOS, sin relayout.
+            <Animated.View style={{
+              position: 'absolute', left: 0, right: 0, bottom: 62 + bottomInset, zIndex: 10,
+              ...iosBottomBarTransform,
+            }}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ gap: 8, paddingHorizontal: 12 }}>
                 {game.cameras.map((cam, i) => {
@@ -963,7 +1118,7 @@ export function GameDetailScreen({
                   );
                 })}
               </ScrollView>
-            </View>
+            </Animated.View>
           )}
         </View>
 
@@ -983,7 +1138,7 @@ export function GameDetailScreen({
             />
           </View>
         )}
-      </KeyboardAvoidingView>
+      </KeyboardWrapper>
 
       {/* Ya no hay panel de comentarios en portrait: viven sobre el video y se
           escribe en la barra de abajo. El panel obligaba a encoger el partido
@@ -1120,6 +1275,26 @@ function TeamGroup({ title, players, onOpenPlayer }: {
       })}
     </View>
   );
+}
+
+/**
+ * Traduce el `easing` que reporta `keyboardWillShow`/`keyboardWillHide` de iOS
+ * (`UIViewAnimationCurve`: 'easeIn' | 'easeOut' | 'easeInEaseOut' | 'linear' |
+ * 'keyboard') a una función de `Easing` de RN, para que `Animated.timing`
+ * dibuje la MISMA curva que usa el teclado nativo — si no coinciden, las dos
+ * animaciones arrancan y terminan juntas pero se "adelantan" una a la otra a
+ * mitad de camino. `'keyboard'` (curva 7, propia de UIKit, sin equivalente
+ * exacto en `Easing`) se aproxima con la bezier estándar que usa la comunidad
+ * de RN para este mismo problema.
+ */
+function iosKeyboardEasing(name?: string): (t: number) => number {
+  switch (name) {
+    case 'easeIn': return Easing.in(Easing.ease);
+    case 'easeOut': return Easing.out(Easing.ease);
+    case 'linear': return Easing.linear;
+    case 'easeInEaseOut': return Easing.inOut(Easing.ease);
+    default: return Easing.bezier(0.17, 0.59, 0.4, 0.77); // curva 'keyboard'
+  }
 }
 
 /** Botón circular translúcido para los controles sobre el video. */
