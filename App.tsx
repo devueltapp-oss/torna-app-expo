@@ -904,6 +904,12 @@ function MainPlayer({ navigation, route }: any) {
   }, [inviteGame, myGames]);
   const { matches: apiMatches, refresh: refreshMatches } = usePlayerMatches(user?.id);
 
+  // Mis highlights reales (GET /highlights/my): públicos + privados. Los públicos
+  // se muestran en el perfil; los privados solo en la librería. Declarado acá (y no
+  // más abajo, donde vivía antes) porque el `useEffect` de refresco por foco de más
+  // abajo necesita `refreshHighlights` ya inicializado.
+  const { highlights: apiHighlights, refresh: refreshHighlights } = useMyHighlights(user?.id);
+
   // Directorio de jugadores reales (GET /user/players).
   const { players: playerList, refresh: refreshPlayers } = usePlayers();
 
@@ -949,13 +955,24 @@ function MainPlayer({ navigation, route }: any) {
       refreshMyGames();
       refreshOpen();
       refreshUpcomingFeed();
+      // "Mis partidos" (grabaciones) y "Mis highlights" de la librería tenían el
+      // mismo bug: usePlayerMatches/useMyHighlights cargan una sola vez al montar
+      // y MainPlayer no se desmonta, así que un video recién procesado (llega la
+      // notificación RECORDING_READY) o un highlight recién creado no aparecían
+      // hasta un pull-to-refresh manual o reiniciar la app.
+      refreshMatches();
+      refreshHighlights();
     });
     return unsubscribe;
-  }, [navigation, refreshOwnProfile, refreshMyGames, refreshOpen, refreshUpcomingFeed]);
-
-  // Mis highlights reales (GET /highlights/my): públicos + privados. Los públicos
-  // se muestran en el perfil; los privados solo en la librería.
-  const { highlights: apiHighlights, refresh: refreshHighlights } = useMyHighlights(user?.id);
+  }, [
+    navigation,
+    refreshOwnProfile,
+    refreshMyGames,
+    refreshOpen,
+    refreshUpcomingFeed,
+    refreshMatches,
+    refreshHighlights,
+  ]);
 
   const owner: ProfileOwner = {
     name: user?.name ?? user?.username ?? '',
