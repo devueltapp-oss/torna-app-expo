@@ -1,10 +1,8 @@
 import React from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Svg, Rect, Line } from 'react-native-svg';
-import { InlineVideo } from '../components/InlineVideo';
-import { ChevronLeft, MoreHorizontal, MapPin, Play, Camera, MessageCircle } from 'lucide-react-native';
-import { useIsFocused } from '@react-navigation/native';
+import { ChevronLeft, MoreHorizontal, Play, Camera, MessageCircle, BadgeCheck } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { SectionHeader, StatusBadge, Avatar } from '../components/ui';
@@ -29,16 +27,22 @@ interface Props {
 /**
  * Perfil público de un CLUB, visto por un jugador. Reutiliza el MISMO lenguaje
  * visual que el perfil de usuario (`PlayerProfilePublicView`): header + highlights,
- * para no confundir. Diferencias de club: etiqueta "CLUB" + anillo verde en el
- * avatar, y una sección extra de "Canchas y horarios" para reservar.
+ * para no confundir. Lo propio del club: un **check verde** junto al nombre lo
+ * identifica (antes era un aro verde en el avatar, que ahora significa "en vivo"),
+ * y una sección extra de "Canchas y horarios" para reservar.
+ *
+ * En vivo: aro verde alrededor del avatar + badge "EN VIVO" tocable que abre el
+ * visor. Antes había tarjetas gigantes con preview del stream dentro de la
+ * galería de highlights — tapaban el contenido real del perfil.
  */
 export function ClubProfilePlayerView({
   club, onBack, onToggleFollow, onMessage, onReserveCourt, onOpenLive, onOpenClip,
   onChangeTab, activeTab = 'home', onOpenFollowers, onOpenFollowing,
 }: Props) {
   const { colors } = useTheme();
-  const isFocused = useIsFocused();
-  const hasHighlights = club.highlights.live.length > 0 || club.highlights.clips.length > 0;
+  const liveGameId = club.highlights.live[0]?.id ?? null;
+  const isLive = !!liveGameId;
+  const hasClips = club.highlights.clips.length > 0;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
@@ -60,19 +64,31 @@ export function ClubProfilePlayerView({
           </View>
 
           <View style={{ flexDirection: 'row', gap: 14, marginTop: 18, alignItems: 'flex-end' }}>
-            {/* Diferencia de club: anillo VERDE alrededor del avatar */}
-            <View style={{ borderRadius: 40, borderWidth: 3, borderColor: colors.accent, padding: 2 }}>
-              <Avatar name={club.name} size={72} ringColor={colors.accent}/>
+            {/* En vivo → aro verde alrededor del avatar. Sin vivo, avatar liso:
+                el aro verde ya NO identifica "club" (eso lo hace el check). */}
+            <View style={isLive
+              ? { borderRadius: 40, borderWidth: 3, borderColor: colors.live, padding: 2 }
+              : { borderRadius: 36, overflow: 'hidden' }}>
+              <Avatar name={club.name} size={72} ringColor="#FFFFFF"/>
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              {/* Diferencia de club: etiqueta "CLUB" (en verde) */}
-              <View style={{ alignSelf: 'flex-start', backgroundColor: colors.accent, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
-                <Text style={{ fontSize: 10, fontWeight: '800', color: colors.ink, letterSpacing: 0.8 }}>CLUB</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <Text style={{ fontSize: 20, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.4, flexShrink: 1 }} numberOfLines={1}>{club.name}</Text>
+                {/* Check verde = cuenta de club (reemplaza al viejo aro verde) */}
+                <BadgeCheck size={18} color={colors.accent} fill="none" accessibilityLabel="Cuenta de club"/>
               </View>
-              <Text style={{ fontSize: 20, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.4, marginTop: 4 }} numberOfLines={1}>{club.name}</Text>
               <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 2 }} numberOfLines={1}>
                 {club.handle}{club.city ? ` · ${club.city}` : ''}
               </Text>
+              {isLive && (
+                <Pressable
+                  onPress={() => onOpenLive?.(liveGameId!)}
+                  style={{ alignSelf: 'flex-start', marginTop: 8 }}
+                  accessibilityLabel="Ver en vivo"
+                >
+                  <StatusBadge status="LIVE"/>
+                </Pressable>
+              )}
             </View>
           </View>
 
@@ -110,44 +126,22 @@ export function ClubProfilePlayerView({
           </View>
         </View>
 
-        {/* Highlights — mismo bloque que el perfil de usuario */}
+        {/* Highlights — mismo bloque que el perfil de usuario. Los partidos EN
+            VIVO ya no van acá como tarjetas gigantes: el acceso al vivo es el
+            badge "EN VIVO" del header. */}
         <View style={{ paddingHorizontal: 16, marginTop: 14 }}>
           <SectionHeader title="Momentos destacados"/>
         </View>
-        {!hasHighlights ? (
+        {!hasClips ? (
           <View style={{ alignItems: 'center', paddingHorizontal: 32, paddingVertical: 28, gap: 6 }}>
             <Text style={{ fontSize: 15, fontFamily: fonts.bold, color: colors.text }}>Sin publicaciones</Text>
             <Text style={{ fontSize: 13, color: colors.muted2, textAlign: 'center', lineHeight: 18 }}>
-              Este club todavía no tiene highlights ni partidos en vivo.
+              Este club todavía no tiene highlights.
             </Text>
           </View>
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: 16, gap: 10, paddingBottom: 8 }}>
-            {/* Partidos en vivo primero */}
-            {club.highlights.live.map(g => (
-              <Pressable key={g.id} onPress={() => onOpenLive?.(g.id)}
-                style={{ width: 200, borderRadius: 14, overflow: 'hidden', backgroundColor: colors.ink, borderWidth: 2, borderColor: colors.live }}>
-                <View style={{ height: 118, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                  {g.streamUrl && isFocused ? (
-                    <InlineVideo key={g.id} uri={g.streamUrl} style={StyleSheet.absoluteFill} contentFit="cover"/>
-                  ) : (
-                    <Svg viewBox="0 0 200 110" width="55%" style={{ opacity: 0.22 }}>
-                      <Rect x={20} y={15} width={160} height={80} stroke={colors.accent} strokeWidth={1.5} fill="none"/>
-                      <Line x1={100} y1={15} x2={100} y2={95} stroke={colors.accent} strokeWidth={1.5}/>
-                    </Svg>
-                  )}
-                  <View style={{ position: 'absolute', top: 8, left: 8 }}><StatusBadge status="LIVE"/></View>
-                </View>
-                <View style={{ paddingHorizontal: 10, paddingVertical: 8 }}>
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.accent }}>{g.court}</Text>
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#FFFFFF', marginTop: 2 }} numberOfLines={1}>
-                    {g.players.slice(0, 2).map(p => p.username).join(' · ')}
-                  </Text>
-                </View>
-              </Pressable>
-            ))}
-
             {/* Clips grabados */}
             {club.highlights.clips.map(c => (
               <Pressable key={c.id} onPress={() => onOpenClip?.(c)}

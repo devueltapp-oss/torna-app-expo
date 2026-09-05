@@ -1,19 +1,20 @@
 import React from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Bell, MessageCircle } from 'lucide-react-native';
+import { ChevronLeft, Bell, MessageCircle, BadgeCheck } from 'lucide-react-native';
 import { Svg, Rect, Line } from 'react-native-svg';
-import { InlineVideo } from '../components/InlineVideo';
-import { useIsFocused } from '@react-navigation/native';
 import { useTheme } from '../theme';
-import { fonts } from '../theme/tokens';
 import { StatusBadge, Avatar, TabStrip } from '../components/ui';
 import { ContentThumb } from '../components/ContentThumb';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
-import type { PlayerPublic, PlayerClip } from '../data/types';
+import type { PlayerPublic, PlayerClip, LibraryMatch } from '../data/types';
+
+type TabKey = 'highlights' | 'matches';
 
 interface Props {
   player: PlayerPublic;
+  /** Partidos completos (FINISHED + recordingUrl) de este jugador — GET /game/player/:id/history. */
+  matches?: LibraryMatch[];
   onBack?: () => void;
   onToggleFollow?: () => void;
   onToggleNotify?: () => void;
@@ -21,6 +22,8 @@ interface Props {
   onMessage?: () => void;
   onOpenLive?: (gameId: string) => void;
   onOpenClip?: (clip: PlayerClip) => void;
+  /** Abre la grabación de un partido completo. */
+  onOpenMatch?: (match: LibraryMatch) => void;
   onChangeTab?: (id: TabId) => void;
   activeTab?: TabId;
   onOpenFollowers?: () => void;
@@ -28,29 +31,36 @@ interface Props {
 }
 
 /**
- * Perfil público de OTRO jugador. Mismo hero (avatar+nombre+nivel sobre fondo
- * azul con motivo de cancha) y mismo grid 3-col con `ContentThumb` que
- * `PlayerOwnProfileScreen` — antes esta vista usaba un carrusel horizontal de
- * tarjetas grandes mientras la propia usaba un grid con pestañas, así que ver
- * tu perfil y el de otro jugador se sentía como dos apps distintas para lo
- * mismo. Ver el comentario de `PlayerOwnProfileScreen` para el detalle de qué
- * NO se comparte (ahí solo van tus propias acciones: 🔒/⚙) y por qué acá hay
- * una sola pestaña en vez de dos (todavía no hay historial de partidos de
- * OTRO jugador conectado a esta pantalla).
+ * Perfil público de OTRO usuario (jugador o club). Es la MISMA pantalla que el
+ * perfil propio (`PlayerOwnProfileScreen`): hero azul con motivo de cancha,
+ * avatar con anillo, nombre/username/nivel, `TabStrip` de dos pestañas
+ * (Highlights / Partidos) y grid 3-col con `ContentThumb`. Lo único que cambia:
  *
- * Si el jugador está transmitiendo en vivo, aparece una tarjeta EN VIVO
- * (con preview del stream) arriba del grid — no mezclada adentro: es un
- * evento urgente y transitorio, no un ítem más de la grilla.
+ *   - NO están los botones propios (⚙ ajustes, 🔒 biblioteca privada): acá el
+ *     hueco superior lo ocupa "volver".
+ *   - SÍ está la fila de acciones sobre otra cuenta (seguir / notificar /
+ *     mensaje) y sus 2 stats (nadie se sigue a sí mismo → no hay "posts").
+ *   - Los "partidos" que se ven acá son SOLO los completos/públicos (todos los
+ *     FINISHED con grabación); no hay privados de otro usuario.
  *
- * In production:
- *   GET /players/:id              → PlayerPublic
- *   POST/DELETE /players/:id/follow → { isFollowing }
+ * En vivo: el avatar se rodea de un aro **verde** y aparez un badge "EN VIVO"
+ * tocable que abre el visor — antes había una tarjeta gigante con preview del
+ * stream dentro de la galería, que tapaba el contenido real del perfil.
+ *
+ * Club: si `player.isClub`, un check verde junto al nombre lo identifica (antes
+ * era un aro verde en el avatar, que ahora significa "en vivo").
  */
-export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onToggleNotify, onMessage, onOpenLive, onOpenClip, onChangeTab, activeTab = 'home', onOpenFollowers, onOpenFollowing }: Props) {
+export function PlayerProfilePublicView({
+  player, matches = [], onBack, onToggleFollow, onToggleNotify, onMessage,
+  onOpenLive, onOpenClip, onOpenMatch, onChangeTab, activeTab = 'home',
+  onOpenFollowers, onOpenFollowing,
+}: Props) {
   const { colors } = useTheme();
-  const isFocused = useIsFocused();
-  const hasClips = player.clips.length > 0;
+  const [tab, setTab] = React.useState<TabKey>('highlights');
+
   const hasLive = player.isLiveNow && !!player.liveGame;
+
+  const grid = tab === 'highlights' ? player.clips : matches;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
@@ -65,8 +75,7 @@ export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onTogg
 
           {/* ⛔ Acá había un botón de "···" que no hacía NADA — se sacó junto
               con el resto de botones muertos de la app (mismo criterio que el
-              chrome del visor). El hueco de la derecha se deja vacío: no hay
-              ninguna acción propia de "ver el perfil de otro" que vaya ahí. */}
+              chrome del visor). El hueco de la derecha se deja vacío. */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Pressable onPress={onBack} style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.14)', alignItems: 'center', justifyContent: 'center' }}>
               <ChevronLeft size={18} color="#FFFFFF"/>
@@ -74,11 +83,20 @@ export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onTogg
           </View>
 
           <View style={{ flexDirection: 'row', gap: 14, marginTop: 18, alignItems: 'flex-end' }}>
-            <View style={{ borderRadius: 36, overflow: 'hidden' }}>
-              <Avatar name={player.name} size={72} ringColor="#FFFFFF"/>
+            {/* En vivo → aro verde alrededor del avatar (antes ese aro marcaba
+                "club"; ahora el club se marca con el check junto al nombre). */}
+            <View style={hasLive
+              ? { borderRadius: 40, borderWidth: 3, borderColor: colors.live, padding: 2 }
+              : { borderRadius: 36, overflow: 'hidden' }}>
+              <Avatar name={player.name} size={72} imageUri={player.profilePicture} ringColor="#FFFFFF"/>
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={{ fontSize: 20, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.4 }} numberOfLines={1}>{player.name}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <Text style={{ fontSize: 20, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.4, flexShrink: 1 }} numberOfLines={1}>{player.name}</Text>
+                {player.isClub && (
+                  <BadgeCheck size={18} color={colors.accent} fill="none" accessibilityLabel="Cuenta de club"/>
+                )}
+              </View>
               {/* La categoría va como texto y no con CategoryBadge: acá el fondo
                   es el azul del hero en ambos temas, y el badge usa colors.text. */}
               <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 2 }} numberOfLines={1}>
@@ -86,11 +104,14 @@ export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onTogg
                   .filter(Boolean)
                   .join(' · ')}
               </Text>
-              {player.isLiveNow && (
-                <View style={{ flexDirection: 'row', alignSelf: 'flex-start', alignItems: 'center', gap: 5, marginTop: 8, backgroundColor: colors.live, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 9999 }}>
-                  <View style={{ width: 6, height: 6, backgroundColor: colors.ink, borderRadius: 3 }}/>
-                  <Text style={{ fontSize: 10, fontWeight: '800', letterSpacing: 0.8, color: colors.ink }}>JUGANDO AHORA</Text>
-                </View>
+              {hasLive && (
+                <Pressable
+                  onPress={() => onOpenLive?.(player.liveGame!.id)}
+                  style={{ alignSelf: 'flex-start', marginTop: 8 }}
+                  accessibilityLabel="Ver en vivo"
+                >
+                  <StatusBadge status="LIVE"/>
+                </Pressable>
               )}
             </View>
           </View>
@@ -152,71 +173,56 @@ export function PlayerProfilePublicView({ player, onBack, onToggleFollow, onTogg
           </View>
         </View>
 
-        {/* Una sola pestaña: no hay (todavía) historial de partidos de OTRO
-            jugador conectado acá. Mismo `TabStrip` que el perfil propio —
-            ver su comentario. */}
-        <TabStrip tabs={[{ id: 'highlights', label: '▶ HIGHLIGHTS' }]} active="highlights" onChange={() => {}}/>
+        {/* Dos pestañas, igual que el perfil propio — sin número debajo. */}
+        <TabStrip
+          tabs={[
+            { id: 'highlights', label: '▶ HIGHLIGHTS' },
+            { id: 'matches',    label: '◫ PARTIDOS' },
+          ]}
+          active={tab}
+          onChange={(k) => setTab(k as TabKey)}
+        />
 
-        {/* Tarjeta EN VIVO — arriba del grid, no mezclada adentro: un partido
-            en curso es urgente y transitorio, no un ítem más de la galería. */}
-        {hasLive && (
-          <Pressable
-            onPress={() => onOpenLive?.(player.liveGame!.id)}
-            style={{
-              margin: 12, borderRadius: 14, overflow: 'hidden', backgroundColor: colors.ink,
-              borderWidth: 2, borderColor: colors.live,
-            }}
-          >
-            <View style={{ height: 160, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-              {player.liveGame!.streamUrl && isFocused ? (
-                <InlineVideo
-                  key={player.liveGame!.id}
-                  uri={player.liveGame!.streamUrl}
-                  style={StyleSheet.absoluteFill}
-                  contentFit="cover"
-                />
-              ) : (
-                <Svg viewBox="0 0 200 110" width="45%" style={{ opacity: 0.22 }}>
-                  <Rect x={20} y={15} width={160} height={80} stroke={colors.accent} strokeWidth={1.5} fill="none"/>
-                  <Line x1={100} y1={15} x2={100} y2={95} stroke={colors.accent} strokeWidth={1.5}/>
-                </Svg>
-              )}
-              <View style={{ position: 'absolute', top: 8, left: 8 }}>
-                <StatusBadge status="LIVE"/>
-              </View>
-            </View>
-            <View style={{ paddingHorizontal: 12, paddingVertical: 10 }}>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.accent }}>{player.liveGame!.court} · {player.liveGame!.club}</Text>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#FFFFFF', marginTop: 2 }}>Verlo en vivo →</Text>
-            </View>
-          </Pressable>
-        )}
-
-        {/* Grid — mismo componente y mismo layout que el perfil propio. */}
-        {!hasClips && !hasLive ? (
+        {/* Grid — mismo componente y layout que el perfil propio. */}
+        {grid.length === 0 ? (
           <View style={{ paddingHorizontal: 24, paddingVertical: 40, alignItems: 'center', gap: 6 }}>
             <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>Nada por ahora</Text>
             <Text style={{ fontSize: 12, color: colors.muted2, textAlign: 'center', lineHeight: 18 }}>
-              Este jugador todavía no tiene highlights ni partidos en vivo.
+              {tab === 'highlights'
+                ? 'Este usuario todavía no tiene highlights públicos.'
+                : 'Este usuario todavía no tiene partidos completos.'}
             </Text>
           </View>
-        ) : hasClips ? (
+        ) : (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', padding: 2 }}>
-            {player.clips.map(c => (
-              <Pressable
-                key={c.id}
-                onPress={() => onOpenClip?.(c)}
-                style={{ width: '33.333%', padding: 1 }}>
-                <ContentThumb
-                  kind="highlight"
-                  durationLabel={c.length}
-                  aspect="square"
-                  imageUri={c.thumbnailUrl}
-                />
-              </Pressable>
-            ))}
+            {tab === 'highlights'
+              ? player.clips.map((c) => (
+                  <Pressable
+                    key={c.id}
+                    onPress={() => onOpenClip?.(c)}
+                    style={{ width: '33.333%', padding: 1 }}>
+                    <ContentThumb
+                      kind="highlight"
+                      durationLabel={c.length}
+                      aspect="square"
+                      imageUri={c.thumbnailUrl}
+                    />
+                  </Pressable>
+                ))
+              : matches.map((m) => (
+                  <Pressable
+                    key={m.id}
+                    onPress={() => onOpenMatch?.(m)}
+                    style={{ width: '33.333%', padding: 1 }}>
+                    <ContentThumb
+                      kind="match"
+                      durationLabel={m.durationLabel}
+                      aspect="square"
+                    />
+                  </Pressable>
+                ))}
           </View>
-        ) : null}
+        )}
       </ScrollView>
 
       {onChangeTab && <BottomTabBar active={activeTab} onChange={onChangeTab} role="player"/>}

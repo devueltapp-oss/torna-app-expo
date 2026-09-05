@@ -1,14 +1,19 @@
 /**
- * PlayerProfilePublicView — unificado visualmente con PlayerOwnProfileScreen
- * (mismo hero, mismo grid 3-col con `ContentThumb`, mismo `TabStrip`). Antes
- * usaba un carrusel horizontal sin pestañas; ver tu perfil y el de otro
- * jugador se sentía como dos apps distintas para lo mismo.
+ * PlayerProfilePublicView — es la MISMA pantalla que el perfil propio
+ * (`PlayerOwnProfileScreen`): hero + `TabStrip` de dos pestañas
+ * (Highlights / Partidos) + grid 3-col con `ContentThumb`. Lo que cambia:
+ * no hay botones propios (⚙/🔒), sí hay fila de acciones (seguir/notificar/
+ * mensaje), y los "partidos" que se ven son solo los completos/públicos.
+ *
+ * En vivo: aro verde en el avatar + badge "EN VIVO" tocable (antes había una
+ * tarjeta gigante con preview del stream dentro de la galería).
+ * Club: check verde junto al nombre (antes era un aro verde en el avatar).
  */
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme';
 import { PlayerProfilePublicView } from '../PlayerProfilePublicView';
-import type { PlayerPublic } from '../../data/types';
+import type { PlayerPublic, LibraryMatch } from '../../data/types';
 
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('@react-navigation/native'),
@@ -32,7 +37,23 @@ const basePlayer: PlayerPublic = {
   followingList: [],
 };
 
-function renderView(overrides: Partial<PlayerPublic> = {}, props: Partial<React.ComponentProps<typeof PlayerProfilePublicView>> = {}) {
+const aMatch: LibraryMatch = {
+  id: 'm1',
+  kind: 'match',
+  title: 'Cancha 3',
+  isPublic: true,
+  cameras: 1,
+  highlightsCount: 0,
+  recordingUrl: 'https://b2/rec/m1.mp4',
+  durationSeconds: 3600,
+  durationLabel: '60:00 min',
+  date: '2 sep',
+};
+
+function renderView(
+  overrides: Partial<PlayerPublic> = {},
+  props: Partial<React.ComponentProps<typeof PlayerProfilePublicView>> = {},
+) {
   return render(
     <ThemeProvider initial="light">
       <PlayerProfilePublicView player={{ ...basePlayer, ...overrides }} {...props} />
@@ -40,16 +61,17 @@ function renderView(overrides: Partial<PlayerPublic> = {}, props: Partial<React.
   );
 }
 
-describe('PlayerProfilePublicView — mismo lenguaje visual que el perfil propio', () => {
-  it('muestra una sola pestaña "Highlights" (todavía sin historial de partidos de otro jugador)', () => {
-    const { getByText, queryByText } = renderView();
+describe('PlayerProfilePublicView — misma pantalla que el perfil propio', () => {
+  it('tiene DOS pestañas: Highlights y Partidos', () => {
+    const { getByText } = renderView();
     expect(getByText('▶ HIGHLIGHTS')).toBeTruthy();
-    expect(queryByText('◫ PARTIDOS')).toBeNull();
+    expect(getByText('◫ PARTIDOS')).toBeTruthy();
   });
 
-  it('sin highlights ni partido en vivo, muestra el estado vacío', () => {
+  it('sin highlights, muestra el estado vacío de esa pestaña', () => {
     const { getByText } = renderView({ clips: [] });
     expect(getByText('Nada por ahora')).toBeTruthy();
+    expect(getByText('Este usuario todavía no tiene highlights públicos.')).toBeTruthy();
   });
 
   it('los clips se muestran en un grid con ContentThumb (duración visible)', () => {
@@ -68,22 +90,42 @@ describe('PlayerProfilePublicView — mismo lenguaje visual que el perfil propio
     expect(onOpenClip).toHaveBeenCalledWith(clip);
   });
 
-  it('en vivo, muestra la tarjeta EN VIVO arriba del grid (no mezclada con los clips)', () => {
-    const onOpenLive = jest.fn();
-    const { getByText } = renderView({
-      isLiveNow: true,
-      liveGame: { id: 'g1', court: 'Cancha 1', club: 'Casapadel', players: [] },
-      clips: [{ id: 'c1', title: 'Smash', length: '0:24', date: 'Ayer' }],
-    }, { onOpenLive });
+  it('la pestaña Partidos lista los partidos completos y al tocar uno llama a onOpenMatch', () => {
+    const onOpenMatch = jest.fn();
+    const { getByText } = renderView({}, { matches: [aMatch], onOpenMatch });
 
-    fireEvent.press(getByText('Verlo en vivo →'));
+    // por defecto arranca en Highlights → vacío
+    expect(getByText('Nada por ahora')).toBeTruthy();
+
+    fireEvent.press(getByText('◫ PARTIDOS'));
+    fireEvent.press(getByText('60:00 min'));
+    expect(onOpenMatch).toHaveBeenCalledWith(aMatch);
+  });
+
+  it('en vivo: badge "EN VIVO" tocable que abre el visor — sin tarjeta gigante de stream', () => {
+    const onOpenLive = jest.fn();
+    const { getByText, queryByText } = renderView(
+      {
+        isLiveNow: true,
+        liveGame: { id: 'g1', court: 'Cancha 1', club: 'Casapadel', players: [] },
+        clips: [{ id: 'c1', title: 'Smash', length: '0:24', date: 'Ayer' }],
+      },
+      { onOpenLive },
+    );
+
+    // La vieja tarjeta con "Verlo en vivo →" ya no existe.
+    expect(queryByText('Verlo en vivo →')).toBeNull();
+
+    fireEvent.press(getByText('EN VIVO'));
     expect(onOpenLive).toHaveBeenCalledWith('g1');
   });
 
-  it('no hay ningún botón "···" muerto en el header', () => {
-    const { queryByTestId } = renderView();
-    // El único ícono del header ahora es "volver"; no queda nada a la derecha.
-    expect(queryByTestId('more-options')).toBeNull();
+  it('club: check verde junto al nombre (no un aro verde en el avatar)', () => {
+    const { queryAllByLabelText } = renderView({ isClub: true });
+    expect(queryAllByLabelText('Cuenta de club').length).toBeGreaterThan(0);
+    // un jugador normal no lo lleva
+    const { queryAllByLabelText: q2 } = renderView({ isClub: false });
+    expect(q2('Cuenta de club').length).toBe(0);
   });
 
   it('el nivel se muestra como texto ("CAT. N") junto al username', () => {

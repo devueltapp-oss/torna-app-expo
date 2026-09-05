@@ -286,11 +286,14 @@ function ProfileErrorScreen({ error, onBack, onRetry }: {
  */
 function PlayerProfileScreen({ navigation, playerId }: { navigation: any; playerId: string }) {
   const { player: fetched, loading, error, refresh } = useUserProfile(playerId);
+  // Partidos completos del jugador (FINISHED + grabación). Alimentan la pestaña
+  // "Partidos" del perfil público — antes solo se veían los highlights.
+  const { matches } = usePlayerMatches(playerId);
   const [overrides, setOverrides] = React.useState<
     Partial<Pick<PlayerPublic, 'isFollowing' | 'followers' | 'notifyOnMatch'>>
   >({});
   const [sheet, setSheet] = React.useState<'followers' | 'following' | null>(null);
-  const [clipModal, setClipModal] = React.useState<{ url: string; title: string; id: string } | null>(null);
+  const [clipModal, setClipModal] = React.useState<{ url: string; title: string; id?: string } | null>(null);
 
   const view: PlayerPublic | null = fetched ? { ...fetched, ...overrides } : null;
 
@@ -309,6 +312,7 @@ function PlayerProfileScreen({ navigation, playerId }: { navigation: any; player
     <>
       <PlayerProfilePublicView
         player={view}
+        matches={matches}
         onBack={() => navigation.goBack()}
         onToggleFollow={() => {
           const wasFollowing = view.isFollowing;
@@ -329,6 +333,7 @@ function PlayerProfileScreen({ navigation, playerId }: { navigation: any; player
         onMessage={() => navigation.navigate('DirectChat', { userId: view.id, title: view.name ?? view.username })}
         onOpenLive={(gameId) => navigation.navigate('GameDetail', { gameId })}
         onOpenClip={(clip) => setClipModal({ url: clip.videoUrl ?? '', title: clip.title, id: clip.id })}
+        onOpenMatch={(m) => setClipModal({ url: m.recordingUrl, title: m.title })}
         onOpenFollowers={() => setSheet('followers')}
         onOpenFollowing={() => setSheet('following')}
       />
@@ -349,7 +354,7 @@ function PlayerProfileScreen({ navigation, playerId }: { navigation: any; player
         durationSeconds={0}
         onClose={() => setClipModal(null)}
         highlightId={clipModal?.id}
-        showComments
+        showComments={!!clipModal?.id}
       />
     </>
   );

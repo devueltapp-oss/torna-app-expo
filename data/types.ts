@@ -182,6 +182,10 @@ export interface PlayerPublic {
   username: string;
   club: string;
   location: string;
+  /** Foto de perfil (URL B2). Si falta, el Avatar cae a iniciales. */
+  profilePicture?: string;
+  /** true = es una cuenta de club (isClub). Se marca con un check verde junto al nombre. */
+  isClub?: boolean;
   /** Categoría de juego: 1 = más alta, 7 = iniciación. null = sin declarar. */
   category?: number | null;
   followers: number;
