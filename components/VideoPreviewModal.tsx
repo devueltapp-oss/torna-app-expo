@@ -3,7 +3,8 @@ import {
   Modal, View, Text, Pressable, Platform, ActivityIndicator,
   FlatList, TextInput, KeyboardAvoidingView, Keyboard,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { X, MessageCircle, Send, Heart } from 'lucide-react-native';
 import { useEventListener } from 'expo';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -150,6 +151,11 @@ export function VideoPreviewModal({
   highlightId,
 }: VideoPreviewModalProps) {
   const { colors } = useTheme();
+  // Mismo patrón que el visor de streaming (`GameDetailScreen`): el `SafeAreaView`
+  // de este modal usa `edges={[]}` a propósito (el video llega hasta el borde real
+  // de la pantalla), así que la X, el título y los controles necesitan sumar los
+  // insets a mano en vez de depender del `SafeAreaView`.
+  const insets = useSafeAreaInsets();
   // `expo-video` (SDK 55, reemplaza a `expo-av`): el player se crea con el hook y no
   // arranca solo (era `shouldPlay={false}`). Fuente `null` mientras el modal está
   // cerrado para no tener un player vivo de fondo.
@@ -246,6 +252,34 @@ export function VideoPreviewModal({
     if (player.playing) player.pause();
     else player.play();
   }
+
+  /**
+   * Gestos sobre el video (2026-09-04): un toque simple sigue pausando/reanudando
+   * (`togglePlay`), y ahora un swipe RÁPIDO de derecha a izquierda cierra el
+   * modal — el mismo gesto de "volver" que la X de arriba, disponible en toda la
+   * superficie del video, igual que en el visor de streaming (`GameDetailScreen`).
+   * Se arma una sola vez (`useMemo` sin deps); los refs puentean la versión
+   * vigente de `togglePlay`/`onClose` para no recrear el detector en cada render.
+   */
+  const togglePlayRef = React.useRef(togglePlay);
+  React.useEffect(() => { togglePlayRef.current = togglePlay; });
+  const onCloseRef = React.useRef(onClose);
+  React.useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  const videoGestures = React.useMemo(() => {
+    const tap = Gesture.Tap()
+      .maxDuration(250)
+      .onEnd((_e, ok) => { if (ok) togglePlayRef.current(); });
+
+    const swipeClose = Gesture.Pan()
+      .onEnd((e) => {
+        if (e.translationX < -70 && e.velocityX < -600 && Math.abs(e.translationY) < 60) {
+          onCloseRef.current();
+        }
+      });
+
+    return Gesture.Simultaneous(tap, swipeClose);
+  }, []);
 
   /** Salta a una posición del video (0–1 del total) tras tocar la barra de progreso. */
   function seekToFraction(frac: number) {
@@ -460,7 +494,11 @@ export function VideoPreviewModal({
       <SafeAreaView style={{ flex: 1, backgroundColor: '#000000' }} edges={[]}>
 
         <View style={{ flex: 1, backgroundColor: '#000000' }}>
-          <Pressable onPress={togglePlay} style={{ width: '100%', height: '100%' }}>
+          {/* `GestureDetector` y no `Pressable`: además del toque simple (pausa/
+              reanuda, `togglePlay`), esta superficie reconoce el swipe rápido de
+              derecha a izquierda que cierra el modal — ver `videoGestures`. */}
+          <GestureDetector gesture={videoGestures}>
+          <View style={{ width: '100%', height: '100%' }}>
             {visible && url ? (
               <VideoView
                 player={player}
@@ -473,9 +511,9 @@ export function VideoPreviewModal({
             {/*
               Ícono de play sobre el video cuando está en pausa.
               Sin esto, un video pausado se ve igual que uno trabado: no había
-              ninguna señal de que el toque hizo algo. Va DENTRO del `Pressable`
-              y con `pointerEvents="none"` para que el toque siga llegando al
-              video y reanude.
+              ninguna señal de que el toque hizo algo. Va DENTRO del detector de
+              gestos y con `pointerEvents="none"` para que el toque siga llegando
+              al video y reanude.
             */}
             {!isPlaying && !isBuffering && (
               <View
@@ -501,7 +539,8 @@ export function VideoPreviewModal({
                 </View>
               </View>
             )}
-          </Pressable>
+          </View>
+          </GestureDetector>
           {isBuffering && (
             <ActivityIndicator
               size="large"
@@ -512,11 +551,14 @@ export function VideoPreviewModal({
 
           {/* Overlays sobre el video */}
           <>
-              {/* Cerrar + título (arriba). Antes acá había un "minimizar" que
-                  llevaba a la vista chica; ahora se sale directo, y el título
-                  viene con él porque el header donde vivía se eliminó. */}
+              {/* Cerrar (arriba-izquierda). Antes acá vivía también el título, pero
+                  en iPhone quedaba debajo del notch/cámara — se movió abajo, junto
+                  a los controles (ver el bloque de progreso). `top` suma
+                  `insets.top` a mano: este `SafeAreaView` usa `edges={[]}` a
+                  propósito (el video llega hasta el borde real de la pantalla), así
+                  que sin el inset la X quedaba pegada a la hora del status bar. */}
               <View style={{
-                position: 'absolute', top: 14, left: 14, right: 14,
+                position: 'absolute', top: 14 + insets.top, left: 14, right: 14,
                 flexDirection: 'row', alignItems: 'center', gap: 12,
               }}>
                 <Pressable
@@ -532,28 +574,33 @@ export function VideoPreviewModal({
                   }}>
                   <X size={20} color="#FFFFFF"/>
                 </Pressable>
-                {!!title && (
-                  <Text
-                    numberOfLines={1}
-                    style={{
-                      flex: 1, color: '#FFFFFF', fontFamily: fonts.bold, fontSize: 14,
-                      textShadowColor: 'rgba(0,0,0,0.7)', textShadowRadius: 4,
-                    }}>
-                    {title}
-                  </Text>
-                )}
               </View>
 
               {/*
-                Barra de progreso + tiempo, sobre el video. Vivía en la vista
-                chica que se eliminó; sin traerla acá, quitar el minimizar habría
-                dejado el highlight **sin forma de adelantar**. Se oculta con el
-                panel de comentarios abierto (queda tapada) y con el teclado.
+                Título + barra de progreso + tiempo, sobre el video, cerca de los
+                controles de abajo. El título vivía arriba, al lado de la X, pero en
+                iPhone el notch/cámara se lo comía; bajarlo hasta acá lo saca de esa
+                zona. `bottom` suma `insets.bottom`, el MISMO margen de safe-area que
+                usa el visor de streaming (`bottomInset` en `GameDetailScreen`) para
+                anclar sus controles — mismo motivo: este modal también usa
+                `edges={[]}`, así que el borde inferior real (home indicator) no
+                está reservado por el `SafeAreaView`. Se oculta con el panel de
+                comentarios abierto (queda tapado) y con el teclado.
               */}
               {!showCommentsPanel && !kbVisible && (
                 <View style={{
-                  position: 'absolute', left: 16, right: 16, bottom: 76, gap: 6,
+                  position: 'absolute', left: 16, right: 16, bottom: 76 + insets.bottom, gap: 8,
                 }}>
+                  {!!title && (
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        color: '#FFFFFF', fontFamily: fonts.bold, fontSize: 14,
+                        textShadowColor: 'rgba(0,0,0,0.7)', textShadowRadius: 4,
+                      }}>
+                      {title}
+                    </Text>
+                  )}
                   <Pressable
                     onLayout={(e) => { seekBarWidth.current = e.nativeEvent.layout.width; }}
                     onPress={(e) => seekToFraction(e.nativeEvent.locationX / (seekBarWidth.current || 1))}

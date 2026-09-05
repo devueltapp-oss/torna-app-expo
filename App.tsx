@@ -77,6 +77,7 @@ import type { CourtData, PlayerData } from './components/cards';
 import { updateHighlightMeta } from './api/highlights';
 import { fetchClubCourts, fetchCourtSlots, createReservation } from './api/clubs';
 import type { CourtSlots } from './lib/reservation';
+import { formatClubDate } from './lib/clubTime';
 import type { DayOption } from './screens';
 import type {
   LibraryItem, LibraryMatch, LibraryHighlight,
@@ -663,7 +664,13 @@ function ReserveInviteScreen({ route, navigation }: { route: any; navigation: an
       onSearchPlayers={searchPartners}
       summary={{
         title: courtLabel || 'Cancha',
-        subtitle: `${date} · ${slotStart}–${slotEnd} · ${durationMinutes} min`,
+        // Fecha (línea 1) y horas del bloque (línea 2) separadas — antes iban
+        // concatenadas en una sola línea y no se entendía a primera vista.
+        // `formatClubDate` (mismo helper que usan `useMyGames`/`useOpenGames`)
+        // formatea en UTC: `date` es un YYYY-MM-DD sin hora, y sin fijar la
+        // zona un dispositivo en huso negativo podía leer el día anterior.
+        date: formatClubDate(date) || date,
+        time: `${slotStart}–${slotEnd} · ${durationMinutes} min`,
         priceLabel: 'Pago en el club',
       }}
       hostCategory={ownProfile?.category ?? null}
@@ -897,6 +904,12 @@ function MainPlayer({ navigation, route }: any) {
   }, [inviteGame, myGames]);
   const { matches: apiMatches, refresh: refreshMatches } = usePlayerMatches(user?.id);
 
+  // Mis highlights reales (GET /highlights/my): públicos + privados. Los públicos
+  // se muestran en el perfil; los privados solo en la librería. Declarado acá (y no
+  // más abajo, donde vivía antes) porque el `useEffect` de refresco por foco de más
+  // abajo necesita `refreshHighlights` ya inicializado.
+  const { highlights: apiHighlights, refresh: refreshHighlights } = useMyHighlights(user?.id);
+
   // Directorio de jugadores reales (GET /user/players).
   const { players: playerList, refresh: refreshPlayers } = usePlayers();
 
@@ -942,13 +955,24 @@ function MainPlayer({ navigation, route }: any) {
       refreshMyGames();
       refreshOpen();
       refreshUpcomingFeed();
+      // "Mis partidos" (grabaciones) y "Mis highlights" de la librería tenían el
+      // mismo bug: usePlayerMatches/useMyHighlights cargan una sola vez al montar
+      // y MainPlayer no se desmonta, así que un video recién procesado (llega la
+      // notificación RECORDING_READY) o un highlight recién creado no aparecían
+      // hasta un pull-to-refresh manual o reiniciar la app.
+      refreshMatches();
+      refreshHighlights();
     });
     return unsubscribe;
-  }, [navigation, refreshOwnProfile, refreshMyGames, refreshOpen, refreshUpcomingFeed]);
-
-  // Mis highlights reales (GET /highlights/my): públicos + privados. Los públicos
-  // se muestran en el perfil; los privados solo en la librería.
-  const { highlights: apiHighlights, refresh: refreshHighlights } = useMyHighlights(user?.id);
+  }, [
+    navigation,
+    refreshOwnProfile,
+    refreshMyGames,
+    refreshOpen,
+    refreshUpcomingFeed,
+    refreshMatches,
+    refreshHighlights,
+  ]);
 
   const owner: ProfileOwner = {
     name: user?.name ?? user?.username ?? '',

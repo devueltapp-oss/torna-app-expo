@@ -23,8 +23,13 @@ interface Props {
   initialPartner?: InvitablePlayer;
   initialOpp1?: InvitablePlayer;
   initialOpp2?: InvitablePlayer;
-  /** Summary text shown on top (court + datetime + price). */
-  summary: { title: string; subtitle: string; priceLabel: string };
+  /**
+   * Summary shown on top (court + date + hours + price).
+   * ⚠️ `date` y `time` van SEPARADOS (no un `subtitle` concatenado): antes
+   * era una sola línea "fecha · horas · duración" y no se entendía a primera
+   * vista. `date` = línea 1, `time` = línea 2 (horas del bloque reservado).
+   */
+  summary: { title: string; date: string; time: string; priceLabel: string };
   /** Nivel propio de quien reserva (host). Precarga el campo; sin nivel
    *  declarado, arranca en 7 (iniciación) — nunca en blanco. */
   hostCategory?: number | null;
@@ -105,14 +110,17 @@ export function ReserveStep3Screen({
       />
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
-        {/* Match summary */}
+        {/* Match summary — fecha primero (línea 1), horas del bloque debajo
+            (línea 2): antes iban concatenadas en una sola línea junto con la
+            duración y no se entendía a primera vista. */}
         <View style={{
           flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8,
           backgroundColor: colors.bg2, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,
         }}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted2, letterSpacing: 0.8 }}>{summary.title}</Text>
-            <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text }}>{summary.subtitle}</Text>
+            <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text, marginTop: 2 }}>{summary.date}</Text>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: colors.muted2, marginTop: 1 }}>{summary.time}</Text>
           </View>
           <Text style={{ fontWeight: '800', fontSize: 16, color: colors.text }}>{summary.priceLabel}</Text>
         </View>

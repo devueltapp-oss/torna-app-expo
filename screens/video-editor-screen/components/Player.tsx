@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, Text, Pressable, TouchableOpacity } from 'react-native';
+import { View, Text, Pressable, TouchableOpacity, Modal } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEventListener } from 'expo';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { Maximize2 } from 'lucide-react-native';
+import { Maximize2, X } from 'lucide-react-native';
 import { useTheme } from '../../../theme';
 
 export interface PlayerHandle {
@@ -58,6 +59,11 @@ export const Player = React.forwardRef<PlayerHandle, PlayerProps>(function Playe
   const [isPlaying, setIsPlaying] = React.useState(autoPlay);
   const [positionSec, setPositionSec] = React.useState(startAt);
   const [totalSec, setTotalSec] = React.useState(durationSeconds);
+  // Pantalla completa IN-APP (Modal propio), no la nativa de expo-video: la nativa
+  // con `nativeControls={false}` puede quedar sin forma de salir (sin botón ni back
+  // de Android), así que el cierre lo controlamos nosotros — incluido el botón atrás
+  // físico vía `onRequestClose` del Modal.
+  const [isFullscreen, setIsFullscreen] = React.useState(false);
 
   const upper = endAt ?? totalSec;
 
@@ -65,8 +71,8 @@ export const Player = React.forwardRef<PlayerHandle, PlayerProps>(function Playe
     seek: (sec) => { player.currentTime = sec; },
     pause: () => player.pause(),
     resume: () => player.play(),
-    enterFullscreen: () => { viewRef.current?.enterFullscreen(); },
-    exitFullscreen: () => { viewRef.current?.exitFullscreen(); },
+    enterFullscreen: () => setIsFullscreen(true),
+    exitFullscreen: () => setIsFullscreen(false),
   }), [player]);
 
   useEventListener(player, 'statusChange', ({ status }) => {
@@ -80,9 +86,10 @@ export const Player = React.forwardRef<PlayerHandle, PlayerProps>(function Playe
   useEventListener(player, 'timeUpdate', ({ currentTime }) => {
     setPositionSec(currentTime);
     onProgress?.(currentTime);
-    // Loop del rango [startAt, endAt]: al llegar al fin vuelve al inicio y para.
+    // Loop del rango [startAt, endAt]: al llegar al fin vuelve al inicio y SIGUE
+    // reproduciendo (antes pausaba ahí, así que el "preview" del recorte se veía
+    // una sola vez y después había que arrastrar un handle para volver a verlo).
     if (endAt !== undefined && player.playing && currentTime >= endAt) {
-      player.pause();
       player.currentTime = startAt;
     }
   });
@@ -93,9 +100,10 @@ export const Player = React.forwardRef<PlayerHandle, PlayerProps>(function Playe
   }
 
   const pct = upper > startAt ? Math.min(1, (positionSec - startAt) / (upper - startAt)) : 0;
+  const inFullscreenView = fullscreen || isFullscreen;
 
-  return (
-    <View style={fullscreen ? { flex: 1, overflow: 'hidden', backgroundColor: '#000' } : {
+  const body = (
+    <View style={inFullscreenView ? { flex: 1, overflow: 'hidden', backgroundColor: '#000' } : {
       aspectRatio: 16 / 9, borderRadius: 18, overflow: 'hidden',
       backgroundColor: colors.ink2, borderWidth: 1, borderColor: colors.line,
     }}>
@@ -117,9 +125,26 @@ export const Player = React.forwardRef<PlayerHandle, PlayerProps>(function Playe
         </View>
       ) : null}
 
-      {!hideControls && (
+      {/* Botón de cerrar — SOLO en el modal de pantalla completa propio. Es la
+          única salida (no hay back nativo: `nativeControls={false}` lo suprime,
+          y sin esto quedaba atrapado en el fullscreen sin forma de volver). */}
+      {isFullscreen ? (
+        <SafeAreaView edges={['top']} style={{ position: 'absolute', top: 0, left: 0, zIndex: 20 }}>
+          <TouchableOpacity
+            onPress={() => setIsFullscreen(false)}
+            style={{
+              margin: 10, width: 36, height: 36, borderRadius: 18,
+              backgroundColor: 'rgba(0,0,0,0.55)',
+              alignItems: 'center', justifyContent: 'center',
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <X size={18} color="#FFFFFF" />
+          </TouchableOpacity>
+        </SafeAreaView>
+      ) : (!hideControls && (
         <TouchableOpacity
-          onPress={() => viewRef.current?.enterFullscreen()}
+          onPress={() => setIsFullscreen(true)}
           style={{
             position: 'absolute',
             top: 10,
@@ -136,7 +161,7 @@ export const Player = React.forwardRef<PlayerHandle, PlayerProps>(function Playe
         >
           <Maximize2 size={16} color="#FFFFFF" />
         </TouchableOpacity>
-      )}
+      ))}
 
       {renderOverlay?.()}
 
@@ -174,4 +199,20 @@ export const Player = React.forwardRef<PlayerHandle, PlayerProps>(function Playe
       )}
     </View>
   );
+
+  // Modal propio en vez de VideoView.enterFullscreen(): la nativa respeta
+  // `nativeControls={false}` incluso en fullscreen en algunos casos y no deja
+  // ninguna forma de salir. `onRequestClose` además captura el botón atrás
+  // físico de Android — sin eso, esa era otra vía sin salida.
+  if (isFullscreen) {
+    return (
+      <Modal visible animationType="fade" statusBarTranslucent onRequestClose={() => setIsFullscreen(false)}>
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
+          {body}
+        </View>
+      </Modal>
+    );
+  }
+
+  return body;
 });

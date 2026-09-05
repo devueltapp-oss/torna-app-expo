@@ -8,7 +8,7 @@
 import React from 'react';
 import {
   View, Text, Pressable, TextInput, ActivityIndicator,
-  ViewStyle, StyleProp, Image,
+  ViewStyle, StyleProp, Image, Platform, InputAccessoryView, Keyboard,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { Heart, Bell, ChevronDown } from 'lucide-react-native';
@@ -95,6 +95,24 @@ export function Input(p: InputProps) {
   // Focus ring uses the brand accent (lime) since it's the only saturated
   // brand color; on white it reads as a soft halo, on blue as a glow.
   const borderColor = p.error ? colors.danger : focused ? colors.accent : colors.line;
+
+  /**
+   * ⚠️ **Campos multilínea en iOS no tienen forma nativa de cerrar el teclado.**
+   * En un `TextInput` de una sola línea, Return dispara `onSubmitEditing` y
+   * (con `blurOnSubmit` default `true`) el teclado se cierra solo. En uno
+   * `multiline`, iOS SIEMPRE inserta un salto de línea al tocar Return —
+   * `returnKeyType`/`onSubmitEditing` no aplican, es comportamiento nativo de
+   * `UITextView`, no algo que se pueda interceptar desde JS. Sin esto, un
+   * campo de descripción quedaba con el teclado permanentemente abierto salvo
+   * que la pantalla que lo envuelve arme su propio "tocar afuera para cerrar".
+   * `InputAccessoryView` es la solución estándar de iOS: una barra de "Listo"
+   * pegada arriba del teclado. No existe en Android (el botón atrás del
+   * sistema ya cierra el teclado ahí), así que es 100% condicional a la
+   * plataforma.
+   */
+  const accessoryId = React.useId();
+  const showAccessory = p.multiline && Platform.OS === 'ios';
+
   return (
     <View style={{ gap: 6 }}>
       {p.label && (
@@ -113,6 +131,8 @@ export function Input(p: InputProps) {
           secureTextEntry={p.secureTextEntry} editable={!p.disabled}
           autoCapitalize={p.autoCapitalize} keyboardType={p.keyboardType}
           multiline={p.multiline} numberOfLines={p.numberOfLines}
+          returnKeyType={p.multiline ? 'done' : undefined}
+          inputAccessoryViewID={showAccessory ? accessoryId : undefined}
           onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
           style={{
             flex: 1, color: p.disabled ? colors.muted : colors.text, fontSize: 15, padding: 0,
@@ -123,6 +143,19 @@ export function Input(p: InputProps) {
       {(p.error || p.hint) ? (
         <Text style={{ fontSize: 11, color: p.error ? colors.danger : colors.muted2 }}>{p.error || p.hint}</Text>
       ) : null}
+      {showAccessory && (
+        <InputAccessoryView nativeID={accessoryId}>
+          <View style={{
+            flexDirection: 'row', justifyContent: 'flex-end',
+            backgroundColor: colors.bg2, borderTopWidth: 1, borderTopColor: colors.line,
+            paddingHorizontal: 14, paddingVertical: 8,
+          }}>
+            <Pressable onPress={Keyboard.dismiss} hitSlop={8}>
+              <Text style={{ color: colors.accentText, fontWeight: '800', fontSize: 15 }}>Listo</Text>
+            </Pressable>
+          </View>
+        </InputAccessoryView>
+      )}
     </View>
   );
 }
