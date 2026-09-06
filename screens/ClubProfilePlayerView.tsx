@@ -5,7 +5,8 @@ import { Svg, Rect, Line } from 'react-native-svg';
 import { ChevronLeft, MoreHorizontal, Play, Camera, MessageCircle, BadgeCheck } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
-import { SectionHeader, StatusBadge, Avatar } from '../components/ui';
+import { SectionHeader, StatusBadge } from '../components/ui';
+import { ProfileHeroAvatar } from '../components/ProfileHeroAvatar';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import type { ClubPublic, ClipPreview } from '../data/types';
 
@@ -64,13 +65,15 @@ export function ClubProfilePlayerView({
           </View>
 
           <View style={{ flexDirection: 'row', gap: 14, marginTop: 18, alignItems: 'flex-end' }}>
-            {/* En vivo → aro verde alrededor del avatar. Sin vivo, avatar liso:
-                el aro verde ya NO identifica "club" (eso lo hace el check). */}
-            <View style={isLive
-              ? { borderRadius: 40, borderWidth: 3, borderColor: colors.live, padding: 2 }
-              : { borderRadius: 36, overflow: 'hidden' }}>
-              <Avatar name={club.name} size={72} ringColor="#FFFFFF"/>
-            </View>
+            {/* Tap en la foto → abre el vivo si el club está transmitiendo.
+                Mantener presionado → foto de perfil a pantalla completa.
+                El aro verde ya NO identifica "club" (eso lo hace el check). */}
+            <ProfileHeroAvatar
+              name={club.name}
+              imageUri={club.profilePicture}
+              live={isLive}
+              onPressLive={() => liveGameId && onOpenLive?.(liveGameId)}
+            />
             <View style={{ flex: 1, minWidth: 0 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                 <Text style={{ fontSize: 20, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.4, flexShrink: 1 }} numberOfLines={1}>{club.name}</Text>

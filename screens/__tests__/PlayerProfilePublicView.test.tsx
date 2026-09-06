@@ -120,6 +120,28 @@ describe('PlayerProfilePublicView — misma pantalla que el perfil propio', () =
     expect(onOpenLive).toHaveBeenCalledWith('g1');
   });
 
+  it('en vivo: tocar la FOTO de perfil también abre el visor', () => {
+    const onOpenLive = jest.fn();
+    const { getByLabelText } = renderView(
+      {
+        isLiveNow: true,
+        liveGame: { id: 'g1', court: 'Cancha 1', club: 'Casapadel', players: [] },
+      },
+      { onOpenLive },
+    );
+
+    fireEvent.press(getByLabelText('Ver la transmisión en vivo'));
+    expect(onOpenLive).toHaveBeenCalledWith('g1');
+  });
+
+  it('sin vivo: la foto NO dispara onOpenLive (queda para el hold → ver la foto)', () => {
+    const onOpenLive = jest.fn();
+    const { getByLabelText } = renderView({ isLiveNow: false, liveGame: null }, { onOpenLive });
+
+    fireEvent.press(getByLabelText('Foto de perfil'));
+    expect(onOpenLive).not.toHaveBeenCalled();
+  });
+
   it('club: check verde junto al nombre (no un aro verde en el avatar)', () => {
     const { queryAllByLabelText } = renderView({ isClub: true });
     expect(queryAllByLabelText('Cuenta de club').length).toBeGreaterThan(0);

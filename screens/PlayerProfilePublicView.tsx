@@ -4,7 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Bell, MessageCircle, BadgeCheck } from 'lucide-react-native';
 import { Svg, Rect, Line } from 'react-native-svg';
 import { useTheme } from '../theme';
-import { StatusBadge, Avatar, TabStrip } from '../components/ui';
+import { StatusBadge, TabStrip } from '../components/ui';
+import { ProfileHeroAvatar } from '../components/ProfileHeroAvatar';
 import { ContentThumb } from '../components/ContentThumb';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import type { PlayerPublic, PlayerClip, LibraryMatch } from '../data/types';
@@ -83,13 +84,14 @@ export function PlayerProfilePublicView({
           </View>
 
           <View style={{ flexDirection: 'row', gap: 14, marginTop: 18, alignItems: 'flex-end' }}>
-            {/* En vivo → aro verde alrededor del avatar (antes ese aro marcaba
-                "club"; ahora el club se marca con el check junto al nombre). */}
-            <View style={hasLive
-              ? { borderRadius: 40, borderWidth: 3, borderColor: colors.live, padding: 2 }
-              : { borderRadius: 36, overflow: 'hidden' }}>
-              <Avatar name={player.name} size={72} imageUri={player.profilePicture} ringColor="#FFFFFF"/>
-            </View>
+            {/* Tap en la foto → abre el vivo si el perfil está en vivo.
+                Mantener presionado → foto de perfil a pantalla completa. */}
+            <ProfileHeroAvatar
+              name={player.name}
+              imageUri={player.profilePicture}
+              live={hasLive}
+              onPressLive={() => player.liveGame && onOpenLive?.(player.liveGame.id)}
+            />
             <View style={{ flex: 1, minWidth: 0 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                 <Text style={{ fontSize: 20, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.4, flexShrink: 1 }} numberOfLines={1}>{player.name}</Text>

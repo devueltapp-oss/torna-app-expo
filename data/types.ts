@@ -119,6 +119,8 @@ export interface ClubPublic {
   name: string;
   handle: string;
   city: string;
+  /** Foto de perfil (URL B2). Si falta, el Avatar cae a iniciales. */
+  profilePicture?: string;
   followers: number;
   followingCount?: number;
   isFollowing: boolean;

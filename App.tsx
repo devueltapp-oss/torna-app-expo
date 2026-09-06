@@ -410,6 +410,7 @@ function ClubProfileScreen({ navigation, clubId }: { navigation: any; clubId: st
     name: view.name,
     handle: view.username,
     city: view.location,
+    profilePicture: view.profilePicture,
     followers: view.followers,
     followingCount: view.followingCount,
     isFollowing: view.isFollowing,
