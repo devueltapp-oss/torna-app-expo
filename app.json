@@ -26,7 +26,8 @@
       [
         "onesignal-expo-plugin",
         {
-          "mode": "production"
+          "mode": "production",
+          "iPhoneDeploymentTarget": "15.1"
         }
       ],
       "@react-native-firebase/app",
