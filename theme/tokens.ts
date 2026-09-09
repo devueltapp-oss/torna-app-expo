@@ -7,30 +7,34 @@ import { Platform, TextStyle } from 'react-native';
 
 // ── BRAND (constant across themes) ─────────────────────────────────────
 const brand = {
-  // Strict 3-color palette per the Torna corporate brand manual.
-  // Lime is THE CTA color; blue is the structural surface in dark mode and
+  // Strict 3-color palette per the Torna corporate brand manual (rebrand
+  // 2026-09-08: lime #D6FF7E → #BFFE3D, navy ink #2d4c75 → #001449).
+  // Lime is THE CTA color; navy is the structural surface in dark mode and
   // the primary text color in light mode. Gradients are banned.
-  primary:    '#D6FF7E',   // lime CTA bg
-  primary600: '#c1ea63',   // pressed lime
-  primary500: '#D6FF7E',
-  primary100: 'rgba(214,255,126,0.22)',
-  primaryFg:  '#2d4c75',   // text/icon color when placed ON the lime CTA
+  primary:    '#BFFE3D',   // lime CTA bg
+  primary600: '#AAE236',   // pressed lime (~11% darker than #BFFE3D)
+  primary500: '#BFFE3D',
+  primary100: 'rgba(191,254,61,0.22)',
+  primaryFg:  '#001449',   // text/icon color when placed ON the lime CTA
   // accentText = legible accent text on the current surface. Defaults to
-  // blue (for white surfaces); darkColors below overrides to lime.
-  accentText: '#2d4c75',
+  // navy (for white surfaces); darkColors below overrides to lime.
+  accentText: '#001449',
 
-  accent:     '#D6FF7E',
-  accentSoft: 'rgba(214,255,126,0.18)',
+  accent:     '#BFFE3D',
+  accentSoft: 'rgba(191,254,61,0.18)',
 
   /**
    * Verde de marca **legible sobre una superficie clara**.
    *
-   * ⚠️ El lima (`#D6FF7E`) sobre blanco da **1.14:1** de contraste — medido, no
-   * estimado. Es prácticamente invisible: es lo que hacía que el ítem activo del
-   * navbar no se distinguiera del inactivo en modo claro. Este verde da
-   * **5.08:1** (WCAG AA) y sigue siendo de la misma familia.
+   * ⚠️ El lima (`#BFFE3D`) sobre blanco da **1.20:1** de contraste — medido, no
+   * estimado (era 1.14:1 con el lima anterior `#D6FF7E`; el nuevo lima es
+   * apenas más contrastado pero sigue siendo prácticamente invisible). Es lo
+   * que hacía que el ítem activo del navbar no se distinguiera del inactivo en
+   * modo claro. Este verde da **5.08:1** (WCAG AA) y sigue siendo de la misma
+   * familia — no depende del tono exacto de lima, así que el rebrand no lo toca.
    *
-   * `darkColors` lo pisa con el lima, que sobre el azul de marca da 7.69:1: ahí
+   * `darkColors` lo pisa con el lima, que sobre el nuevo navy de marca da
+   * 12.61:1 (sobre `surface` `#0E2646`) / 13.57:1 (sobre `bg` `#08203E`): ahí
    * el problema no existe y usar el verde oscuro sería el error inverso.
    *
    * ✅ Para **texto e íconos** sobre `surface`/`bg`.
@@ -39,19 +43,25 @@ const brand = {
    */
   accentStrong: '#4F7A1C',
 
-  ink:   '#2d4c75',
-  ink2:  '#25406b',
-  navy:  '#2d4c75',
+  ink:   '#001449',
+  // `ink2` colapsado a `ink` en el rebrand 2026-09-08: el mockup oficial no
+  // define un segundo tono de navy, y arrastrar el `#25406b` viejo desentonaba
+  // al lado del `ink` nuevo. Sigue existiendo como alias (no se tocaron los
+  // 3 call sites: fondo placeholder de video en Player/ProcessingStep y fill
+  // decorativo de ContentThumb) por si algún día vuelve a necesitar un tono
+  // propio — hoy es simplemente `ink`.
+  ink2:  '#001449',
+  navy:  '#001449',
 
-  // Status colors collapsed into the brand palette (lime + blue contrast).
-  live:    '#D6FF7E',
-  warning: '#D6FF7E',
-  warnFg:  '#2d4c75',
-  success: '#D6FF7E',
-  okFg:    '#2d4c75',
-  info:    '#D6FF7E',
-  infoFg:  '#2d4c75',
-  danger:  '#2d4c75',
+  // Status colors collapsed into the brand palette (lime + navy contrast).
+  live:    '#BFFE3D',
+  warning: '#BFFE3D',
+  warnFg:  '#001449',
+  success: '#BFFE3D',
+  okFg:    '#001449',
+  info:    '#BFFE3D',
+  infoFg:  '#001449',
+  danger:  '#001449',
 
   /**
    * ⚠️ ÚNICA excepción al "solo 3 colores" del manual: el rojo de **acciones
@@ -63,7 +73,7 @@ const brand = {
    *
    * **Solo para el affordance destructivo** (fondo del swipe, botón de confirmar
    * borrado). No lo uses para errores de formulario, badges ni texto común: para
-   * eso está `danger`, que sigue siendo azul de marca.
+   * eso está `danger`, que sigue siendo el navy de marca.
    */
   destructive:   '#D94A3D',
   destructiveFg: '#FFFFFF',
@@ -74,43 +84,55 @@ export const lightColors = {
   ...brand,
   bg:       '#FFFFFF',
   surface:  '#FFFFFF',
-  surface2: '#F4F7FB',
-  bg2:      '#F4F7FB',
-  bg3:      '#EAF0F7',
-  line:        'rgba(45,76,117,0.14)',
-  lineStrong:  'rgba(45,76,117,0.26)',
-  text:   '#2d4c75',
-  text2:  'rgba(45,76,117,0.85)',
-  muted2: 'rgba(45,76,117,0.70)',
-  muted:  'rgba(45,76,117,0.50)',
-  liveBg: 'rgba(214,255,126,0.22)',
-  warnBg: 'rgba(214,255,126,0.22)',
-  okBg:   'rgba(214,255,126,0.18)',
-  infoBg: 'rgba(214,255,126,0.18)',
+  surface2: '#F3F5F9',
+  bg2:      '#F3F5F9',
+  // Mismo salto relativo que tenía bg2→bg3 antes del rebrand (-10,-7,-4 sobre
+  // 255 en cada canal, aplicado ahora sobre el nuevo `surface2`/`bg2`).
+  bg3:      '#E9EEF5',
+  // rgba de `ink` (`#001449`) — antes eran rgba de `#2d4c75`, mismas opacidades.
+  line:        'rgba(0,20,73,0.14)',
+  lineStrong:  'rgba(0,20,73,0.26)',
+  text:   '#001449',
+  text2:  'rgba(0,20,73,0.85)',
+  muted2: 'rgba(0,20,73,0.70)',
+  muted:  'rgba(0,20,73,0.50)',
+  // rgba del nuevo lima (`#BFFE3D`) — mismas opacidades que ya usaban.
+  liveBg: 'rgba(191,254,61,0.22)',
+  warnBg: 'rgba(191,254,61,0.22)',
+  okBg:   'rgba(191,254,61,0.18)',
+  infoBg: 'rgba(191,254,61,0.18)',
 };
 
 // ── DARK (navy-based per Torna web palette) ────────────────────────────
 export const darkColors = {
   ...brand,
-  bg:       '#2d4c75',
-  // accent text flips to lime on the blue surface
-  accentText: '#D6FF7E',
-  // Sobre el azul de marca el lima da 7.69:1: acá el verde oscuro sería ilegible.
-  accentStrong: '#D6FF7E',
-  surface:  '#2d4c75',
-  surface2: '#25406b',
-  bg2:      '#25406b',
-  bg3:      '#1f3a5c',
+  // Fondo base, el más oscuro del mockup oficial.
+  bg:       '#08203E',
+  // accent text flips to lime on the navy surface
+  accentText: '#BFFE3D',
+  // Sobre el navy de marca el lima da 12.61:1 (surface) / 13.57:1 (bg): acá el
+  // verde oscuro sería ilegible.
+  accentStrong: '#BFFE3D',
+  // Superficie elevada (cards, tab bar, sheets) — antes bg==surface; el
+  // mockup los separa en dos tonos de navy distintos.
+  surface:  '#0E2646',
+  // Progresión de navy intermedios, cada uno un poco más claro que el
+  // anterior (bg → surface → surface2 → bg3), aproximado del mockup y
+  // verificado a ojo por contraste — no son valores oficiales del manual.
+  surface2: '#15304F',
+  bg2:      '#15304F',
+  bg3:      '#1C3A5C',
   line:        'rgba(255,255,255,0.18)',
   lineStrong:  'rgba(255,255,255,0.32)',
   text:   '#FFFFFF',
   text2:  'rgba(255,255,255,0.90)',
   muted2: 'rgba(255,255,255,0.78)',
   muted:  'rgba(255,255,255,0.55)',
-  liveBg: 'rgba(214,255,126,0.22)',
-  warnBg: 'rgba(214,255,126,0.22)',
-  okBg:   'rgba(214,255,126,0.18)',
-  infoBg: 'rgba(214,255,126,0.18)',
+  // rgba del nuevo lima (`#BFFE3D`) — mismas opacidades que ya usaban.
+  liveBg: 'rgba(191,254,61,0.22)',
+  warnBg: 'rgba(191,254,61,0.22)',
+  okBg:   'rgba(191,254,61,0.18)',
+  infoBg: 'rgba(191,254,61,0.18)',
 };
 
 export type ThemeColors = typeof lightColors;

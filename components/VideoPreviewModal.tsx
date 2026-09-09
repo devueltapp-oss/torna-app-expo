@@ -544,7 +544,7 @@ export function VideoPreviewModal({
           {isBuffering && (
             <ActivityIndicator
               size="large"
-              color="#D6FF7E"
+              color="#BFFE3D"
               style={{ position: 'absolute', top: '50%', left: '50%', transform: [{ translateX: -20 }, { translateY: -20 }] }}
             />
           )}

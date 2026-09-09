@@ -1790,7 +1790,7 @@ export default function App() {
   }, []);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#2d4c75' }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#08203E' }}>
       <SafeAreaProvider>
         <ThemeProvider initial="system">
           <ErrorBoundary>

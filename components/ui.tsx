@@ -2,7 +2,7 @@
  * Core UI atoms — themed via useTheme(). All props-driven so they can be
  * dropped into screens as plain components.
  *
- * Brand-strict: only #2d4c75 (blue), #D6FF7E (lime), #FFFFFF (white) and
+ * Brand-strict: only #001449 (navy), #BFFE3D (lime), #FFFFFF (white) and
  * opacity-tinted neutrals are used. Status colors collapse into lime+blue.
  */
 import React from 'react';
@@ -290,7 +290,7 @@ export function JumpToLatestButton({ onPress }: { onPress: () => void }) {
         width: 38, height: 38, borderRadius: 19,
         alignItems: 'center', justifyContent: 'center',
         backgroundColor: colors.accent,
-        shadowColor: '#2d4c75', shadowOpacity: 0.24,
+        shadowColor: colors.ink, shadowOpacity: 0.24,
         shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
         elevation: 5,
       }}

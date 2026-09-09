@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/torna-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0F1E47"
+      "backgroundColor": "#08203E"
     },
     "plugins": [
       "expo-video",

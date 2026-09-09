@@ -94,10 +94,11 @@ export function BottomTabBar({ active, onChange, role = 'club', safeBottom }: Pr
             )}
             {/*
               ⚠️ `accentStrong`, NO `primary`.
-              `primary` es el lima `#D6FF7E`, que sobre la superficie clara del
-              navbar da **1.14:1** de contraste — o sea, el ítem activo no se
+              `primary` es el lima `#BFFE3D`, que sobre la superficie clara del
+              navbar da **1.20:1** de contraste — o sea, el ítem activo no se
               distinguía del inactivo en modo claro. `accentStrong` es verde
-              oscuro en claro (5.08:1) y vuelve a ser lima en oscuro (7.69:1).
+              oscuro en claro (5.08:1) y vuelve a ser lima en oscuro (12.61:1
+              sobre la superficie navy `#0E2646`).
             */}
             <Icon size={22} strokeWidth={on ? 2.2 : 2} color={on ? colors.accentStrong : colors.muted} />
             <Text style={{ fontSize: 10, fontWeight: on ? '800' : '600', color: on ? colors.accentStrong : colors.muted }}>

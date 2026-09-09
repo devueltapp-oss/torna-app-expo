@@ -164,7 +164,7 @@ export function InAppNotificationHost({ navigationRef, isClub = false }: InAppNo
             opacity: pressed ? 0.9 : 1,
             // Sombra: la tarjeta flota sobre la pantalla, y en claro comparte el
             // blanco con el fondo — sin esto no se despega.
-            shadowColor: '#2d4c75',
+            shadowColor: colors.ink,
             shadowOpacity: 0.22,
             shadowRadius: 14,
             shadowOffset: { width: 0, height: 6 },

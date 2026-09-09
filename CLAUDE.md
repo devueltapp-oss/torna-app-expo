@@ -1405,7 +1405,7 @@ PATCH /notification/read-all        → { updated }
 | **Fuentes** | `expo-font` ~55.0.x (carga de .ttf custom) |
 | **Notificaciones** | `react-native-onesignal` ~5.5.x + `onesignal-expo-plugin` (push; registro vía `notificationID`). Ver "Notificaciones push (OneSignal)" arriba |
 | **Procesamiento de video** | **Server-side** en el backend (`POST /highlights/from-recording`: FFmpeg byte-range → B2). La app ya **no** usa `ffmpeg-kit-react-native` (crasheaba y estaba fuera de `package.json`). |
-| **Splash / icon** | `assets/torna-icon.png` (1024×1024) · fondo `#2d4c75` |
+| **Splash / icon** | `assets/torna-icon.png` (1024×1024) · fondo `#08203E` |
 | **Bundle IDs** | iOS: `io.torna` · Android package: `io.torna` |
 | **Auth** | `@react-native-firebase/{app,auth}` **v22** · `@react-native-google-signin/google-signin` **v15** · `expo-apple-authentication`. `AuthContext.tsx` usa la **API namespaced** de RNFirebase (`firebaseAuth().signInWith…`, `firebaseAuth.GoogleAuthProvider`): v22 la mantiene, solo tira warnings de deprecación apuntando a la modular. Migrar a la modular es cleanup aparte, no bloquea |
 | **Storage** | `expo-secure-store` (auth tokens) · `@react-native-async-storage` (tema) |
@@ -1420,24 +1420,30 @@ PATCH /notification/read-all        → { updated }
 
 | Token | Hex | Uso |
 |---|---|---|
-| **Classic Blue** | `#2d4c75` | Ink, texto en claro, surface en oscuro, dot del LIVE |
-| **Light Lime** | `#D6FF7E` | CTAs, accent, badges, switches activos, LIVE bg |
-| **White** | `#FFFFFF` | Text sobre azul, surface en claro |
+| **Navy** | `#001449` | Ink, texto en claro, dot del LIVE |
+| **Lime** | `#BFFE3D` | CTAs, accent, badges, switches activos, LIVE bg |
+| **White** | `#FFFFFF` | Text sobre navy, bg/surface en claro |
+| **Navy oscuro (dark bg)** | `#08203E` | Fondo base en modo oscuro |
+| **Navy elevado (dark surface)** | `#0E2646` | Surface elevada (cards, tab bar, sheets) en modo oscuro |
 
-Neutrals = opacidades de `#2d4c75`. **No hay grises separados.**
+> Rebrand 2026-09-08: reemplaza el lima anterior `#D6FF7E` y el navy anterior `#2d4c75`.
+> En modo oscuro `bg` y `surface` eran el mismo navy (`#2d4c75`); ahora son dos tonos
+> distintos del mockup oficial (`#08203E` / `#0E2646`).
+
+Neutrals = opacidades de `#001449` (claro) / blanco (oscuro). **No hay grises separados.**
 
 Paletas viven en `theme/tokens.ts` (`lightColors`, `darkColors`). El
 `ThemeProvider` re-renderiza al togglear el modo.
 
 #### Token clave: `T.accentText`
 
-Lima sobre blanco es ilegible (contrast ratio < 2:1) y azul sobre azul es
+Lima sobre blanco es ilegible (contrast ratio < 2:1) y navy sobre navy es
 invisible. `accentText` flippea según modo:
 
 | Superficie | `T.primary` (CTA bg) | `T.accentText` (texto accent) |
 |---|---|---|
-| Light (blanco) | `#D6FF7E` | `#2d4c75` |
-| Dark (azul) | `#D6FF7E` | `#D6FF7E` |
+| Light (blanco) | `#BFFE3D` | `#001449` |
+| Dark (navy) | `#BFFE3D` | `#BFFE3D` |
 
 **Reglas:**
 - Para fondo de CTA usar `T.primary` (lima) con `T.primaryFg` (azul) como
@@ -1670,7 +1676,7 @@ const { colors } = useTheme();
 - El `background`/`card` del `theme` del `NavigationContainer` (`navTheme` en
   `Root`) cubre el root, pero **no** el contenedor de escena en plena animación:
   el `contentStyle` es imprescindible.
-- El root `GestureHandlerRootView` (`App.tsx`) lleva `backgroundColor: '#2d4c75'`
+- El root `GestureHandlerRootView` (`App.tsx`) lleva `backgroundColor: '#08203E'`
   (color de marca = splash) para que no corte a blanco entre splash y primer
   render.
 - Cada pantalla sigue pintando `colors.bg` en su `SafeAreaView` — eso es el
@@ -1790,11 +1796,11 @@ leerse**, no el identificador interno.
 
 ### Al usar colores
 
-- **Solo 3 colores**: `colors.ink` (`#2d4c75`), `colors.accent` (`#D6FF7E`),
+- **Solo 3 colores**: `colors.ink` (`#001449`), `colors.accent` (`#BFFE3D`),
   `#FFFFFF`.
-- Neutrals = opacidades de azul (`colors.line`, `colors.muted2`, etc.).
+- Neutrals = opacidades de navy (`colors.line`, `colors.muted2`, etc.).
 - Texto "acento" sobre superficie neutra → `colors.accentText`.
-- CTA con fondo lima → texto en `colors.primaryFg` (= `#2d4c75`).
+- CTA con fondo lima → texto en `colors.primaryFg` (= `#001449`).
 - **Nunca**: rojo, naranja, verde diferente al lima, gradient.
 
 ### Al cambiar tokens
