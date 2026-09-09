@@ -25,6 +25,7 @@ export interface PlayerProps {
   onProgress?: (currentTime: number) => void;
   onLoad?: (duration: number) => void;
   onBuffer?: (isBuffering: boolean) => void;
+  onPlayingChange?: (isPlaying: boolean) => void;
   hideControls?: boolean;
   fullscreen?: boolean;
   renderOverlay?: () => React.ReactNode;
@@ -41,7 +42,7 @@ export const Player = React.forwardRef<PlayerHandle, PlayerProps>(function Playe
   const { colors } = useTheme();
   const {
     recordingUrl, durationSeconds, startAt = 0, endAt,
-    autoPlay = false, muted = false, label, onProgress, onLoad, onBuffer,
+    autoPlay = false, muted = false, label, onProgress, onLoad, onBuffer, onPlayingChange,
     hideControls = false, fullscreen = false, renderOverlay,
   } = props;
 
@@ -82,7 +83,10 @@ export const Player = React.forwardRef<PlayerHandle, PlayerProps>(function Playe
       onLoad?.(player.duration);
     }
   });
-  useEventListener(player, 'playingChange', ({ isPlaying }) => setIsPlaying(isPlaying));
+  useEventListener(player, 'playingChange', ({ isPlaying }) => {
+    setIsPlaying(isPlaying);
+    onPlayingChange?.(isPlaying);
+  });
   useEventListener(player, 'timeUpdate', ({ currentTime }) => {
     setPositionSec(currentTime);
     onProgress?.(currentTime);
