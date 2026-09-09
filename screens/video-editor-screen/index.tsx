@@ -48,8 +48,14 @@ export function VideoEditorScreen({
   const { colors } = useTheme();
   const flow = useVideoEditorFlow({ gameId, recordingUrl, durationSeconds });
 
-  // Cancel está oculto durante "processing" salvo que el job haya FALLADO.
-  const canCancel = flow.step !== 'processing' || !!flow.jobError;
+  // ⚠️ Antes el back se deshabilitaba durante "processing" salvo error (se asumía
+  // que el recorte server-side siempre es cuestión de segundos). Bug real
+  // (2026-09-09): si el request se cuelga —red lenta, servidor tardando— la
+  // persona queda atrapada en la pantalla sin swipe nativo (no es un Modal) y
+  // sin ningún botón visible. `cancelProcessing` solo deja de mirar la promesa
+  // (no hay AbortController): si el job igual termina bien, el highlight se crea
+  // en silencio y aparece en la librería — mejor eso que un editor sin salida.
+  const canCancel = true;
 
   function handleBack() {
     switch (flow.step) {

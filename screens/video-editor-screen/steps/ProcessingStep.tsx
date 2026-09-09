@@ -67,7 +67,7 @@ export function ProcessingStep({ status, error, onRetry, onCancel }: ProcessingS
       </View>
 
       {!error ? (
-        <View>
+        <View style={{ gap: 12 }}>
           <View style={{ height: 8, backgroundColor: colors.bg2, borderRadius: 4, overflow: 'hidden' }}>
             <Animated.View style={{
               position: 'absolute', top: 0, bottom: 0, width: '40%',
@@ -75,9 +75,14 @@ export function ProcessingStep({ status, error, onRetry, onCancel }: ProcessingS
               left: loopAnim.interpolate({ inputRange: [0, 1], outputRange: ['-40%', '100%'] }),
             }}/>
           </View>
-          <Text style={{ marginTop: 6, fontSize: 11, color: colors.muted2, fontFamily: 'Menlo' }}>
+          <Text style={{ fontSize: 11, color: colors.muted2, fontFamily: 'Menlo' }}>
             JOB {status}
           </Text>
+          {/* ⚠️ Salida visible aunque no haya error todavía (2026-09-09): antes
+              este botón solo aparecía si `error` era verdadero, y el chevron del
+              header estaba deshabilitado mientras tanto — si el job se colgaba,
+              no había NINGUNA forma de salir de la pantalla. */}
+          <Button variant="soft" size="lg" onPress={onCancel}>Cancelar</Button>
         </View>
       ) : (
         <View style={{ flexDirection: 'row', gap: 8 }}>
