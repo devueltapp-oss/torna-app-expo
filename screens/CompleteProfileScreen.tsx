@@ -11,11 +11,12 @@ import {
   View, Text, ScrollView, Pressable, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, AtSign, User as UserIcon, CheckCircle2, XCircle } from 'lucide-react-native';
+import { ArrowLeft, AtSign, User as UserIcon, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { Button, Input } from '../components/ui';
 import { useAuth, type TornaUser, type RegisterDto } from '../contexts/AuthContext';
 import { checkUsernameAvailable, USERNAME_RE } from '../api/auth';
+import type { LoginRole } from './LoginWithRoleScreen';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -27,7 +28,16 @@ export interface CompleteProfileScreenProps {
   prefillEmail?: string;
   /** `email` = entró con email/contraseña pero no tenía cuenta en Torna. */
   authProvider: 'email' | 'google' | 'apple' | 'facebook';
+  /**
+   * Rol elegido en el segmented control de LoginWithRole. ⚠️ Decide a qué
+   * endpoint/flujo va el alta — ver el comentario de `registerSocialClub` en
+   * AuthContext. Sin esto, toda alta que pasaba por acá terminaba siendo un
+   * Player, incluso habiendo elegido "Soy Club" (bug real 2026-09-09).
+   */
+  role: LoginRole;
   onComplete: (user: TornaUser) => void;
+  /** Alta de CLUB completada: queda pendiente de aprobación, no logueado. */
+  onPending: () => void;
   onBack: () => void;
 }
 
@@ -54,11 +64,13 @@ export function CompleteProfileScreen({
   prefillName = '',
   prefillEmail,
   authProvider,
+  role,
   onComplete,
+  onPending,
   onBack,
 }: CompleteProfileScreenProps) {
   const { colors } = useTheme();
-  const { register } = useAuth();
+  const { register, registerSocialClub } = useAuth();
 
   const [username, setUsername] = useState('');
   const [name, setName] = useState(prefillName);
@@ -111,6 +123,19 @@ export function CompleteProfileScreen({
     setIsSubmitting(true);
 
     try {
+      // ⚠️ Club NO usa `register()` (ese loguea al instante): el club queda
+      // `status:false` pendiente de aprobación, así que `registerSocialClub`
+      // ni siquiera guarda token — la UI va a Pending, no a la app.
+      if (role === 'club') {
+        await registerSocialClub(
+          idToken,
+          { username: username.trim(), name: name.trim() },
+          authProvider,
+        );
+        onPending();
+        return;
+      }
+
       const dto: RegisterDto = {
         username: username.trim(),
         name: name.trim(),
@@ -272,6 +297,21 @@ export function CompleteProfileScreen({
           </View>
         ) : null}
 
+        {/* Mismo aviso que LoginWithRoleScreen para "Soy Club" — acá aplica
+            igual: el alta social de un club también pasa por aprobación. */}
+        {role === 'club' ? (
+          <View style={{
+            flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+            backgroundColor: colors.accent, padding: 12, borderRadius: 12,
+          }}>
+            <AlertTriangle size={16} color={colors.warnFg} />
+            <Text style={{ flex: 1, fontSize: 12, color: colors.warnFg, lineHeight: 17 }}>
+              Tu club queda pendiente de aprobación manual del admin (menos de 24 h) — no vas a
+              entrar a la app todavía.
+            </Text>
+          </View>
+        ) : null}
+
         <View style={{ flex: 1 }} />
 
         {/* CTA */}
@@ -282,7 +322,7 @@ export function CompleteProfileScreen({
           loading={isSubmitting}
           onPress={handleSubmit}
         >
-          Crear mi cuenta
+          {role === 'club' ? 'Enviar solicitud' : 'Crear mi cuenta'}
         </Button>
 
         <Text style={{ textAlign: 'center', fontSize: 11, color: colors.muted, lineHeight: 16 }}>

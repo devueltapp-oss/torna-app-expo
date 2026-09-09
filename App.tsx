@@ -159,6 +159,10 @@ type AuthStackParamList = {
     prefillEmail?: string;
     /** `email` = login por email/contraseña sin cuenta en la DB de Torna. */
     authProvider: 'email' | 'google' | 'apple' | 'facebook';
+    /** Rol elegido en el segmented control de LoginWithRole — ver su comentario
+     * sobre `onNeedsRegistration` (bug 2026-09-09: sin esto, todo alta que
+     * pasaba por acá quedaba registrada como Player). */
+    role: LoginRole;
   };
 };
 
@@ -736,12 +740,13 @@ function AuthNavigator() {
             onForgot={(email?: string) =>
               navigation.navigate('ForgotPassword', { prefillEmail: email })
             }
-            onNeedsRegistration={(result: LoginResult & { status: 'needs_registration' }, provider) => {
+            onNeedsRegistration={(result: LoginResult & { status: 'needs_registration' }, provider, role) => {
               navigation.navigate('CompleteProfile', {
                 idToken: result.idToken,
                 prefillName: result.name,
                 prefillEmail: result.email,
                 authProvider: provider,
+                role,
               });
             }}
           />
@@ -793,13 +798,15 @@ function AuthNavigator() {
 
       <AuthStack.Screen name="CompleteProfile">
         {({ navigation, route }) => {
-          const { idToken, prefillName, prefillEmail, authProvider } = route.params;
+          const { idToken, prefillName, prefillEmail, authProvider, role } = route.params;
           return (
             <CompleteProfileScreen
               idToken={idToken}
               prefillName={prefillName}
               prefillEmail={prefillEmail}
               authProvider={authProvider}
+              role={role}
+              onPending={() => navigation.replace('Pending')}
               onComplete={() => {
                 // AuthProvider.register() already set user → Root will
                 // switch to AppStack. Nothing to navigate here.

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, Image, Pressable } from 'react-native';
+import { View, Text, ScrollView, Image, Pressable, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Mail, Lock, User as UserIcon, Home, AlertTriangle } from 'lucide-react-native';
 import { useTheme } from '../theme';
@@ -15,8 +15,17 @@ interface Props {
   onLogin?: (role: LoginRole) => void;
   /** Called when the user wants to register (no social token involved). */
   onRegister?: (role: LoginRole) => void;
-  /** Called when a social login returns needs_registration. */
-  onNeedsRegistration?: (result: LoginResult & { status: 'needs_registration' }, provider: 'email' | 'google' | 'apple' | 'facebook') => void;
+  /**
+   * Called when a login returns needs_registration (social o email sin fila en
+   * la DB). Lleva el `role` elegido en el segmented control — ⚠️ **obligatorio
+   * de propagar** (bug real 2026-09-09): sin esto, `CompleteProfileScreen`
+   * registraba SIEMPRE como Player, aunque la persona hubiera elegido "Soy
+   * Club" antes de tocar "Continuar con Google/Apple". El backend defaultea
+   * `isClub` a `false` cuando el DTO no lo manda (`registerDto.isClub ===
+   * true`), así que un club nuevo por login social quedaba activo como
+   * jugador en vez de pendiente de aprobación.
+   */
+  onNeedsRegistration?: (result: LoginResult & { status: 'needs_registration' }, provider: 'email' | 'google' | 'apple' | 'facebook', role: LoginRole) => void;
   /** Recuperar contraseña. Recibe el email ya tipeado para no pedirlo dos veces. */
   onForgot?: (email?: string) => void;
 }
@@ -64,7 +73,7 @@ export function LoginWithRoleScreen({ onLogin, onRegister, onNeedsRegistration, 
       // creado desde la consola de Firebase): completar el alta eligiendo
       // username, igual que en el login social.
       if (result.status === 'needs_registration') {
-        onNeedsRegistration?.(result, 'email');
+        onNeedsRegistration?.(result, 'email', role);
         return;
       }
 
@@ -92,7 +101,7 @@ export function LoginWithRoleScreen({ onLogin, onRegister, onNeedsRegistration, 
       if (result.status === 'authenticated') {
         onLogin?.(result.user.isClub ? 'club' : 'player');
       } else {
-        onNeedsRegistration?.(result, provider);
+        onNeedsRegistration?.(result, provider, role);
       }
     } catch (err: any) {
       // Cancelar el selector de cuenta de Google no es un error: es como
@@ -253,13 +262,20 @@ export function LoginWithRoleScreen({ onLogin, onRegister, onNeedsRegistration, 
             disabled={isBusy}
             onPress={() => handleSocial('google')}
           />
-          <SocialButton
-            provider="apple"
-            label="Continuar con Apple"
-            loading={socialLoading === 'apple'}
-            disabled={isBusy}
-            onPress={() => handleSocial('apple')}
-          />
+          {/* ⚠️ Sign in with Apple es exclusivo de iOS: `expo-apple-authentication`
+              no tiene implementación en Android y `signInAsync` tira ahí un error
+              de "no disponible" (no un cancelar). Antes el botón se veía en las
+              dos plataformas y en Android era un botón que rompía apenas se
+              tocaba. */}
+          {Platform.OS === 'ios' && (
+            <SocialButton
+              provider="apple"
+              label="Continuar con Apple"
+              loading={socialLoading === 'apple'}
+              disabled={isBusy}
+              onPress={() => handleSocial('apple')}
+            />
+          )}
         </View>
 
         {/* Info banner */}

@@ -86,6 +86,20 @@ interface AuthContextValue {
     dto: Omit<RegisterDto, 'authProvider' | 'isClub'>,
   ) => Promise<void>;
   /**
+   * Alta de un club desde un login social (Google/Apple) o un idToken de email
+   * ya obtenido — el equivalente de `registerClub` para cuando Firebase YA
+   * autenticó a la persona (CompleteProfileScreen). Mismo contrato: crea la
+   * fila en el backend con `isClub:true` (queda `status:false`, pendiente) y
+   * **no** inicia sesión ni guarda token — cierra la sesión de Firebase que
+   * dejó el login social, para no dejar credenciales activas de una cuenta
+   * todavía no aprobada.
+   */
+  registerSocialClub: (
+    idToken: string,
+    dto: Omit<RegisterDto, 'authProvider' | 'isClub'>,
+    authProvider: NonNullable<RegisterDto['authProvider']>,
+  ) => Promise<void>;
+  /**
    * Recuperación de contraseña (usuario deslogueado): manda el mail con el
    * enlace de Firebase. NO usa el backend — `POST /auth/reset-password` está
    * detrás de FirebaseAuthGuard y exige sesión, justo lo que no hay acá.
@@ -617,6 +631,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   // ------------------------------------------------------------------
+  // registerSocialClub — mismo contrato que registerClub, para cuando el
+  // idToken ya existe (login social ya autenticó contra Firebase).
+  // ------------------------------------------------------------------
+  const registerSocialClub = useCallback(
+    async (
+      idToken: string,
+      dto: Omit<RegisterDto, 'authProvider' | 'isClub'>,
+      authProvider: NonNullable<RegisterDto['authProvider']>,
+    ): Promise<void> => {
+      await apiRegister(idToken, { ...dto, isClub: true, authProvider });
+      await firebaseAuth().signOut().catch(() => undefined);
+    },
+    [],
+  );
+
+  // ------------------------------------------------------------------
   // sendPasswordReset — recuperación con el usuario deslogueado.
   // Firebase manda el mail con el enlace; el backend no participa (su
   // POST /auth/reset-password exige sesión, así que no sirve para esto).
@@ -699,6 +729,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loginWithEmailPassword,
     registerWithEmailPassword,
     registerClub,
+    registerSocialClub,
     sendPasswordReset,
     changePassword,
     loginWithGoogle,
