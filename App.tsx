@@ -968,6 +968,12 @@ function MainPlayer({ navigation, route }: any) {
       // hasta un pull-to-refresh manual o reiniciar la app.
       refreshMatches();
       refreshHighlights();
+      // ⚠️ Mismo bug, no cubierto hasta el 2026-09-09: "Highlights · de tus
+      // seguidos" (useFeed → GET /highlights/feed) también carga una sola vez al
+      // montar. Si alguien que seguís publica un highlight público mientras
+      // estás en otra pantalla (perfil, chat, reserva…), al volver a Inicio no
+      // aparecía hasta hacer pull-to-refresh a mano o reiniciar la app.
+      refreshFeed();
     });
     return unsubscribe;
   }, [
@@ -978,6 +984,7 @@ function MainPlayer({ navigation, route }: any) {
     refreshUpcomingFeed,
     refreshMatches,
     refreshHighlights,
+    refreshFeed,
   ]);
 
   const owner: ProfileOwner = {
