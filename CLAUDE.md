@@ -1259,7 +1259,7 @@ PUT    /user/update-notification-id  { notificationID }  → registra el push to
 DELETE /user/notification-id                             → lo borra (logout)
 ```
 
-**Ruteo — `resolvePushTarget(additionalData)`** traduce el push a pantalla. Son los **11
+**Ruteo — `resolvePushTarget(additionalData)`** traduce el push a pantalla. Son los **12
 tipos** que emite el backend (cubiertos por `services/__tests__/notifications.test.ts`):
 
 | `type` | Pantalla |
@@ -1268,6 +1268,7 @@ tipos** que emite el backend (cubiertos por `services/__tests__/notifications.te
 | `NEW_CHAT_MESSAGE` | `GameChat { gameId }` |
 | `NEW_DM_MESSAGE` | `DirectChat { userId: fromUserId }` |
 | `GAME_CANCELLED` · `GAME_PLAYER_LEFT` · `GAME_PAIR_CANCELLED` · `GAME_PLAYER_ADDED` · `GAME_APPLICATION_RECEIVED` | `MainPlayer { initialTab: 'games' }` |
+| `NEW_HIGHLIGHT_PUBLISHED` (2026-09-09: alguien que seguís subió un highlight público) | `PlayerProfile { playerId: actorId }` |
 
 - **La misma tabla resuelve el tap en la campanita**: cada notificación guardada trae el
   mismo `data` que viajó en el push, así que `NotificationsScreen` no necesita un ruteo

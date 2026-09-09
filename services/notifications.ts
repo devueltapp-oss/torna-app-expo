@@ -39,6 +39,8 @@ export interface PushData {
   gameId?: string;
   fromUserId?: string;
   conversationId?: string;
+  /** Autor de la actividad — hoy solo lo manda NEW_HIGHLIGHT_PUBLISHED. */
+  actorId?: string;
 }
 
 /** Pantalla a la que hay que ir cuando se toca la notificación. */
@@ -112,6 +114,14 @@ export function resolvePushTarget(data: PushData | null | undefined): PushTarget
     case 'NEW_DM_MESSAGE':
       return data?.fromUserId
         ? { name: 'DirectChat', params: { userId: data.fromUserId } }
+        : null;
+
+    // "Alguien que seguís publicó un highlight" — no hay pantalla para abrir un
+    // highlight suelto (se ven dentro de un perfil/librería), así que el lugar
+    // útil es el perfil del autor: ahí está arriba de todo en su grid.
+    case 'NEW_HIGHLIGHT_PUBLISHED':
+      return data?.actorId
+        ? { name: 'PlayerProfile', params: { playerId: data.actorId } }
         : null;
 
     case 'GAME_CANCELLED':

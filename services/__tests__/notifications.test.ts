@@ -54,10 +54,18 @@ describe('resolvePushTarget', () => {
     });
   });
 
+  it('manda al perfil del autor cuando un seguido publica un highlight', () => {
+    expect(resolvePushTarget({ type: 'NEW_HIGHLIGHT_PUBLISHED', actorId: 'u9' })).toEqual({
+      name: 'PlayerProfile',
+      params: { playerId: 'u9' },
+    });
+  });
+
   it('no navega si falta el dato que la pantalla necesita', () => {
     expect(resolvePushTarget({ type: 'STREAMING_STARTED' })).toBeNull();
     expect(resolvePushTarget({ type: 'NEW_CHAT_MESSAGE' })).toBeNull();
     expect(resolvePushTarget({ type: 'NEW_DM_MESSAGE' })).toBeNull();
+    expect(resolvePushTarget({ type: 'NEW_HIGHLIGHT_PUBLISHED' })).toBeNull();
   });
 
   it('ignora tipos desconocidos y payloads vacíos', () => {
