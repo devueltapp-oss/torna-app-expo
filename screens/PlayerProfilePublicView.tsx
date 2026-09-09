@@ -66,8 +66,10 @@ export function PlayerProfilePublicView({
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
-        {/* Hero — mismo tratamiento que el perfil propio (ver PlayerOwnProfileScreen) */}
-        <View style={{ backgroundColor: colors.ink, padding: 16, paddingBottom: 18, overflow: 'hidden' }}>
+        {/* Hero — mismo tratamiento que el perfil propio (ver PlayerOwnProfileScreen).
+            ⚠️ Fondo `colors.bg` (2026-09-09), NO `colors.ink` — ver el comentario
+            equivalente en PlayerOwnProfileScreen.tsx para el motivo. */}
+        <View style={{ backgroundColor: colors.bg, padding: 16, paddingBottom: 18, overflow: 'hidden' }}>
           <Svg viewBox="0 0 390 220" width="100%" height="100%" preserveAspectRatio="xMidYMid slice"
             style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.14 }}>
             <Rect x={40} y={40} width={310} height={140} stroke={colors.accent} strokeWidth={2} fill="none"/>
@@ -78,8 +80,8 @@ export function PlayerProfilePublicView({
               con el resto de botones muertos de la app (mismo criterio que el
               chrome del visor). El hueco de la derecha se deja vacío. */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Pressable onPress={onBack} style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.14)', alignItems: 'center', justifyContent: 'center' }}>
-              <ChevronLeft size={18} color="#FFFFFF"/>
+            <Pressable onPress={onBack} style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: colors.bg2, alignItems: 'center', justifyContent: 'center' }}>
+              <ChevronLeft size={18} color={colors.text}/>
             </Pressable>
           </View>
 
@@ -94,14 +96,15 @@ export function PlayerProfilePublicView({
             />
             <View style={{ flex: 1, minWidth: 0 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                <Text style={{ fontSize: 20, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.4, flexShrink: 1 }} numberOfLines={1}>{player.name}</Text>
+                <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, letterSpacing: -0.4, flexShrink: 1 }} numberOfLines={1}>{player.name}</Text>
                 {player.isClub && (
                   <BadgeCheck size={18} color={colors.accent} fill="none" accessibilityLabel="Cuenta de club"/>
                 )}
               </View>
-              {/* La categoría va como texto y no con CategoryBadge: acá el fondo
-                  es el azul del hero en ambos temas, y el badge usa colors.text. */}
-              <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 2 }} numberOfLines={1}>
+              {/* La categoría va como texto y no con CategoryBadge: acá el hero
+                  usa el mismo fondo que el badge (`colors.bg`/`colors.text`), así
+                  que el badge se vería duplicado — este texto ya cumple lo mismo. */}
+              <Text style={{ fontSize: 12, color: colors.muted2, marginTop: 2 }} numberOfLines={1}>
                 {[player.username, player.club, player.category ? `CAT. ${player.category}` : null]
                   .filter(Boolean)
                   .join(' · ')}
@@ -122,12 +125,18 @@ export function PlayerProfilePublicView({
               notificar y mensajear son cosas que solo tienen sentido sobre
               OTRA cuenta. */}
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 14, alignItems: 'center' }}>
+            {/* ⚠️ 2026-09-09: antes "Seguir" era blanco sólido y "Siguiendo" era
+                blanco translúcido — contraste pensado para el hero navy fijo. Con
+                el hero en `colors.bg`, "Seguir" pasa a ser la CTA lima estándar
+                (mismo par que `<Button variant="accent"/>`: fondo lima + texto
+                ink) y "Siguiendo" al soft gris-azulado (`bg2`/`text`) que ya usa
+                el resto de la app para estados "ya hecho". */}
             <Pressable onPress={onToggleFollow} style={{
               flex: 1, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10,
-              backgroundColor: player.isFollowing ? 'rgba(255,255,255,0.18)' : '#FFFFFF',
+              backgroundColor: player.isFollowing ? colors.bg2 : colors.accent,
               alignItems: 'center',
             }}>
-              <Text style={{ fontWeight: '800', fontSize: 13, color: player.isFollowing ? '#FFFFFF' : colors.ink }}>
+              <Text style={{ fontWeight: '800', fontSize: 13, color: player.isFollowing ? colors.text : colors.ink }}>
                 {player.isFollowing ? '✓ Siguiendo' : '+ Seguir'}
               </Text>
             </Pressable>
@@ -137,12 +146,12 @@ export function PlayerProfilePublicView({
                 style={{
                   width: 42, height: 42, borderRadius: 10,
                   alignItems: 'center', justifyContent: 'center',
-                  backgroundColor: player.notifyOnMatch ? '#FFFFFF' : 'rgba(255,255,255,0.18)',
+                  backgroundColor: player.notifyOnMatch ? colors.accent : colors.bg2,
                 }}
               >
                 <Bell
                   size={18}
-                  color={player.notifyOnMatch ? colors.ink : '#FFFFFF'}
+                  color={player.notifyOnMatch ? colors.ink : colors.text}
                   fill={player.notifyOnMatch ? colors.ink : 'none'}
                 />
               </Pressable>
@@ -154,10 +163,10 @@ export function PlayerProfilePublicView({
                 style={{
                   width: 42, height: 42, borderRadius: 10,
                   alignItems: 'center', justifyContent: 'center',
-                  backgroundColor: 'rgba(255,255,255,0.18)',
+                  backgroundColor: colors.bg2,
                 }}
               >
-                <MessageCircle size={18} color="#FFFFFF" />
+                <MessageCircle size={18} color={colors.text} />
               </Pressable>
             )}
           </View>
@@ -236,10 +245,11 @@ export function PlayerProfilePublicView({
 
 /** Mismo tratamiento que los stats del hero del perfil propio. */
 function HeroStat({ value, label }: { value: number; label: string }) {
+  const { colors } = useTheme();
   return (
     <View>
-      <Text style={{ fontSize: 18, fontWeight: '800', color: '#FFFFFF' }}>{value}</Text>
-      <Text style={{ fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.7)', letterSpacing: 0.8 }}>
+      <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{value}</Text>
+      <Text style={{ fontSize: 10, fontWeight: '700', color: colors.muted2, letterSpacing: 0.8 }}>
         {label}
       </Text>
     </View>

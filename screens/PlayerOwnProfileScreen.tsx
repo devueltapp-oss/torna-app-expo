@@ -2,8 +2,9 @@
  * PlayerOwnProfileScreen — vista pública del PROPIO perfil.
  *
  * Mismo lenguaje visual que `PlayerProfilePublicView` (el perfil de OTRO
- * jugador) a propósito — hero azul con motivo de cancha, avatar con anillo
- * blanco, nombre/username/nivel en la misma línea, pestañas + grid 3-col con
+ * jugador) a propósito — hero con motivo de cancha (⚠️ fondo `colors.bg`
+ * desde 2026-09-09, antes `colors.ink`: ver esa fecha más abajo), avatar con
+ * anillo, nombre/username/nivel en la misma línea, pestañas + grid 3-col con
  * `ContentThumb`. Antes eran dos pantallas con estilos distintos (una barra
  * plana acá, un hero con foto de fondo allá) que hacían sentir la app como
  * dos apps distintas para la misma cosa (ver un perfil).
@@ -78,8 +79,14 @@ export function PlayerOwnProfileScreen({
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
-        {/* Hero — mismo tratamiento que el perfil ajeno (ver PlayerProfilePublicView) */}
-        <View style={{ backgroundColor: colors.ink, padding: 16, paddingBottom: 18, overflow: 'hidden' }}>
+        {/* Hero — mismo tratamiento que el perfil ajeno (ver PlayerProfilePublicView).
+            ⚠️ Fondo `colors.bg` (2026-09-09), NO `colors.ink`: el hero navy fijo
+            desentonaba contra la sección de highlights/partidos de abajo, que
+            siempre usó `colors.bg` — en modo claro quedaba un bloque azul oscuro
+            arriba de una página blanca. Unificado con la superficie de la
+            pantalla; todo lo que abajo asumía "texto blanco sobre navy" pasa a
+            los tokens de texto normales. */}
+        <View style={{ backgroundColor: colors.bg, padding: 16, paddingBottom: 18, overflow: 'hidden' }}>
           <Svg viewBox="0 0 390 220" width="100%" height="100%" preserveAspectRatio="xMidYMid slice"
             style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.14 }}>
             <Rect x={40} y={40} width={310} height={140} stroke={colors.accent} strokeWidth={2} fill="none"/>
@@ -91,21 +98,21 @@ export function PlayerOwnProfileScreen({
               que existen solo sobre la cuenta propia. */}
           <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
             <HeroIconButton onPress={onOpenLibrary} dot>
-              <Lock size={16} color="#FFFFFF"/>
+              <Lock size={16} color={colors.text}/>
             </HeroIconButton>
             <HeroIconButton onPress={onOpenSettings}>
-              <Settings size={16} color="#FFFFFF"/>
+              <Settings size={16} color={colors.text}/>
             </HeroIconButton>
           </View>
 
           <View style={{ flexDirection: 'row', gap: 14, marginTop: 18, alignItems: 'flex-end' }}>
             <Pressable onPress={() => owner.profilePicture && setViewer(true)}>
               <View style={{ borderRadius: 36, overflow: 'hidden' }}>
-                <Avatar name={owner.name} size={72} imageUri={owner.profilePicture} ringColor="#FFFFFF"/>
+                <Avatar name={owner.name} size={72} imageUri={owner.profilePicture} ringColor={colors.bg}/>
               </View>
             </Pressable>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={{ fontSize: 20, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.4 }} numberOfLines={1}>
+              <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, letterSpacing: -0.4 }} numberOfLines={1}>
                 {owner.name}
               </Text>
               {/*
@@ -118,7 +125,7 @@ export function PlayerOwnProfileScreen({
                 que es aproximado y no se muestra. `ProfileOwner.club` además
                 llega siempre vacío en la app.
               */}
-              <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 2 }} numberOfLines={1}>
+              <Text style={{ fontSize: 12, color: colors.muted2, marginTop: 2 }} numberOfLines={1}>
                 {[owner.username, owner.category ? `CAT. ${owner.category}` : null]
                   .filter(Boolean)
                   .join(' · ')}
@@ -196,22 +203,25 @@ export function PlayerOwnProfileScreen({
 
 /* ───────────── Helpers ───────────── */
 
-/** Mismo botón translúcido que "volver"/"···" en el hero del perfil ajeno. */
+/** Mismo botón que "volver"/"···" en el hero del perfil ajeno — fondo `bg2`,
+ * ícono `text`, igual que cualquier botón secundario sobre `colors.bg` en el
+ * resto de la app (p. ej. el buscador de HomeScreen). */
 function HeroIconButton({ children, onPress, dot }: {
   children: React.ReactNode;
   onPress?: () => void;
   dot?: boolean;
 }) {
+  const { colors } = useTheme();
   return (
     <Pressable onPress={onPress} style={({ pressed }) => ({
-      width: 34, height: 34, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.14)',
+      width: 34, height: 34, borderRadius: 11, backgroundColor: colors.bg2,
       alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.7 : 1,
     })}>
       {children}
       {dot ? (
         <View style={{
           position: 'absolute', top: 5, right: 5, width: 6, height: 6, borderRadius: 3,
-          backgroundColor: '#D6FF7E',
+          backgroundColor: '#BFFE3D',
         }}/>
       ) : null}
     </Pressable>
@@ -220,10 +230,11 @@ function HeroIconButton({ children, onPress, dot }: {
 
 /** Mismo tratamiento que los conteos de seguidores/seguidos del perfil ajeno. */
 function HeroStat({ value, label }: { value: number; label: string }) {
+  const { colors } = useTheme();
   return (
     <View>
-      <Text style={{ fontSize: 18, fontWeight: '800', color: '#FFFFFF' }}>{value}</Text>
-      <Text style={{ fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.7)', letterSpacing: 0.8 }}>
+      <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{value}</Text>
+      <Text style={{ fontSize: 10, fontWeight: '700', color: colors.muted2, letterSpacing: 0.8 }}>
         {label}
       </Text>
     </View>

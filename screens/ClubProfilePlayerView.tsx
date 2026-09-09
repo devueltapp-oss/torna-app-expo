@@ -48,19 +48,21 @@ export function ClubProfilePlayerView({
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
-        {/* Header — mismo layout que el perfil de usuario */}
-        <View style={{ backgroundColor: colors.ink, padding: 16, paddingBottom: 18, overflow: 'hidden' }}>
+        {/* Header — mismo layout que el perfil de usuario.
+            ⚠️ Fondo `colors.bg` (2026-09-09), NO `colors.ink` — ver el comentario
+            equivalente en PlayerOwnProfileScreen.tsx para el motivo. */}
+        <View style={{ backgroundColor: colors.bg, padding: 16, paddingBottom: 18, overflow: 'hidden' }}>
           <Svg viewBox="0 0 390 220" width="100%" height="100%" preserveAspectRatio="xMidYMid slice"
             style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.14 }}>
             <Rect x={40} y={40} width={310} height={140} stroke={colors.accent} strokeWidth={2} fill="none"/>
             <Line x1={195} y1={40} x2={195} y2={180} stroke={colors.accent} strokeWidth={2}/>
           </Svg>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Pressable onPress={onBack} style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.14)', alignItems: 'center', justifyContent: 'center' }}>
-              <ChevronLeft size={18} color="#FFFFFF"/>
+            <Pressable onPress={onBack} style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: colors.bg2, alignItems: 'center', justifyContent: 'center' }}>
+              <ChevronLeft size={18} color={colors.text}/>
             </Pressable>
-            <Pressable style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.14)', alignItems: 'center', justifyContent: 'center' }}>
-              <MoreHorizontal size={18} color="#FFFFFF"/>
+            <Pressable style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: colors.bg2, alignItems: 'center', justifyContent: 'center' }}>
+              <MoreHorizontal size={18} color={colors.text}/>
             </Pressable>
           </View>
 
@@ -76,11 +78,11 @@ export function ClubProfilePlayerView({
             />
             <View style={{ flex: 1, minWidth: 0 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                <Text style={{ fontSize: 20, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.4, flexShrink: 1 }} numberOfLines={1}>{club.name}</Text>
+                <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, letterSpacing: -0.4, flexShrink: 1 }} numberOfLines={1}>{club.name}</Text>
                 {/* Check verde = cuenta de club (reemplaza al viejo aro verde) */}
                 <BadgeCheck size={18} color={colors.accent} fill="none" accessibilityLabel="Cuenta de club"/>
               </View>
-              <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 2 }} numberOfLines={1}>
+              <Text style={{ fontSize: 12, color: colors.muted2, marginTop: 2 }} numberOfLines={1}>
                 {club.handle}{club.city ? ` · ${club.city}` : ''}
               </Text>
               {isLive && (
@@ -96,12 +98,14 @@ export function ClubProfilePlayerView({
           </View>
 
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 14, alignItems: 'center' }}>
+            {/* Mismo par CTA-lima/soft-gris que el perfil de player — ver el
+                comentario equivalente en PlayerProfilePublicView.tsx. */}
             <Pressable onPress={onToggleFollow} style={{
               flex: 1, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10,
-              backgroundColor: club.isFollowing ? 'rgba(255,255,255,0.18)' : '#FFFFFF',
+              backgroundColor: club.isFollowing ? colors.bg2 : colors.accent,
               alignItems: 'center',
             }}>
-              <Text style={{ fontWeight: '800', fontSize: 13, color: club.isFollowing ? '#FFFFFF' : colors.ink }}>
+              <Text style={{ fontWeight: '800', fontSize: 13, color: club.isFollowing ? colors.text : colors.ink }}>
                 {club.isFollowing ? '✓ Siguiendo' : '+ Seguir'}
               </Text>
             </Pressable>
@@ -112,19 +116,19 @@ export function ClubProfilePlayerView({
                 style={{
                   width: 42, height: 42, borderRadius: 10,
                   alignItems: 'center', justifyContent: 'center',
-                  backgroundColor: 'rgba(255,255,255,0.18)',
+                  backgroundColor: colors.bg2,
                 }}
               >
-                <MessageCircle size={18} color="#FFFFFF" />
+                <MessageCircle size={18} color={colors.text} />
               </Pressable>
             )}
             <Pressable onPress={onOpenFollowers} style={{ alignItems: 'flex-end', minWidth: 60 }}>
-              <Text style={{ fontSize: 18, fontWeight: '800', color: '#FFFFFF' }}>{club.followers.toLocaleString('es-AR')}</Text>
-              <Text style={{ fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.7)', letterSpacing: 0.8 }}>SEGUIDORES</Text>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{club.followers.toLocaleString('es-AR')}</Text>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: colors.muted2, letterSpacing: 0.8 }}>SEGUIDORES</Text>
             </Pressable>
             <Pressable onPress={onOpenFollowing} style={{ alignItems: 'flex-end', minWidth: 60 }}>
-              <Text style={{ fontSize: 18, fontWeight: '800', color: '#FFFFFF' }}>{(club.followingCount ?? 0).toLocaleString('es-AR')}</Text>
-              <Text style={{ fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.7)', letterSpacing: 0.8 }}>SIGUIENDO</Text>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{(club.followingCount ?? 0).toLocaleString('es-AR')}</Text>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: colors.muted2, letterSpacing: 0.8 }}>SIGUIENDO</Text>
             </Pressable>
           </View>
         </View>

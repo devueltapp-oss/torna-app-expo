@@ -51,7 +51,13 @@ export function ProfileHeroAvatar({
             ? { borderRadius: size / 2 + 6, borderWidth: 3, borderColor: colors.live, padding: 2 }
             : { borderRadius: size / 2, overflow: 'hidden' }}
         >
-          <Avatar name={name} size={size} imageUri={imageUri} ringColor="#FFFFFF" />
+          {/* El aro interno usa el color de FONDO del hero, no blanco fijo: es lo
+              que crea el "hueco" entre la foto y el aro verde de "en vivo" —
+              tiene que fundirse con la superficie de atrás, sea cual sea el
+              tema, o sea el color que se le puso al hero (ver 2026-09-09:
+              unificación con `colors.bg`). Blanco fijo se volvía invisible
+              apenas el hero dejó de ser azul en modo claro. */}
+          <Avatar name={name} size={size} imageUri={imageUri} ringColor={colors.bg} />
         </View>
       </Pressable>
 
