@@ -26,6 +26,8 @@ interface Props {
   /** Abre la hoja de gestión de esa partida (la misma de Juegos → Mis partidas). */
   onOpenUpcoming?: (game: UpcomingGameData) => void;
   feedPosts?: FeedPostData[];
+  /** Like/unlike de un highlight del feed (POST /highlights/:id/like, optimista). */
+  onLikeHighlight?: (id: string) => void;
   onOpenGame?: (id: string) => void;
   onOpenSearch?: () => void;
   onChangeTab?: (id: TabId) => void;
@@ -61,6 +63,7 @@ export function HomeScreen({
   upcomingGames = [],
   onOpenUpcoming,
   feedPosts = [],
+  onLikeHighlight,
   onOpenGame,
   onOpenSearch,
   onChangeTab,
@@ -77,9 +80,13 @@ export function HomeScreen({
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       {/* Header */}
+      {/* ⚠️ `colors.bg`, NO `colors.surface` (2026-09-09): en claro son el mismo
+          blanco, pero en oscuro `surface` (#0E2646) desentonaba contra el resto
+          de la pantalla — la barra de búsqueda/notificaciones quedaba con un
+          tono de "caja" en vez de fundirse con el fondo general (#08203E). */}
       <View style={{
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        backgroundColor: colors.surface, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 14,
+        backgroundColor: colors.bg, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 14,
       }}>
         {/* ⛔ Acá había un "Hola / <tu nombre>". Se eliminó el 2026-09-02: le
             decía al usuario cómo se llama, que es lo único que ya sabe, y se
@@ -164,9 +171,11 @@ export function HomeScreen({
                       key={p.id}
                       post={p}
                       fullWidth
-                      onDoubleTap={p.type === 'highlight' && p.videoUrl
+                      isActive={isFocused}
+                      onOpen={p.type === 'highlight' && p.videoUrl
                         ? () => setHighlightModal({ url: p.videoUrl!, title: p.caption ?? 'Highlight', id: p.id })
                         : undefined}
+                      onLike={p.type === 'highlight' ? () => onLikeHighlight?.(p.id) : undefined}
                     />
                   ))}
                 </View>

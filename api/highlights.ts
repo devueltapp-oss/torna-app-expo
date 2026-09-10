@@ -167,6 +167,7 @@ export interface FeedHighlight {
   createdAt: string;
   likesCount: number;
   commentsCount: number;
+  isLikedByMe: boolean;
   author: {
     id: string;
     username: string;

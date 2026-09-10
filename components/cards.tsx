@@ -5,7 +5,7 @@
  * Brand-strict: solid fills only (no gradients), 3-color palette.
  */
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, Image, StyleSheet, Platform } from 'react-native';
+import { View, Text, Pressable, Image, StyleSheet, Platform, Animated } from 'react-native';
 import { Svg, Rect, Line } from 'react-native-svg';
 import { InlineVideo } from './InlineVideo';
 import { Camera, Heart, MessageCircle, Play, WifiOff } from 'lucide-react-native';
@@ -470,7 +470,21 @@ export function UpcomingGameTile({ game, onDoubleTap }: {
  *   - 200px wide, 1:1 media (square), tight footer with author + caption + counts
  */
 
-export function FeedPost({ post, onDoubleTap, fullWidth }: { post: FeedPostData; onDoubleTap?: () => void; fullWidth?: boolean }) {
+export interface FeedPostProps {
+  post: FeedPostData;
+  fullWidth?: boolean;
+  /** Abre el visor a pantalla completa. Se dispara con un tap simple, con un
+   * pequeño delay (300ms) para poder distinguirlo de un doble tap. */
+  onOpen?: () => void;
+  /** Like/unlike del highlight — doble tap sobre el preview o tap en el
+   * corazón del footer. Togglea (`useFeed.toggleLike`), no solo "likear". */
+  onLike?: () => void;
+  /** El preview de video autoplayea solo si está activo (Home enfocada). Al
+   * ir a `false` cae al thumbnail estático (o al placeholder si no hay). */
+  isActive?: boolean;
+}
+
+export function FeedPost({ post, onOpen, onLike, fullWidth, isActive = true }: FeedPostProps) {
   const { colors } = useTheme();
   const isHighlight = post.type === 'highlight';
   const mediaBg = post.tone === 'lime' ? colors.accent
@@ -478,51 +492,121 @@ export function FeedPost({ post, onDoubleTap, fullWidth }: { post: FeedPostData;
                 : colors.ink;
   const motifStroke = post.tone === 'lime' ? colors.ink : colors.accent;
 
+  const [videoError, setVideoError] = useState(false);
+  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+  const hasVideoPreview = isHighlight && !!post.videoUrl && isActive && !videoError;
+  const hasThumbnail = isHighlight && !!post.thumbnailUrl;
+
   const lastTap = React.useRef(0);
   const tapTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Corazón grande que aparece un instante al doble-tap, igual que Instagram.
+  const heartBurst = React.useRef(new Animated.Value(0)).current;
 
   React.useEffect(() => () => {
     if (tapTimer.current) clearTimeout(tapTimer.current);
   }, []);
 
-  const handlePress = () => {
-    if (!onDoubleTap || !isHighlight) return;
-    // En el feed (fullWidth) un tap simple abre; en carrusel se mantiene el doble tap.
-    if (fullWidth) { onDoubleTap(); return; }
+  function burstHeart() {
+    heartBurst.stopAnimation();
+    heartBurst.setValue(0);
+    Animated.sequence([
+      Animated.spring(heartBurst, { toValue: 1, useNativeDriver: true, friction: 4, tension: 140 }),
+      Animated.delay(350),
+      Animated.timing(heartBurst, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start();
+  }
+
+  /**
+   * Doble tap → like (2026-09-10). Antes CUALQUIER tap en el feed abría el
+   * modal al toque — no había forma de ver el video sin "entrar". Ahora un
+   * tap simple sigue abriendo el visor completo (con un delay corto para
+   * poder distinguirlo de un doble tap), y un doble tap sobre el preview
+   * likea sin abrir nada, igual que Instagram: solo AGREGA el like (nunca lo
+   * saca) — para sacarlo está el corazón del footer, que sí togglea.
+   */
+  const handleMediaPress = () => {
+    if (!isHighlight) return;
     const now = Date.now();
     if (now - lastTap.current < 300) {
       if (tapTimer.current) { clearTimeout(tapTimer.current); tapTimer.current = null; }
-      onDoubleTap();
+      lastTap.current = 0;
+      if (!post.isLikedByMe) onLike?.();
+      burstHeart();
+      return;
     }
     lastTap.current = now;
+    if (onOpen) {
+      tapTimer.current = setTimeout(() => {
+        onOpen();
+        tapTimer.current = null;
+      }, 300);
+    }
   };
 
   return (
-    <Pressable onPress={handlePress} style={{ width: fullWidth ? '100%' : 200 }}>
+    <Pressable testID="feed-post-media" onPress={handleMediaPress} style={{ width: fullWidth ? '100%' : 200 }}>
     <View style={{
       borderRadius: 14, overflow: 'hidden',
       backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line,
     }}>
-      {/* Media — square thumbnail */}
+      {/* Media — square, preview real de video si hay (2026-09-10: antes esto
+          era siempre un placeholder de color sólido, ni siquiera el
+          thumbnail — había que abrir el modal para ver cualquier imagen del
+          highlight). */}
       <View style={{ position: 'relative', aspectRatio: 1, backgroundColor: mediaBg, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-        {post.tone !== 'white' && (
-          <Svg viewBox="0 0 200 110" width="62%" style={{ opacity: post.tone === 'lime' ? 0.20 : 0.22 }}>
-            <Rect x={20} y={15} width={160} height={80} stroke={motifStroke} strokeWidth={1.5} fill="none"/>
-            <Line x1={100} y1={15} x2={100} y2={95} stroke={motifStroke} strokeWidth={1.5}/>
-          </Svg>
-        )}
-        {isHighlight ? (
-          <View style={{
-            position: 'absolute', width: 38, height: 38, borderRadius: 19, backgroundColor: '#FFFFFF',
-            alignItems: 'center', justifyContent: 'center',
-          }}>
-            <Play size={16} color={colors.ink}/>
-          </View>
+        {hasVideoPreview ? (
+          <>
+            <InlineVideo
+              key={post.id}
+              uri={post.videoUrl!}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              muted
+              loop
+              onError={() => setVideoError(true)}
+              onPlayingChange={setIsPreviewPlaying}
+            />
+            {!isPreviewPlaying && (
+              <View pointerEvents="none" style={{
+                position: 'absolute', width: 38, height: 38, borderRadius: 19,
+                backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Play size={16} color="#FFFFFF" fill="#FFFFFF"/>
+              </View>
+            )}
+          </>
+        ) : hasThumbnail ? (
+          <>
+            <Image source={{ uri: post.thumbnailUrl }} style={StyleSheet.absoluteFill} resizeMode="cover"/>
+            <View pointerEvents="none" style={{
+              position: 'absolute', width: 38, height: 38, borderRadius: 19,
+              backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Play size={16} color="#FFFFFF" fill="#FFFFFF"/>
+            </View>
+          </>
         ) : (
-          <Text style={{
-            fontFamily: fonts.mono, fontSize: 9, letterSpacing: 1.4, fontWeight: '700',
-            color: post.tone === 'white' ? colors.muted2 : 'rgba(255,255,255,0.6)',
-          }}>FOTO</Text>
+          <>
+            {post.tone !== 'white' && (
+              <Svg viewBox="0 0 200 110" width="62%" style={{ opacity: post.tone === 'lime' ? 0.20 : 0.22 }}>
+                <Rect x={20} y={15} width={160} height={80} stroke={motifStroke} strokeWidth={1.5} fill="none"/>
+                <Line x1={100} y1={15} x2={100} y2={95} stroke={motifStroke} strokeWidth={1.5}/>
+              </Svg>
+            )}
+            {isHighlight ? (
+              <View style={{
+                position: 'absolute', width: 38, height: 38, borderRadius: 19, backgroundColor: '#FFFFFF',
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Play size={16} color={colors.ink}/>
+              </View>
+            ) : (
+              <Text style={{
+                fontFamily: fonts.mono, fontSize: 9, letterSpacing: 1.4, fontWeight: '700',
+                color: post.tone === 'white' ? colors.muted2 : 'rgba(255,255,255,0.6)',
+              }}>FOTO</Text>
+            )}
+          </>
         )}
         {/* Role badge — only shown for club authors */}
         {post.author.role === 'club' && (
@@ -536,6 +620,14 @@ export function FeedPost({ post, onDoubleTap, fullWidth }: { post: FeedPostData;
             <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '700', fontFamily: fonts.mono }}>{post.duration}</Text>
           </View>
         )}
+        {/* Corazón del doble-tap, centrado sobre el video */}
+        <Animated.View pointerEvents="none" style={{
+          position: 'absolute',
+          opacity: heartBurst,
+          transform: [{ scale: heartBurst.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1.15] }) }],
+        }}>
+          <Heart size={72} color="#FFFFFF" fill="#FFFFFF" style={{ opacity: 0.95 }}/>
+        </Animated.View>
       </View>
 
       {/* Footer */}
@@ -552,11 +644,24 @@ export function FeedPost({ post, onDoubleTap, fullWidth }: { post: FeedPostData;
             {post.caption}
           </Text>
         ) : null}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 2 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-            <Heart size={12} color={colors.muted2}/>
-            <Text style={{ color: colors.muted2, fontSize: 11, fontWeight: '700' }}>{post.likes}</Text>
-          </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 2 }}>
+          {/* Corazón tappable — like/unlike sin abrir el video (2026-09-10). */}
+          <Pressable
+            testID="feed-post-like"
+            onPress={onLike}
+            disabled={!onLike}
+            hitSlop={8}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}
+          >
+            <Heart
+              size={13}
+              color={post.isLikedByMe ? colors.live : colors.muted2}
+              fill={post.isLikedByMe ? colors.live : 'none'}
+            />
+            <Text style={{ color: post.isLikedByMe ? colors.live : colors.muted2, fontSize: 11, fontWeight: '700' }}>
+              {post.likes}
+            </Text>
+          </Pressable>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
             <MessageCircle size={12} color={colors.muted2}/>
             <Text style={{ color: colors.muted2, fontSize: 11, fontWeight: '700' }}>{post.comments}</Text>

@@ -6,8 +6,8 @@
  * abrirlo en el visor. Si no sigue a nadie (o sin highlights), queda `[]` y el
  * Home muestra su estado vacío (sin la sección).
  */
-import { useCallback, useEffect, useState } from 'react';
-import { fetchFeed, type FeedHighlight } from '../api/highlights';
+import { useCallback, useEffect, useState, useRef } from 'react';
+import { fetchFeed, toggleHighlightLike, type FeedHighlight } from '../api/highlights';
 import type { FeedPost } from '../data/types';
 
 function fmtDuration(seconds: number): string {
@@ -44,6 +44,8 @@ function mapFeed(h: FeedHighlight): FeedPost {
     likes: h.likesCount,
     comments: h.commentsCount,
     videoUrl: h.clipUrl,
+    thumbnailUrl: h.thumbnailUrl ?? undefined,
+    isLikedByMe: h.isLikedByMe,
   };
 }
 
@@ -71,5 +73,37 @@ export function useFeed(userId?: string) {
 
   useEffect(() => { load(); }, [load]);
 
-  return { feed, loading, refresh: load };
+  // Ref con el valor previo: el updater de `setState` puede correr después del
+  // `await` (mismo motivo que useGameChat/useDirectChat) y el revert quedaría
+  // sin nada de dónde restaurar si leyera del closure viejo.
+  const feedRef = useRef(feed);
+  feedRef.current = feed;
+
+  /**
+   * Like/unlike de un highlight del feed — optimista con revert, doble tap o
+   * botón. `id` es el id del highlight (= FeedPost.id).
+   */
+  const toggleLike = useCallback(async (id: string) => {
+    const prev = feedRef.current.find((p) => p.id === id);
+    if (!prev) return;
+    const prevLiked = !!prev.isLikedByMe;
+    const prevCount = prev.likes;
+
+    setFeed((rows) => rows.map((p) => p.id === id
+      ? { ...p, isLikedByMe: !prevLiked, likes: prevCount + (prevLiked ? -1 : 1) }
+      : p));
+
+    try {
+      const res = await toggleHighlightLike(id);
+      setFeed((rows) => rows.map((p) => p.id === id
+        ? { ...p, isLikedByMe: res.liked, likes: res.likesCount }
+        : p));
+    } catch {
+      setFeed((rows) => rows.map((p) => p.id === id
+        ? { ...p, isLikedByMe: prevLiked, likes: prevCount }
+        : p));
+    }
+  }, []);
+
+  return { feed, loading, refresh: load, toggleLike };
 }

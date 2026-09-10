@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   Modal, View, Text, Pressable, Platform, ActivityIndicator,
-  FlatList, TextInput, KeyboardAvoidingView, Keyboard,
+  FlatList, TextInput, KeyboardAvoidingView, Keyboard, Animated,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -98,25 +98,40 @@ function fmt(s: number) {
 }
 
 /**
+ * Piso del cluster de like/comentarios (2026-09-10): tiene que quedar SIEMPRE
+ * arriba del bloque de título+barra de progreso+tiempo, que ancla en
+ * `bottom: 76 + insets.bottom` y crece hacia arriba con su contenido (título
+ * opcional + barra de 4px + tiempo, con gaps de 8 ≈ 60px en el caso más alto,
+ * con título). `76 (el mismo offset del bloque) + 60 (su alto) + 16 (margen)`.
+ * Igual que ese bloque, suma `insets.bottom` — así los dos escalan juntos en
+ * cualquier tamaño de pantalla y nunca se pisan.
+ */
+const BUTTONS_BASE = 76 + 60 + 16;
+
+/**
  * Modal de reproducción de un highlight. Carga la URL (MP4 o HLS) con expo-av y
  * abre **siempre en pantalla completa in-app**, con los controles y —si
  * `showComments`— el panel de comentarios superpuestos al video.
  */
 /** Burbuja de un comentario (raíz o respuesta) con acción "Responder". */
 function CommentBubble({
-  row, colors, onReply, size = 'md',
+  row, colors, isDark, onReply, size = 'md',
 }: {
   row: CommentRow;
   colors: ReturnType<typeof useTheme>['colors'];
+  isDark: boolean;
   onReply: () => void;
   size?: 'sm' | 'md';
 }) {
   const av = size === 'sm' ? 28 : 34;
   return (
     <View style={{ flexDirection: 'row', gap: 10 }}>
+      {/* Ícono de "perfil vacío" del comentario: fondo `colors.bg` en oscuro,
+          NO `colors.ink` (navy invariante por tema) — ver el comentario
+          equivalente en ChatsInboxScreen.tsx (2026-09-09). */}
       <View style={{
         width: av, height: av, borderRadius: av / 2,
-        backgroundColor: colors.ink,
+        backgroundColor: isDark ? colors.bg : colors.ink,
         alignItems: 'center', justifyContent: 'center',
         flexShrink: 0,
       }}>
@@ -150,7 +165,7 @@ export function VideoPreviewModal({
   visible, url, title, durationSeconds, onClose, showComments = false,
   highlightId,
 }: VideoPreviewModalProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   // Mismo patrón que el visor de streaming (`GameDetailScreen`): el `SafeAreaView`
   // de este modal usa `edges={[]}` a propósito (el video llega hasta el borde real
   // de la pantalla), así que la X, el título y los controles necesitan sumar los
@@ -203,16 +218,22 @@ export function VideoPreviewModal({
       setReplyingTo(null);
       setShowCommentsPanel(false);
       setKbVisible(false);
-      // Comentarios + likes + descripción reales del highlight (si hay highlightId).
-      if (highlightId && showComments) {
+      // Likes SIEMPRE que haya highlightId (2026-09-10: antes solo se cargaban
+      // con `showComments`, así que el corazón flotante — que ahora es
+      // independiente del panel de comentarios — arrancaba en 0/sin likear
+      // aunque el highlight ya tuviera likes). Comentarios + descripción solo
+      // si además `showComments`.
+      if (highlightId) {
         let cancelled = false;
         fetchHighlightDetail(highlightId)
           .then((d) => {
             if (cancelled) return;
-            setComments(d.comments.map(mapComment));
             setLikesCount(d.likesCount);
             setIsLiked(d.isLikedByMe);
-            setDescription(d.description ?? null);
+            if (showComments) {
+              setComments(d.comments.map(mapComment));
+              setDescription(d.description ?? null);
+            }
           })
           .catch(() => { /* sin datos → estado vacío, sin mock */ });
         return () => { cancelled = true; };
@@ -253,23 +274,63 @@ export function VideoPreviewModal({
     else player.play();
   }
 
+  // Corazón grande que aparece un instante al doble-tap sobre el video —
+  // mismo tratamiento que en el feed (components/cards.tsx → FeedPost).
+  const heartBurst = React.useRef(new Animated.Value(0)).current;
+  function burstHeart() {
+    heartBurst.stopAnimation();
+    heartBurst.setValue(0);
+    Animated.sequence([
+      Animated.spring(heartBurst, { toValue: 1, useNativeDriver: true, friction: 4, tension: 140 }),
+      Animated.delay(350),
+      Animated.timing(heartBurst, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start();
+  }
+
   /**
-   * Gestos sobre el video (2026-09-04): un toque simple sigue pausando/reanudando
-   * (`togglePlay`), y ahora un swipe RÁPIDO de derecha a izquierda cierra el
+   * Doble tap → like (2026-09-10). Igual que Instagram: solo AGREGA el like
+   * (nunca lo saca) — para sacarlo está el corazón flotante, que sí togglea.
+   */
+  function handleDoubleTapLike() {
+    if (!isLikedRef.current) toggleLikeRef.current();
+    burstHeart();
+  }
+
+  /**
+   * Gestos sobre el video (2026-09-04): un toque simple pausa/reanuda
+   * (`togglePlay`), y un swipe RÁPIDO de derecha a izquierda cierra el
    * modal — el mismo gesto de "volver" que la X de arriba, disponible en toda la
    * superficie del video, igual que en el visor de streaming (`GameDetailScreen`).
    * Se arma una sola vez (`useMemo` sin deps); los refs puentean la versión
-   * vigente de `togglePlay`/`onClose` para no recrear el detector en cada render.
+   * vigente de `togglePlay`/`onClose`/`toggleLike` para no recrear el detector
+   * en cada render.
+   *
+   * ⚠️ 2026-09-10: se suma el doble tap → like. `Gesture.Exclusive(doubleTap,
+   * singleTap)` (RNGH) hace que el tap simple espere a que el de doble falle
+   * antes de disparar — la única forma de distinguirlos sobre la misma
+   * superficie. Le agrega ~300ms de latencia al pausar con un toque, el mismo
+   * costo que paga cualquier video con doble-tap-para-like (Instagram incluido).
    */
   const togglePlayRef = React.useRef(togglePlay);
   React.useEffect(() => { togglePlayRef.current = togglePlay; });
   const onCloseRef = React.useRef(onClose);
   React.useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  const isLikedRef = React.useRef(isLiked);
+  React.useEffect(() => { isLikedRef.current = isLiked; }, [isLiked]);
+  const toggleLikeRef = React.useRef<() => void>(() => {});
+  React.useEffect(() => { toggleLikeRef.current = toggleLike; });
 
   const videoGestures = React.useMemo(() => {
-    const tap = Gesture.Tap()
+    const doubleTap = Gesture.Tap()
+      .numberOfTaps(2)
+      .maxDuration(250)
+      .onEnd((_e, ok) => { if (ok) handleDoubleTapLike(); });
+
+    const singleTap = Gesture.Tap()
       .maxDuration(250)
       .onEnd((_e, ok) => { if (ok) togglePlayRef.current(); });
+
+    const tap = Gesture.Exclusive(doubleTap, singleTap);
 
     const swipeClose = Gesture.Pan()
       .onEnd((e) => {
@@ -378,6 +439,7 @@ export function VideoPreviewModal({
             <CommentBubble
               row={item}
               colors={colors}
+              isDark={isDark}
               onReply={() => setReplyingTo({ id: item.id, user: item.user })}
             />
             {/* Respuestas (thread), indentadas bajo la raíz */}
@@ -388,6 +450,7 @@ export function VideoPreviewModal({
                     key={r.id}
                     row={r}
                     colors={colors}
+                    isDark={isDark}
                     size="sm"
                     onReply={() => setReplyingTo({ id: item.id, user: r.user })}
                   />
@@ -539,6 +602,16 @@ export function VideoPreviewModal({
                 </View>
               </View>
             )}
+
+            {/* Corazón del doble-tap (2026-09-10) — mismo tratamiento que el feed. */}
+            <Animated.View pointerEvents="none" style={{
+              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+              alignItems: 'center', justifyContent: 'center',
+              opacity: heartBurst,
+              transform: [{ scale: heartBurst.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1.15] }) }],
+            }}>
+              <Heart size={110} color="#FFFFFF" fill="#FFFFFF" style={{ opacity: 0.95 }}/>
+            </Animated.View>
           </View>
           </GestureDetector>
           {isBuffering && (
@@ -624,12 +697,52 @@ export function VideoPreviewModal({
                 </View>
               )}
 
+              {/* Botón flotante de like (2026-09-10) — antes el corazón vivía
+                  SOLO adentro del panel de comentarios: había que abrirlo para
+                  poder likear. Ahora es independiente y siempre visible,
+                  arriba del botón de comentarios cuando ambos están.
+                  ⚠️ **Arriba de la barra de progreso, siempre** (2026-09-10):
+                  el bloque de título+progreso+tiempo ancla en
+                  `bottom: 76 + insets.bottom` y crece hacia arriba con su
+                  contenido (título opcional + barra + tiempo ≈ 60px). El
+                  cluster de like/comentarios usaba un `bottom` fijo (20/74)
+                  que no sumaba `insets.bottom`: en dispositivos con poco o
+                  ningún inset inferior (Android, iPhone sin notch) los rangos
+                  se pisaban y los botones quedaban tapando la barra en vez de
+                  arriba de ella. `BUTTONS_BASE` reserva ese mismo alto
+                  (76 + ~60 de contenido + 16 de margen) y suma `insets.bottom`
+                  igual que la barra, para que los dos bloques escalen juntos
+                  en cualquier tamaño de pantalla. */}
+              {!!highlightId && !showCommentsPanel && (
+                <Pressable
+                  onPress={toggleLike}
+                  hitSlop={8}
+                  style={{
+                    position: 'absolute',
+                    // Apilado arriba del botón de comentarios cuando los dos existen.
+                    bottom: (showComments ? BUTTONS_BASE + 54 : BUTTONS_BASE) + insets.bottom,
+                    right: 16,
+                    flexDirection: 'row', alignItems: 'center', gap: 7,
+                    backgroundColor: 'rgba(0,0,0,0.62)',
+                    paddingHorizontal: 15, paddingVertical: 11, borderRadius: 24,
+                  }}>
+                  <Heart
+                    size={18}
+                    color={isLiked ? colors.live : '#FFFFFF'}
+                    fill={isLiked ? colors.live : 'none'}
+                  />
+                  <Text style={{ color: '#FFFFFF', fontFamily: fonts.bold, fontSize: 13 }}>
+                    {likesCount}
+                  </Text>
+                </Pressable>
+              )}
+
               {/* Botón flotante "Comentarios (N)" (abajo derecha) */}
               {showComments && !showCommentsPanel && (
                 <Pressable
                   onPress={() => setShowCommentsPanel(true)}
                   style={{
-                    position: 'absolute', bottom: 20, right: 16,
+                    position: 'absolute', bottom: BUTTONS_BASE + insets.bottom, right: 16,
                     flexDirection: 'row', alignItems: 'center', gap: 7,
                     backgroundColor: 'rgba(0,0,0,0.62)',
                     paddingHorizontal: 15, paddingVertical: 11, borderRadius: 24,

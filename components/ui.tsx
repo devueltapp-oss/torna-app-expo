@@ -352,7 +352,7 @@ function initials(name = '?') {
 }
 
 export function Avatar({ name = '?', size = 40, ringColor, imageUri }: { name?: string; size?: number; ringColor?: string; imageUri?: string }) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const ring = { borderWidth: ringColor ? 2 : 0, borderColor: ringColor };
   if (imageUri) {
     return (
@@ -362,13 +362,20 @@ export function Avatar({ name = '?', size = 40, ringColor, imageUri }: { name?: 
       />
     );
   }
+  // ⚠️ Ícono de perfil vacío en modo oscuro (2026-09-09): fondo `colors.bg`
+  // (#08203E) con relleno lima, NO `colors.ink` — ese es un navy invariante
+  // por tema (#001449 siempre, incluso en oscuro) y quedaba como un TERCER
+  // tono de navy que nadie pidió. En claro se mantiene el tratamiento de
+  // siempre (ink + iniciales blancas).
+  const emptyBg = isDark ? colors.bg : colors.ink;
+  const emptyFg = isDark ? colors.accent : '#FFFFFF';
   return (
     <View style={{
-      width: size, height: size, borderRadius: size / 2, backgroundColor: colors.ink,
+      width: size, height: size, borderRadius: size / 2, backgroundColor: emptyBg,
       alignItems: 'center', justifyContent: 'center',
       ...ring,
     }}>
-      <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: size * 0.36 }}>{initials(name)}</Text>
+      <Text style={{ color: emptyFg, fontWeight: '800', fontSize: size * 0.36 }}>{initials(name)}</Text>
     </View>
   );
 }

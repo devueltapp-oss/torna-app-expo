@@ -114,6 +114,19 @@ export interface FollowItem {
   /** true si el seguido es un club (para sugerir clubs al reservar). */
   isClub?: boolean;
 }
+
+/**
+ * Club cerca de mi ubicación, CON al menos una cancha reservable
+ * (GET /club/nearby?lat=&lng=&radius= — filtrado del lado del backend).
+ * Para el picker de club de la reserva, aparte de "Clubs que sigues".
+ */
+export interface NearbyClub {
+  id: string;
+  name: string;
+  username: string;
+  profilePicture?: string;
+  distanceKm: number;
+}
 export interface ClubPublic {
   id: string;
   name: string;
@@ -251,6 +264,10 @@ export interface FeedPost {
   tone?: FeedPostTone;
   mediaAspectRatio?: string;
   videoUrl?: string;
+  /** Poster real del highlight (B2) — mientras el preview de video carga, o si falla. */
+  thumbnailUrl?: string;
+  /** Si el usuario autenticado ya likeó este highlight (GET /highlights/feed). */
+  isLikedByMe?: boolean;
 }
 
 /* ─────────── Perfil propio del player ─────────── */

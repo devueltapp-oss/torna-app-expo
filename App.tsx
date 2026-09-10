@@ -70,12 +70,14 @@ import { useUpcomingFeed } from './hooks/useUpcomingFeed';
 import { useDoubleBackToExit } from './hooks/useDoubleBackToExit';
 import { useBackToHomeTab } from './hooks/useBackToHomeTab';
 import { useClubLocation } from './hooks/useClubLocation';
+import { useNearbyClubs, type PositionResult } from './hooks/useNearbyClubs';
+import * as Location from 'expo-location';
 import { ClubLocationSheet } from './components/ClubLocationSheet';
 import type { AppNotification } from './api/notifications';
 import { searchUsers, searchUsersAndClubs, fetchUserProfile, setFollowNotify, fetchFollowing, followUser, unfollowUser } from './api/users';
 import type { CourtData, PlayerData } from './components/cards';
 import { updateHighlightMeta } from './api/highlights';
-import { fetchClubCourts, fetchCourtSlots, createReservation } from './api/clubs';
+import { fetchClubCourts, fetchCourtSlots, createReservation, fetchNearbyClubs } from './api/clubs';
 import type { CourtSlots } from './lib/reservation';
 import { formatClubDate } from './lib/clubTime';
 import type { DayOption } from './screens';
@@ -348,7 +350,15 @@ function PlayerProfileScreen({ navigation, playerId }: { navigation: any; player
         onClose={() => setSheet(null)}
         onOpenProfile={(id) => {
           setSheet(null);
-          navigation.navigate('PlayerProfile', { playerId: id });
+          // ⚠️ `push`, NO `navigate` (2026-09-10): la lista de seguidores es
+          // recursiva (un perfil abre la de OTRO). `navigate` sobre una ruta
+          // ya presente en la pila la reutiliza y solo actualiza sus params
+          // (por eso este screen usa `key={playerId}` para forzar el remount)
+          // — la pila nunca crecía, así que "atrás" desde un perfil visitado
+          // así saltaba directo a lo que había ANTES del primero, no al
+          // anterior de la cadena. Se sentía como "no hay forma de volver" en
+          // iPhone. `push` sí agrega una entrada nueva siempre.
+          navigation.push('PlayerProfile', { playerId: id });
         }}
       />
       <VideoPreviewModal
@@ -460,7 +470,9 @@ function ClubProfileScreen({ navigation, clubId }: { navigation: any; clubId: st
         onClose={() => setSheet(null)}
         onOpenProfile={(id) => {
           setSheet(null);
-          navigation.navigate('PlayerProfile', { playerId: id });
+          // `push`, no `navigate` — ver el comentario equivalente en
+          // PlayerProfileScreen (2026-09-10).
+          navigation.push('PlayerProfile', { playerId: id });
         }}
       />
       <VideoPreviewModal
@@ -479,6 +491,41 @@ function ClubProfileScreen({ navigation, clubId }: { navigation: any; clubId: st
 /* ─────────── Selector de club para reservar (POV player) ─────────── */
 
 /**
+ * Lee la posición para "Clubes cerca de ti" del picker de reserva. Directo con
+ * `expo-location` ACÁ, no vía `lib/location.ts`: ese módulo documenta
+ * explícitamente que su único destino es el aviso de partidas cercanas
+ * ("no agregues acá un jugadores/clubes cerca de mí") — este es un uso
+ * distinto (buscar clubes para reservar, nada se guarda ni se notifica a
+ * nadie), así que se resuelve aparte en vez de forzarlo ahí.
+ *
+ * `requestPermission:false` (al montar el picker) solo mira si YA hay permiso
+ * concedido, sin disparar el diálogo del sistema. `true` lo pide — se usa
+ * nada más desde el botón "Usar mi ubicación", el único contexto donde ese
+ * diálogo se entiende.
+ */
+async function getClubPickerPosition(requestPermission: boolean): Promise<PositionResult> {
+  try {
+    const { status } = requestPermission
+      ? await Location.requestForegroundPermissionsAsync()
+      : await Location.getForegroundPermissionsAsync();
+    if (status !== 'granted') return { granted: false, coords: null };
+
+    const last = await Location.getLastKnownPositionAsync({}).catch(() => null);
+    const pos = last ?? await Location
+      .getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+      .catch(() => null);
+    if (!pos?.coords) return { granted: false, coords: null };
+
+    return {
+      granted: true,
+      coords: { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
+    };
+  } catch {
+    return { granted: false, coords: null };
+  }
+}
+
+/**
  * Picker de club para iniciar una reserva. **Debe ser un componente propio** (no un
  * render-prop inline dentro de `<AppStack.Screen>`): cuando los hooks (`useFollowedClubs`)
  * viven en el callback `children` del Screen, sus `setState` NO re-renderizan el subárbol
@@ -494,11 +541,21 @@ function ReservePickClubScreen({ navigation }: { navigation: any }) {
     user?.id,
     fetchFollowing,
   );
+  // Clubes cerca de mi ubicación con canchas reservables (2026-09-10) — además
+  // de los seguidos. Ver hooks/useNearbyClubs.ts.
+  const {
+    clubs: nearbyClubs, loading: loadingNearby,
+    permissionDenied: nearbyPermissionDenied, requestNearby,
+  } = useNearbyClubs(fetchNearbyClubs, getClubPickerPosition);
   return (
     <ReserveClubPickerScreen
       onBack={() => navigation.goBack()}
       suggestedClubs={suggestedClubs}
       loadingSuggested={loadingFollowed}
+      nearbyClubs={nearbyClubs}
+      loadingNearby={loadingNearby}
+      nearbyPermissionDenied={nearbyPermissionDenied}
+      onRequestNearby={requestNearby}
       // El buscador busca CLUBS (no canchas): solo nombre del club.
       onSearchClubs={async (q) => {
         const res = await searchUsersAndClubs(q);
@@ -933,7 +990,7 @@ function MainPlayer({ navigation, route }: any) {
   // para pintar lo mismo — y dos pantallas que podían discrepar.
 
   // Feed social: highlights de seguidos (GET /highlights/feed) → "Highlights · de tus seguidos".
-  const { feed: feedPosts, refresh: refreshFeed } = useFeed(user?.id);
+  const { feed: feedPosts, refresh: refreshFeed, toggleLike: toggleFeedLike } = useFeed(user?.id);
 
   // Jugadores invitables (elegir compañero al postularse): directorio mapeado.
   const invitablePlayers = React.useMemo<InvitablePlayer[]>(
@@ -1130,6 +1187,7 @@ function MainPlayer({ navigation, route }: any) {
             upcomingGames={proximas}
             onOpenUpcoming={(g) => setMyGameSheet(g)}
             feedPosts={feedPosts}
+            onLikeHighlight={toggleFeedLike}
             activeTab="home" onChangeTab={handleTab}
             onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id, liveStreamUrl: liveGames.find(g => g.id === id)?.streamUrl })}
             onOpenSearch={() => navigation.navigate('GlobalSearch')}
@@ -1241,7 +1299,11 @@ function MainPlayer({ navigation, route }: any) {
               onClose={() => setOwnSheet(null)}
               onOpenProfile={(id) => {
                 setOwnSheet(null);
-                navigation.navigate('PlayerProfile', { playerId: id });
+                // `push`, no `navigate` — ver el comentario en
+                // PlayerProfileScreen (2026-09-10): esta pantalla es un tab
+                // raíz, no está en la pila, pero el destino (PlayerProfile) sí
+                // puede quedar reusado si ya se visitó otro antes.
+                navigation.push('PlayerProfile', { playerId: id });
               }}
             />
           </>
@@ -1274,7 +1336,8 @@ function MainPlayer({ navigation, route }: any) {
         onClose={() => setMyGameSheet(null)}
         onOpenPlayerProfile={(playerId) => {
           setMyGameSheet(null);
-          navigation.navigate('PlayerProfile', { playerId });
+          // `push` — ver el comentario en PlayerProfileScreen (2026-09-10).
+          navigation.push('PlayerProfile', { playerId });
         }}
         onAcceptApplication={handleApplicationChange}
         onRejectApplication={handleApplicationChange}
@@ -1581,8 +1644,10 @@ function GameDetailContainer({ navigation, route }: { navigation: any; route: an
       onBack={() => navigation.goBack()}
       // Desde el panel de jugadores se abre el perfil de cualquiera: los jugadores
       // por su UID y el club por el suyo (un club es un User con isClub=true).
-      onOpenPlayer={(playerId) => navigation.navigate('PlayerProfile', { playerId })}
-      onOpenClub={(id) => navigation.navigate('ClubProfile', { clubId: id })}
+      // `push`, no `navigate` — ver el comentario en PlayerProfileScreen
+      // (2026-09-10): abrir un perfil siempre debe apilar, nunca reusar.
+      onOpenPlayer={(playerId) => navigation.push('PlayerProfile', { playerId })}
+      onOpenClub={(id) => navigation.push('ClubProfile', { clubId: id })}
       onShare={route.params?.gameId ? () => setShareOpen(true) : undefined}
       onCreateHighlight={canCreateHighlight ? () => navigation.navigate('VideoEditor', {
         gameId: apiGame!.id,
@@ -1710,8 +1775,9 @@ function AppNavigator() {
                 }));
               }}
               onBack={() => navigation.goBack()}
-              onOpenPlayerProfile={onPick ?? ((id) => navigation.navigate('PlayerProfile', { playerId: id }))}
-              onOpenClubProfile={onPick ?? ((id) => navigation.navigate('ClubProfile', { clubId: id }))}
+              // `push`, no `navigate` — ver el comentario en PlayerProfileScreen (2026-09-10).
+              onOpenPlayerProfile={onPick ?? ((id) => navigation.push('PlayerProfile', { playerId: id }))}
+              onOpenClubProfile={onPick ?? ((id) => navigation.push('ClubProfile', { clubId: id }))}
             />
           );
         }}
