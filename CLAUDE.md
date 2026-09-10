@@ -1391,7 +1391,7 @@ PATCH /notification/read-all        → { updated }
 | | |
 |---|---|
 | **Framework** | Expo SDK 55 · React Native 0.83 · React 19.2 · TypeScript 5.9 strict · **New Architecture ON** (obligatoria desde SDK 52) |
-| **Plataformas** | iOS (principal) · Android |
+| **Plataformas** | iOS (principal) · Android. **Solo iPhone** (`ios.supportsTablet: false` desde 2026-09-10) — la app nunca se diseñó para iPad (portrait-lock, tab bar de teléfono) y Apple exige capturas de iPad de 13" en la ficha si se declara soporte tablet; sacarlo evita fabricar capturas de una experiencia que no existe |
 | **Navegación** | `@react-navigation/native` v6 + `native-stack` |
 | **Estilos** | StyleSheet inline + tokens de `theme/tokens.ts` (NO styled-components, NO Tailwind) |
 | **Iconos** | `lucide-react-native` (size 22 default, stroke 2) |
