@@ -21,6 +21,40 @@ function fmt(s: number) {
   return `${m}:${r.toString().padStart(2, '0')}`;
 }
 
+/**
+ * Clamps puros de los 3 gestos del recorte, separados del `PanResponder`/
+ * `Gesture.Pan()` por el mismo motivo que `shouldDismissSwipe` en
+ * `useSwipeToDismiss.ts`: lo que devuelve el gesture handler (`onUpdate`) no
+ * se puede simular con un evento de prueba, así que la única parte testeable
+ * es la aritmética. `dt` = delta de tiempo ya convertido de píxeles a
+ * segundos (`translationX / width * duration`); `s0`/`e0` = rango al
+ * comenzar el gesto (`onBegin`).
+ *
+ * Los tres garantizan por construcción que `TRIM_MIN_SEC <= end-start <=
+ * TRIM_MAX_SEC` — antes solo el mínimo estaba clampeado acá, y el máximo se
+ * descubría después con un cartel de error ("El clip no puede pasar de
+ * 3:00") que había que resolver soltando el handle y volviendo a arrastrar.
+ */
+export function clampStartDrag(dt: number, s0: number, e0: number): number {
+  const minStart = Math.max(0, e0 - TRIM_MAX_SEC);
+  const maxStart = e0 - TRIM_MIN_SEC;
+  return Math.max(minStart, Math.min(maxStart, s0 + dt));
+}
+
+export function clampEndDrag(dt: number, s0: number, e0: number, duration: number): number {
+  const maxEnd = Math.min(duration, s0 + TRIM_MAX_SEC);
+  const minEnd = s0 + TRIM_MIN_SEC;
+  return Math.max(minEnd, Math.min(maxEnd, e0 + dt));
+}
+
+/** Arrastre del cuadro entero: mismo `dt` aplicado a los dos extremos, sin
+ * cambiar la duración seleccionada — devuelve el nuevo `start` únicamente
+ * (`end` = `start + (e0 - s0)`, calculado por el caller). */
+export function clampMoveDrag(dt: number, s0: number, e0: number, duration: number): number {
+  const segLen = e0 - s0;
+  return Math.max(0, Math.min(duration - segLen, s0 + dt));
+}
+
 export function TrimRangeSlider({ duration, value, onChange, currentTime }: TrimRangeSliderProps) {
   const { colors } = useTheme();
   const [w, setW] = React.useState(0);
@@ -54,8 +88,7 @@ export function TrimRangeSlider({ duration, value, onChange, currentTime }: Trim
           const dNow = durRef.current;
           const [s0, e0] = grantValueRef.current;
           const dt = (e.translationX / wNow) * dNow;
-          const next = Math.max(0, Math.min(e0 - TRIM_MIN_SEC, s0 + dt));
-          onChangeRef.current([next, e0]);
+          onChangeRef.current([clampStartDrag(dt, s0, e0), e0]);
         }),
     [],
   );
@@ -74,8 +107,34 @@ export function TrimRangeSlider({ duration, value, onChange, currentTime }: Trim
           const dNow = durRef.current;
           const [s0, e0] = grantValueRef.current;
           const dt = (e.translationX / wNow) * dNow;
-          const next = Math.min(dNow, Math.max(s0 + TRIM_MIN_SEC, e0 + dt));
-          onChangeRef.current([s0, next]);
+          onChangeRef.current([s0, clampEndDrag(dt, s0, e0, dNow)]);
+        }),
+    [],
+  );
+
+  /**
+   * Arrastrar TODO el recorte de una — tocando la franja de arriba del cuadro
+   * de selección, no un handle — desplaza `start` y `end` juntos, la misma
+   * distancia, preservando la duración elegida (2026-09-10). Antes solo se
+   * podía mover un extremo por vez: para correr el fragmento 5s a la derecha
+   * sin cambiar su largo había que arrastrar los dos handles a mano,
+   * intentando no alterar la duración en el camino.
+   */
+  const moveGesture = React.useMemo(
+    () =>
+      Gesture.Pan()
+        .runOnJS(true)
+        .minDistance(0)
+        .activeOffsetX([-2, 2])
+        .onBegin(() => { grantValueRef.current = valueRef.current; })
+        .onUpdate((e) => {
+          const wNow = widthRef.current;
+          if (wNow <= 0) return;
+          const dNow = durRef.current;
+          const [s0, e0] = grantValueRef.current;
+          const dt = (e.translationX / wNow) * dNow;
+          const nextStart = clampMoveDrag(dt, s0, e0, dNow);
+          onChangeRef.current([nextStart, nextStart + (e0 - s0)]);
         }),
     [],
   );
@@ -114,6 +173,21 @@ export function TrimRangeSlider({ duration, value, onChange, currentTime }: Trim
           left: `${pct(start)}%`, right: `${100 - pct(end)}%`,
           backgroundColor: accentColor,
         }} pointerEvents="none" />
+
+        {/* Franja táctil para arrastrar TODO el recorte (2026-09-10). Va ANTES
+            que los handles en el JSX a propósito: en las esquinas se superpone
+            con su zona de 36px, y como los handles se pintan después quedan
+            arriba en la prioridad de toque — tocar cerca de un extremo sigue
+            resolviendo/achicando ese extremo, no moviendo el cuadro entero.
+            Insets de 18px (mitad del ancho de un handle) para no competir con
+            ellos en el resto del rango. */}
+        <GestureDetector gesture={moveGesture}>
+          <View style={{
+            position: 'absolute', top: 0, height: 22,
+            left: `${pct(start)}%`, right: `${100 - pct(end)}%`,
+            marginLeft: 18, marginRight: 18,
+          }} />
+        </GestureDetector>
 
         {/* Borde inferior de selección */}
         <View style={{
