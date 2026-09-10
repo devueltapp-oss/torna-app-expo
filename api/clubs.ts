@@ -9,7 +9,7 @@
  * El backend envuelve toda respuesta en { data, statusCode } (TransformInterceptor).
  */
 import * as SecureStore from 'expo-secure-store';
-import type { ClubCourtPublic, Slot, SearchableCourt, FollowItem } from '../data/types';
+import type { ClubCourtPublic, Slot, SearchableCourt, FollowItem, NearbyClub } from '../data/types';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
 const TOKEN_KEY = 'torna_auth_token';
@@ -130,6 +130,36 @@ export async function fetchClubCourts(clubId: string): Promise<ClubCourtPublic[]
 export async function fetchCourt(courtId: string): Promise<ClubCourtPublic> {
   const c = await authedGet<BackendCourt>(`/padel-court/${encodeURIComponent(courtId)}`);
   return mapCourt(c);
+}
+
+interface BackendNearbyClub {
+  id: string;
+  name: string | null;
+  username: string;
+  profilePicture: string | null;
+  distanceKm: number;
+}
+
+/**
+ * Clubes cerca de `(lat, lng)` con al menos una cancha reservable
+ * (GET /club/nearby?lat=&lng=&radius=, filtrado del lado del backend —
+ * ver ClubService.findNearby). `radiusKm` default 25, igual que el backend.
+ */
+export async function fetchNearbyClubs(
+  lat: number,
+  lng: number,
+  radiusKm = 25,
+): Promise<NearbyClub[]> {
+  const rows = await authedGet<BackendNearbyClub[]>(
+    `/club/nearby?lat=${lat}&lng=${lng}&radius=${radiusKm}`,
+  );
+  return rows.map((c) => ({
+    id: c.id,
+    name: c.name ?? c.username,
+    username: c.username,
+    profilePicture: c.profilePicture ?? undefined,
+    distanceKm: c.distanceKm,
+  }));
 }
 
 /** Slots de una cancha para un día (YYYY-MM-DD). */

@@ -8,10 +8,10 @@ import {
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Search, ChevronRight } from 'lucide-react-native';
+import { ChevronLeft, Search, ChevronRight, MapPin } from 'lucide-react-native';
 import { useTheme } from '../theme';
-import { AppHeader, Avatar } from '../components/ui';
-import type { FollowItem } from '../data/types';
+import { AppHeader, Avatar, Button } from '../components/ui';
+import type { FollowItem, NearbyClub } from '../data/types';
 
 interface Props {
   onBack?: () => void;
@@ -22,6 +22,13 @@ interface Props {
   onSearchClubs?: (q: string) => Promise<FollowItem[]>;
   /** Elegir un club → arranca el flujo de reserva (canchas → horarios). */
   onPickClub?: (clubId: string) => void;
+  /** Clubs cerca de mi ubicación con canchas reservables (2026-09-10). */
+  nearbyClubs?: NearbyClub[];
+  loadingNearby?: boolean;
+  /** true solo después de pedir la ubicación y que el sistema la niegue. */
+  nearbyPermissionDenied?: boolean;
+  /** Pide el permiso de ubicación (si hace falta) y busca — botón "Usar mi ubicación". */
+  onRequestNearby?: () => void;
 }
 
 /**
@@ -35,6 +42,10 @@ export function ReserveClubPickerScreen({
   loadingSuggested = false,
   onSearchClubs,
   onPickClub,
+  nearbyClubs = [],
+  loadingNearby = false,
+  nearbyPermissionDenied = false,
+  onRequestNearby,
 }: Props) {
   const { colors } = useTheme();
   const [query, setQuery] = React.useState('');
@@ -150,6 +161,67 @@ export function ReserveClubPickerScreen({
                 ))
               )}
             </View>
+          )}
+        </View>
+
+        {/* Clubes cerca de ti (2026-09-10) — antes el picker SOLO sugería los
+            clubs que seguís; si no seguías ninguno (o el que te queda cerca
+            no es de esos), había que buscarlo a mano por nombre exacto. Usa
+            GET /club/nearby, ya filtrado del lado del backend por clubes CON
+            canchas reservables. Permiso pedido en contexto: recién al tocar
+            "Usar mi ubicación", nunca solo. */}
+        <View>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text, marginBottom: 8 }}>
+            Clubes cerca de ti
+          </Text>
+          {loadingNearby ? (
+            <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 8 }} />
+          ) : nearbyClubs.length > 0 ? (
+            <View style={{ gap: 8 }}>
+              {nearbyClubs.map((club) => (
+                <Pressable
+                  key={club.id}
+                  onPress={() => onPickClub?.(club.id)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                    backgroundColor: colors.surface,
+                    borderWidth: 1,
+                    borderColor: colors.line,
+                    borderRadius: 12,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                  }}>
+                  <Avatar name={club.name} imageUri={club.profilePicture} size={36} />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text }}>
+                      {club.name}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.muted2 }}>
+                      {club.distanceKm < 1
+                        ? `${Math.round(club.distanceKm * 1000)} m`
+                        : `${club.distanceKm.toFixed(1)} km`}
+                    </Text>
+                  </View>
+                  <ChevronRight size={18} color={colors.muted2} />
+                </Pressable>
+              ))}
+            </View>
+          ) : nearbyPermissionDenied ? (
+            <Text style={{ fontSize: 13, color: colors.muted2, paddingVertical: 8, lineHeight: 19 }}>
+              No diste permiso de ubicación. Podés habilitarlo desde Ajustes del sistema
+              para ver clubes cerca de ti acá.
+            </Text>
+          ) : (
+            <Button
+              variant="soft"
+              size="sm"
+              icon={<MapPin size={16} color={colors.text} />}
+              onPress={onRequestNearby}
+            >
+              Usar mi ubicación
+            </Button>
           )}
         </View>
 

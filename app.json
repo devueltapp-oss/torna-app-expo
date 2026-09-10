@@ -18,7 +18,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Torna usa tu ubicación para avisarte de partidas abiertas cerca tuyo. No se muestra a nadie ni se comparte con otros jugadores.",
+          "locationAlwaysAndWhenInUsePermission": "Torna usa tu ubicación para mostrarte clubes cercanos al reservar y para avisarte de partidas abiertas cerca tuyo. No se muestra a nadie ni se comparte con otros jugadores.",
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false
         }
@@ -45,14 +45,14 @@
       "./plugins/withNonModularHeaders"
     ],
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.Tornapp",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "Torna accede a tu galería para subir fotos y videos.",
         "NSPhotoLibraryAddUsageDescription": "Torna guarda clips en tu galería.",
-        "NSLocationWhenInUseUsageDescription": "Torna usa tu ubicación para avisarte de partidas abiertas cerca tuyo. No se muestra a nadie ni se comparte con otros jugadores."
+        "NSLocationWhenInUseUsageDescription": "Torna usa tu ubicación para mostrarte clubes cercanos al reservar y para avisarte de partidas abiertas cerca tuyo. No se muestra a nadie ni se comparte con otros jugadores."
       },
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
