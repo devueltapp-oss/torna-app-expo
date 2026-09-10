@@ -67,3 +67,39 @@ describe('PlayerOwnProfileScreen — solo públicos en el perfil', () => {
     expect(queryByText(PUB_LABEL)).toBeTruthy();
   });
 });
+
+describe('PlayerOwnProfileScreen — nivel (categoría) con default (2026-09-10)', () => {
+  it('sin categoría declarada, muestra CAT. 7 por default', () => {
+    const { getByText } = render(
+      <ThemeProvider initial="light">
+        <PlayerOwnProfileScreen
+          owner={{ ...owner, category: null }}
+          matches={[]}
+          highlights={[]}
+          onOpenLibrary={jest.fn()}
+          onOpenSettings={jest.fn()}
+          activeTab="profile"
+          onChangeTab={jest.fn()}
+        />
+      </ThemeProvider>,
+    );
+    expect(getByText('@ana · CAT. 7')).toBeTruthy();
+  });
+
+  it('con categoría declarada, muestra la propia', () => {
+    const { getByText } = render(
+      <ThemeProvider initial="light">
+        <PlayerOwnProfileScreen
+          owner={{ ...owner, category: 2 }}
+          matches={[]}
+          highlights={[]}
+          onOpenLibrary={jest.fn()}
+          onOpenSettings={jest.fn()}
+          activeTab="profile"
+          onChangeTab={jest.fn()}
+        />
+      </ThemeProvider>,
+    );
+    expect(getByText('@ana · CAT. 2')).toBeTruthy();
+  });
+});

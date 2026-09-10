@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { ChevronLeft, Bell, MessageCircle, BadgeCheck } from 'lucide-react-native';
-import { Svg, Rect, Line } from 'react-native-svg';
 import { useTheme } from '../theme';
 import { StatusBadge, TabStrip } from '../components/ui';
 import { ProfileHeroAvatar } from '../components/ProfileHeroAvatar';
@@ -56,12 +56,23 @@ export function PlayerProfilePublicView({
   onOpenLive, onOpenClip, onOpenMatch, onChangeTab, activeTab = 'home',
   onOpenFollowers, onOpenFollowing,
 }: Props) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [tab, setTab] = React.useState<TabKey>('highlights');
 
   const hasLive = player.isLiveNow && !!player.liveGame;
 
   const grid = tab === 'highlights' ? player.clips : matches;
+
+  // Swipe lateral para cambiar de pestaña — ver el comentario equivalente en
+  // PlayerOwnProfileScreen.tsx (2026-09-10).
+  const swipeTabs = React.useMemo(() => Gesture.Pan()
+    .activeOffsetX([-20, 20])
+    .failOffsetY([-15, 15])
+    .onEnd((e) => {
+      if (Math.abs(e.translationX) > 60) {
+        setTab((t) => (t === 'highlights' ? 'matches' : 'highlights'));
+      }
+    }), []);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
@@ -70,12 +81,6 @@ export function PlayerProfilePublicView({
             ⚠️ Fondo `colors.bg` (2026-09-09), NO `colors.ink` — ver el comentario
             equivalente en PlayerOwnProfileScreen.tsx para el motivo. */}
         <View style={{ backgroundColor: colors.bg, padding: 16, paddingBottom: 18, overflow: 'hidden' }}>
-          <Svg viewBox="0 0 390 220" width="100%" height="100%" preserveAspectRatio="xMidYMid slice"
-            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.14 }}>
-            <Rect x={40} y={40} width={310} height={140} stroke={colors.accent} strokeWidth={2} fill="none"/>
-            <Line x1={195} y1={40} x2={195} y2={180} stroke={colors.accent} strokeWidth={2}/>
-          </Svg>
-
           {/* ⛔ Acá había un botón de "···" que no hacía NADA — se sacó junto
               con el resto de botones muertos de la app (mismo criterio que el
               chrome del visor). El hueco de la derecha se deja vacío. */}
@@ -85,7 +90,12 @@ export function PlayerProfilePublicView({
             </Pressable>
           </View>
 
-          <View style={{ flexDirection: 'row', gap: 14, marginTop: 18, alignItems: 'flex-end' }}>
+          {/* Avatar + stats en la MISMA fila (2026-09-10, estilo Instagram) —
+              antes las stats iban en su propia fila más abajo, y encima solo
+              traían 2 (sin "posts": acá SÍ hay, son los highlights/partidos
+              públicos de este jugador). Nombre/username pasan a su propia
+              línea, debajo de esta fila. */}
+          <View style={{ flexDirection: 'row', gap: 14, marginTop: 18, alignItems: 'center' }}>
             {/* Tap en la foto → abre el vivo si el perfil está en vivo.
                 Mantener presionado → foto de perfil a pantalla completa. */}
             <ProfileHeroAvatar
@@ -94,31 +104,47 @@ export function PlayerProfilePublicView({
               live={hasLive}
               onPressLive={() => player.liveGame && onOpenLive?.(player.liveGame.id)}
             />
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, letterSpacing: -0.4, flexShrink: 1 }} numberOfLines={1}>{player.name}</Text>
-                {player.isClub && (
-                  <BadgeCheck size={18} color={colors.accent} fill="none" accessibilityLabel="Cuenta de club"/>
-                )}
-              </View>
-              {/* La categoría va como texto y no con CategoryBadge: acá el hero
-                  usa el mismo fondo que el badge (`colors.bg`/`colors.text`), así
-                  que el badge se vería duplicado — este texto ya cumple lo mismo. */}
-              <Text style={{ fontSize: 12, color: colors.muted2, marginTop: 2 }} numberOfLines={1}>
-                {[player.username, player.club, player.category ? `CAT. ${player.category}` : null]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </Text>
-              {hasLive && (
-                <Pressable
-                  onPress={() => onOpenLive?.(player.liveGame!.id)}
-                  style={{ alignSelf: 'flex-start', marginTop: 8 }}
-                  accessibilityLabel="Ver en vivo"
-                >
-                  <StatusBadge status="LIVE"/>
-                </Pressable>
+            <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-around' }}>
+              <HeroStat value={player.clips.length + matches.length} label="POSTS"/>
+              <Pressable onPress={onOpenFollowers}>
+                <HeroStat value={player.followers} label="SEGUIDORES"/>
+              </Pressable>
+              <Pressable onPress={onOpenFollowing}>
+                <HeroStat value={player.followingCount} label="SIGUIENDO"/>
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={{ marginTop: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+              <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, letterSpacing: -0.4, flexShrink: 1 }} numberOfLines={1}>{player.name}</Text>
+              {/* En claro el lima es casi invisible sobre blanco (1.20:1,
+                  ver brand.accentStrong en tokens.ts) — se pisa con el navy
+                  de fondo del modo oscuro (#08203E) a pedido (2026-09-10).
+                  En oscuro sigue siendo lima, que ahí sí se distingue. */}
+              {player.isClub && (
+                <BadgeCheck size={18} color={isDark ? colors.accent : '#08203E'} fill="none" accessibilityLabel="Cuenta de club"/>
               )}
             </View>
+            {/* La categoría va como texto y no con CategoryBadge: acá el hero
+                usa el mismo fondo que el badge (`colors.bg`/`colors.text`), así
+                que el badge se vería duplicado — este texto ya cumple lo mismo.
+                ⚠️ Nivel con default 7 (2026-09-10) — ver el comentario
+                equivalente en PlayerOwnProfileScreen.tsx. */}
+            <Text style={{ fontSize: 12, color: colors.muted2, marginTop: 2 }} numberOfLines={1}>
+              {[player.username, player.club, `CAT. ${player.category ?? 7}`]
+                .filter(Boolean)
+                .join(' · ')}
+            </Text>
+            {hasLive && (
+              <Pressable
+                onPress={() => onOpenLive?.(player.liveGame!.id)}
+                style={{ alignSelf: 'flex-start', marginTop: 8 }}
+                accessibilityLabel="Ver en vivo"
+              >
+                <StatusBadge status="LIVE"/>
+              </Pressable>
+            )}
           </View>
 
           {/* Acciones: acá SÍ van (a diferencia del perfil propio) — seguir,
@@ -171,17 +197,6 @@ export function PlayerProfilePublicView({
             )}
           </View>
 
-          {/* Stats — mismo tratamiento blanco-sobre-azul que "posts/seguidores/
-              siguiendo" del perfil propio. Acá solo 2: nadie se sigue a sí
-              mismo, así que no hay un tercer stat de "posts". */}
-          <View style={{ flexDirection: 'row', gap: 22, marginTop: 16 }}>
-            <Pressable onPress={onOpenFollowers}>
-              <HeroStat value={player.followers} label="SEGUIDORES"/>
-            </Pressable>
-            <Pressable onPress={onOpenFollowing}>
-              <HeroStat value={player.followingCount} label="SIGUIENDO"/>
-            </Pressable>
-          </View>
         </View>
 
         {/* Dos pestañas, igual que el perfil propio — sin número debajo. */}
@@ -194,46 +209,51 @@ export function PlayerProfilePublicView({
           onChange={(k) => setTab(k as TabKey)}
         />
 
-        {/* Grid — mismo componente y layout que el perfil propio. */}
-        {grid.length === 0 ? (
-          <View style={{ paddingHorizontal: 24, paddingVertical: 40, alignItems: 'center', gap: 6 }}>
-            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>Nada por ahora</Text>
-            <Text style={{ fontSize: 12, color: colors.muted2, textAlign: 'center', lineHeight: 18 }}>
-              {tab === 'highlights'
-                ? 'Este usuario todavía no tiene highlights públicos.'
-                : 'Este usuario todavía no tiene partidos completos.'}
-            </Text>
+        {/* Grid — mismo componente y layout que el perfil propio. Swipeable:
+            deslizar acá togglea Highlights ↔ Partidos (2026-09-10). */}
+        <GestureDetector gesture={swipeTabs}>
+          <View>
+            {grid.length === 0 ? (
+              <View style={{ paddingHorizontal: 24, paddingVertical: 40, alignItems: 'center', gap: 6 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>Nada por ahora</Text>
+                <Text style={{ fontSize: 12, color: colors.muted2, textAlign: 'center', lineHeight: 18 }}>
+                  {tab === 'highlights'
+                    ? 'Este usuario todavía no tiene highlights públicos.'
+                    : 'Este usuario todavía no tiene partidos completos.'}
+                </Text>
+              </View>
+            ) : (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', padding: 2 }}>
+                {tab === 'highlights'
+                  ? player.clips.map((c) => (
+                      <Pressable
+                        key={c.id}
+                        onPress={() => onOpenClip?.(c)}
+                        style={{ width: '33.333%', padding: 1 }}>
+                        <ContentThumb
+                          kind="highlight"
+                          durationLabel={c.length}
+                          aspect="square"
+                          imageUri={c.thumbnailUrl}
+                        />
+                      </Pressable>
+                    ))
+                  : matches.map((m) => (
+                      <Pressable
+                        key={m.id}
+                        onPress={() => onOpenMatch?.(m)}
+                        style={{ width: '33.333%', padding: 1 }}>
+                        <ContentThumb
+                          kind="match"
+                          durationLabel={m.durationLabel}
+                          aspect="square"
+                        />
+                      </Pressable>
+                    ))}
+              </View>
+            )}
           </View>
-        ) : (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', padding: 2 }}>
-            {tab === 'highlights'
-              ? player.clips.map((c) => (
-                  <Pressable
-                    key={c.id}
-                    onPress={() => onOpenClip?.(c)}
-                    style={{ width: '33.333%', padding: 1 }}>
-                    <ContentThumb
-                      kind="highlight"
-                      durationLabel={c.length}
-                      aspect="square"
-                      imageUri={c.thumbnailUrl}
-                    />
-                  </Pressable>
-                ))
-              : matches.map((m) => (
-                  <Pressable
-                    key={m.id}
-                    onPress={() => onOpenMatch?.(m)}
-                    style={{ width: '33.333%', padding: 1 }}>
-                    <ContentThumb
-                      kind="match"
-                      durationLabel={m.durationLabel}
-                      aspect="square"
-                    />
-                  </Pressable>
-                ))}
-          </View>
-        )}
+        </GestureDetector>
       </ScrollView>
 
       {onChangeTab && <BottomTabBar active={activeTab} onChange={onChangeTab} role="player"/>}
@@ -248,7 +268,9 @@ function HeroStat({ value, label }: { value: number; label: string }) {
   const { colors } = useTheme();
   return (
     <View>
-      <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{value}</Text>
+      {/* ⚠️ 2026-09-10: `colors.accentText` (lima en oscuro, navy en claro) —
+          ver el comentario equivalente en PlayerOwnProfileScreen.tsx. */}
+      <Text style={{ fontSize: 18, fontWeight: '800', color: colors.accentText }}>{value}</Text>
       <Text style={{ fontSize: 10, fontWeight: '700', color: colors.muted2, letterSpacing: 0.8 }}>
         {label}
       </Text>

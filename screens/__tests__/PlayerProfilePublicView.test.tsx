@@ -155,6 +155,20 @@ describe('PlayerProfilePublicView — misma pantalla que el perfil propio', () =
     expect(getByText('@beto · CAT. 5')).toBeTruthy();
   });
 
+  it('sin nivel declarado, muestra CAT. 7 por default (2026-09-10)', () => {
+    const { getByText } = renderView({ category: null, club: '' });
+    expect(getByText('@beto · CAT. 7')).toBeTruthy();
+  });
+
+  it('la stat "POSTS" suma highlights públicos + partidos completos (2026-09-10)', () => {
+    const clips = [
+      { id: 'c1', length: '0:12', thumbnailUrl: undefined as any },
+      { id: 'c2', length: '0:20', thumbnailUrl: undefined as any },
+    ];
+    const { getByText } = renderView({ clips: clips as any }, { matches: [aMatch] });
+    expect(getByText('3')).toBeTruthy(); // 2 clips + 1 partido
+  });
+
   it('tocar seguidores/seguidos llama a los callbacks correspondientes', () => {
     const onOpenFollowers = jest.fn();
     const onOpenFollowing = jest.fn();

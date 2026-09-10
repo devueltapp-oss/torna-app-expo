@@ -30,8 +30,8 @@
 import React from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Lock, Settings } from 'lucide-react-native';
-import { Svg, Rect, Line } from 'react-native-svg';
 import { useTheme } from '../theme';
 import { Avatar, TabStrip } from '../components/ui';
 import { ImageViewerModal } from '../components/ImageViewerModal';
@@ -76,6 +76,24 @@ export function PlayerOwnProfileScreen({
   // fotos (la única imagen subible es el avatar).
   const grid: LibraryItem[] = tab === 'highlights' ? publicHl : publicMatch;
 
+  /**
+   * Swipe lateral para cambiar de pestaña sin tocar el `TabStrip` (2026-09-10).
+   * Con solo 2 pestañas, cualquier swipe decisivo alcanza — no hace falta
+   * distinguir dirección. `activeOffsetX` + `failOffsetY` para no pelear con
+   * el scroll vertical del `ScrollView` que envuelve toda la pantalla: el
+   * gesto solo se activa si el movimiento es sobre todo horizontal; si es
+   * vertical, cede al scroll (mismo patrón que el swipe-back de
+   * `FollowListSheet`).
+   */
+  const swipeTabs = React.useMemo(() => Gesture.Pan()
+    .activeOffsetX([-20, 20])
+    .failOffsetY([-15, 15])
+    .onEnd((e) => {
+      if (Math.abs(e.translationX) > 60) {
+        setTab((t) => (t === 'highlights' ? 'matches' : 'highlights'));
+      }
+    }), []);
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
@@ -87,12 +105,6 @@ export function PlayerOwnProfileScreen({
             pantalla; todo lo que abajo asumía "texto blanco sobre navy" pasa a
             los tokens de texto normales. */}
         <View style={{ backgroundColor: colors.bg, padding: 16, paddingBottom: 18, overflow: 'hidden' }}>
-          <Svg viewBox="0 0 390 220" width="100%" height="100%" preserveAspectRatio="xMidYMid slice"
-            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.14 }}>
-            <Rect x={40} y={40} width={310} height={140} stroke={colors.accent} strokeWidth={2} fill="none"/>
-            <Line x1={195} y1={40} x2={195} y2={180} stroke={colors.accent} strokeWidth={2}/>
-          </Svg>
-
           {/* Acá no va "volver" (esto es un tab raíz, no una pantalla apilada):
               el lugar de los dos íconos de arriba lo ocupan las únicas acciones
               que existen solo sobre la cuenta propia. */}
@@ -105,45 +117,48 @@ export function PlayerOwnProfileScreen({
             </HeroIconButton>
           </View>
 
-          <View style={{ flexDirection: 'row', gap: 14, marginTop: 18, alignItems: 'flex-end' }}>
+          {/* Avatar + stats en la MISMA fila (2026-09-10, estilo Instagram):
+              antes las stats iban en una fila propia debajo de avatar+nombre.
+              Nombre/username pasan a su propia línea, debajo de esta fila. */}
+          <View style={{ flexDirection: 'row', gap: 14, marginTop: 18, alignItems: 'center' }}>
             <Pressable onPress={() => owner.profilePicture && setViewer(true)}>
               <View style={{ borderRadius: 36, overflow: 'hidden' }}>
                 <Avatar name={owner.name} size={72} imageUri={owner.profilePicture} ringColor={colors.bg}/>
               </View>
             </Pressable>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, letterSpacing: -0.4 }} numberOfLines={1}>
-                {owner.name}
-              </Text>
-              {/*
-                ⛔ Bajo el nombre va **username + nivel**, nada más.
-
-                Antes se pintaba `club · ciudad`, pero la ciudad venía de
-                `User.region` — un dato viejo cargado a mano (a alguien de
-                Ciudad Guayana le decía "caracas") que la app ya no edita: el
-                único uso de la ubicación es el aviso de partidas cercanas,
-                que es aproximado y no se muestra. `ProfileOwner.club` además
-                llega siempre vacío en la app.
-              */}
-              <Text style={{ fontSize: 12, color: colors.muted2, marginTop: 2 }} numberOfLines={1}>
-                {[owner.username, owner.category ? `CAT. ${owner.category}` : null]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </Text>
+            <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-around' }}>
+              <HeroStat value={totalPosts} label="POSTS"/>
+              <Pressable onPress={onOpenFollowers}>
+                <HeroStat value={owner.followers} label="SEGUIDORES"/>
+              </Pressable>
+              <Pressable onPress={onOpenFollowing}>
+                <HeroStat value={owner.following} label="SIGUIENDO"/>
+              </Pressable>
             </View>
           </View>
 
-          {/* Stats — posts/seguidores/siguiendo, mismo tratamiento blanco-sobre-azul
-              que los conteos del perfil ajeno (ahí solo hay 2: nadie se sigue a
-              sí mismo, así que no hay fila de "Seguir/Notificar/Mensaje" acá). */}
-          <View style={{ flexDirection: 'row', gap: 22, marginTop: 16 }}>
-            <HeroStat value={totalPosts} label="POSTS"/>
-            <Pressable onPress={onOpenFollowers}>
-              <HeroStat value={owner.followers} label="SEGUIDORES"/>
-            </Pressable>
-            <Pressable onPress={onOpenFollowing}>
-              <HeroStat value={owner.following} label="SIGUIENDO"/>
-            </Pressable>
+          <View style={{ marginTop: 12 }}>
+            <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, letterSpacing: -0.4 }} numberOfLines={1}>
+              {owner.name}
+            </Text>
+            {/*
+              ⛔ Bajo el nombre va **username + nivel**, nada más.
+
+              Antes se pintaba `club · ciudad`, pero la ciudad venía de
+              `User.region` — un dato viejo cargado a mano (a alguien de
+              Ciudad Guayana le decía "caracas") que la app ya no edita: el
+              único uso de la ubicación es el aviso de partidas cercanas,
+              que es aproximado y no se muestra. `ProfileOwner.club` además
+              llega siempre vacío en la app.
+
+              ⚠️ Nivel con default 7 (2026-09-10): `category` es nullable
+              (nadie lo declaró todavía) y antes, sin nivel, el "· CAT. N"
+              directamente desaparecía — mostrar SIEMPRE algo, 7 = iniciación
+              (el mismo default que usa el manual de pádel para "sin declarar").
+            */}
+            <Text style={{ fontSize: 12, color: colors.muted2, marginTop: 2 }} numberOfLines={1}>
+              {owner.username} · CAT. {owner.category ?? 7}
+            </Text>
           </View>
         </View>
 
@@ -159,35 +174,39 @@ export function PlayerOwnProfileScreen({
           onChange={(k) => setTab(k as TabKey)}
         />
 
-        {/* Grid */}
-        {grid.length === 0 ? (
-          <View style={{ paddingHorizontal: 24, paddingVertical: 40, alignItems: 'center', gap: 6 }}>
-            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>Nada por ahora</Text>
-            <Text style={{ fontSize: 12, color: colors.muted2, textAlign: 'center', lineHeight: 18 }}>
-              Pasa a tu{' '}
-              <Text onPress={onOpenLibrary} style={{ color: colors.accentText, fontWeight: '700' }}>
-                biblioteca privada
-              </Text>
-              {' '}y marca algo como público para que aparezca aquí.
-            </Text>
+        {/* Grid — swipeable: deslizar acá togglea Highlights ↔ Partidos. */}
+        <GestureDetector gesture={swipeTabs}>
+          <View>
+            {grid.length === 0 ? (
+              <View style={{ paddingHorizontal: 24, paddingVertical: 40, alignItems: 'center', gap: 6 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>Nada por ahora</Text>
+                <Text style={{ fontSize: 12, color: colors.muted2, textAlign: 'center', lineHeight: 18 }}>
+                  Pasa a tu{' '}
+                  <Text onPress={onOpenLibrary} style={{ color: colors.accentText, fontWeight: '700' }}>
+                    biblioteca privada
+                  </Text>
+                  {' '}y marca algo como público para que aparezca aquí.
+                </Text>
+              </View>
+            ) : (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', padding: 2 }}>
+                {grid.map(item => (
+                  <Pressable
+                    key={item.id}
+                    onPress={() => onOpenItem?.(item)}
+                    style={{ width: '33.333%', padding: 1 }}>
+                    <ContentThumb
+                      kind={item.kind}
+                      durationLabel={item.durationLabel}
+                      aspect="square"
+                      imageUri={item.kind === 'highlight' ? item.thumbnailUrl : undefined}
+                    />
+                  </Pressable>
+                ))}
+              </View>
+            )}
           </View>
-        ) : (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', padding: 2 }}>
-            {grid.map(item => (
-              <Pressable
-                key={item.id}
-                onPress={() => onOpenItem?.(item)}
-                style={{ width: '33.333%', padding: 1 }}>
-                <ContentThumb
-                  kind={item.kind}
-                  durationLabel={item.durationLabel}
-                  aspect="square"
-                  imageUri={item.kind === 'highlight' ? item.thumbnailUrl : undefined}
-                />
-              </Pressable>
-            ))}
-          </View>
-        )}
+        </GestureDetector>
       </ScrollView>
 
       <BottomTabBar role="player" active={activeTab} onChange={onChangeTab}/>
@@ -233,7 +252,11 @@ function HeroStat({ value, label }: { value: number; label: string }) {
   const { colors } = useTheme();
   return (
     <View>
-      <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{value}</Text>
+      {/* ⚠️ 2026-09-10: el número va en `colors.accentText` (lima en oscuro,
+          el mismo #BFFE3D de siempre; navy en claro) — NO `colors.accent` a
+          secas, que sobre blanco da 1.20:1 de contraste y queda invisible
+          (ver la nota de `brand.accentStrong` en tokens.ts). */}
+      <Text style={{ fontSize: 18, fontWeight: '800', color: colors.accentText }}>{value}</Text>
       <Text style={{ fontSize: 10, fontWeight: '700', color: colors.muted2, letterSpacing: 0.8 }}>
         {label}
       </Text>
