@@ -53,7 +53,7 @@ export function ChatsInboxScreen({
   items, loading, onOpenDm, onOpenGame, onNewChat, onRefresh, refreshing,
   onDeleteChat, activeTab = 'chats', onChangeTab, role = 'player',
 }: ChatsInboxScreenProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [filter, setFilter] = React.useState<InboxFilter>('game');
 
   /**
@@ -102,6 +102,7 @@ export function ChatsInboxScreen({
           <ChatRow
             item={item}
             colors={colors}
+            isDark={isDark}
             onPress={() =>
               item.kind === 'dm'
                 ? item.otherUserId && onOpenDm(item.otherUserId, item.title)
@@ -201,10 +202,11 @@ function FilterTab({
  * dirección, que es justo lo que un `onLongPress` no podía darnos.
  */
 function ChatRow({
-  item, colors, onPress, onDelete,
+  item, colors, isDark, onPress, onDelete,
 }: {
   item: InboxItem;
   colors: ReturnType<typeof useTheme>['colors'];
+  isDark: boolean;
   onPress: () => void;
   onDelete?: () => void;
 }) {
@@ -248,12 +250,20 @@ function ChatRow({
       style={({ pressed }) => ({
         flexDirection: 'row', alignItems: 'center', gap: 12,
         paddingHorizontal: 12, paddingVertical: 12, borderRadius: 14,
-        backgroundColor: pressed ? colors.bg2 : colors.surface,
-        borderWidth: 1, borderColor: colors.line,
+        // Chat con mensajes sin leer = lavado lima (`infoBg`), mismo criterio
+        // que NotificationsScreen (2026-09-09) — antes solo el numerito del
+        // badge era lima; la fila entera no distinguía leído/no leído.
+        backgroundColor: item.unreadCount > 0 ? colors.infoBg : (pressed ? colors.bg2 : colors.surface),
+        borderWidth: 1, borderColor: item.unreadCount > 0 ? colors.lineStrong : colors.line,
       })}
     >
       {isGame ? (
-        <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' }}>
+        // ⚠️ Ícono de "perfil vacío" del chat grupal: fondo `colors.bg` en
+        // oscuro (#08203E), NO `colors.ink` (ese es un navy invariante por
+        // tema, #001449 siempre, y quedaba como un tono de más). En claro se
+        // mantiene `colors.ink` — ahí sí hace falta el navy oscuro para que el
+        // ícono lima tenga contraste (lima sobre blanco es casi invisible).
+        <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: isDark ? colors.bg : colors.ink, alignItems: 'center', justifyContent: 'center' }}>
           <Users size={20} color={colors.accent} />
         </View>
       ) : (

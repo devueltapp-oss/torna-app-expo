@@ -116,12 +116,15 @@ export const darkColors = {
   // Superficie elevada (cards, tab bar, sheets) — antes bg==surface; el
   // mockup los separa en dos tonos de navy distintos.
   surface:  '#0E2646',
-  // Progresión de navy intermedios, cada uno un poco más claro que el
-  // anterior (bg → surface → surface2 → bg3), aproximado del mockup y
-  // verificado a ojo por contraste — no son valores oficiales del manual.
-  surface2: '#15304F',
-  bg2:      '#15304F',
-  bg3:      '#1C3A5C',
+  // ⚠️ 2026-09-09: colapsados a `surface` (`#0E2646`) a pedido explícito —
+  // antes eran tonos intermedios INVENTADOS (`#15304F`/`#1C3A5C`, aproximados
+  // a ojo, nunca especificados por el mockup) y quedaban un tercer/cuarto tono
+  // de navy que nadie pidió. La regla en modo oscuro es DOS tonos nada más:
+  // `bg` (`#08203E`, fondo base) y todo lo elevado —cards, chats, botones,
+  // sheets— en `#0E2646` para hacer contraste contra el fondo.
+  surface2: '#0E2646',
+  bg2:      '#0E2646',
+  bg3:      '#0E2646',
   line:        'rgba(255,255,255,0.18)',
   lineStrong:  'rgba(255,255,255,0.32)',
   text:   '#FFFFFF',

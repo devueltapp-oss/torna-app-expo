@@ -240,7 +240,10 @@ function SheetContent({
           {game.time} · {game.court}
         </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
-          <Text style={{ color: colors.muted2, fontSize: 13, flexShrink: 1 }}>
+          {/* `colors.accent` a propósito (2026-09-10): lima #BFFE3D fijo en los
+              DOS temas, no `accentText` — acá se pidió el mismo verde siempre,
+              no el que flippea a navy en claro. */}
+          <Text style={{ color: colors.accent, fontSize: 13, fontFamily: fonts.bold, flexShrink: 1 }}>
             {[game.date, game.club].filter(Boolean).join(' · ')}
           </Text>
           <CategoryBadge category={game.category} />

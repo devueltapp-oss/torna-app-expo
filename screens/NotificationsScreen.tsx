@@ -138,7 +138,7 @@ export function NotificationsScreen({
 }
 
 function NotificationRow({ item, onPress }: { item: AppNotification; onPress: () => void }) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const Icon = ICONS[item.type] ?? Bell;
   const unread = !item.readAt;
 
@@ -149,12 +149,18 @@ function NotificationRow({ item, onPress }: { item: AppNotification; onPress: ()
       style={({ pressed }) => ({
         flexDirection: 'row', alignItems: 'center', gap: 12,
         paddingHorizontal: 12, paddingVertical: 12, borderRadius: 14,
-        // No leída = un tono distinto de la MISMA paleta (azul/lima/blanco), sin colores nuevos.
-        backgroundColor: pressed ? colors.bg2 : unread ? colors.bg2 : colors.surface,
+        // No leída = lavado lima (`infoBg`), no un gris/navy más. ⚠️ 2026-09-09:
+        // antes usaba `colors.bg2`, que en oscuro quedó igual a `colors.surface`
+        // (los dos colapsaron a #0E2646 — ver tokens.ts), así que leída y no
+        // leída se veían IDÉNTICAS. El lima es la señal, no un tono de navy.
+        backgroundColor: unread ? colors.infoBg : (pressed ? colors.bg2 : colors.surface),
         borderWidth: 1, borderColor: unread ? colors.lineStrong : colors.line,
       })}
     >
-      <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' }}>
+      {/* Ícono de "perfil vacío" de la notificación: fondo `colors.bg` en
+          oscuro, NO `colors.ink` (navy invariante por tema) — ver el
+          comentario equivalente en ChatsInboxScreen.tsx (2026-09-09). */}
+      <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isDark ? colors.bg : colors.ink, alignItems: 'center', justifyContent: 'center' }}>
         <Icon size={20} color={colors.accent} />
       </View>
 

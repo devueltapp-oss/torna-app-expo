@@ -40,7 +40,7 @@ export function ClubProfilePlayerView({
   club, onBack, onToggleFollow, onMessage, onReserveCourt, onOpenLive, onOpenClip,
   onChangeTab, activeTab = 'home', onOpenFollowers, onOpenFollowing,
 }: Props) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const liveGameId = club.highlights.live[0]?.id ?? null;
   const isLive = !!liveGameId;
   const hasClips = club.highlights.clips.length > 0;
@@ -52,11 +52,6 @@ export function ClubProfilePlayerView({
             ⚠️ Fondo `colors.bg` (2026-09-09), NO `colors.ink` — ver el comentario
             equivalente en PlayerOwnProfileScreen.tsx para el motivo. */}
         <View style={{ backgroundColor: colors.bg, padding: 16, paddingBottom: 18, overflow: 'hidden' }}>
-          <Svg viewBox="0 0 390 220" width="100%" height="100%" preserveAspectRatio="xMidYMid slice"
-            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.14 }}>
-            <Rect x={40} y={40} width={310} height={140} stroke={colors.accent} strokeWidth={2} fill="none"/>
-            <Line x1={195} y1={40} x2={195} y2={180} stroke={colors.accent} strokeWidth={2}/>
-          </Svg>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Pressable onPress={onBack} style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: colors.bg2, alignItems: 'center', justifyContent: 'center' }}>
               <ChevronLeft size={18} color={colors.text}/>
@@ -80,7 +75,9 @@ export function ClubProfilePlayerView({
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                 <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, letterSpacing: -0.4, flexShrink: 1 }} numberOfLines={1}>{club.name}</Text>
                 {/* Check verde = cuenta de club (reemplaza al viejo aro verde) */}
-                <BadgeCheck size={18} color={colors.accent} fill="none" accessibilityLabel="Cuenta de club"/>
+                {/* Mismo criterio que PlayerProfilePublicView.tsx (2026-09-10):
+                    lima en claro es casi invisible sobre blanco. */}
+                <BadgeCheck size={18} color={isDark ? colors.accent : '#08203E'} fill="none" accessibilityLabel="Cuenta de club"/>
               </View>
               <Text style={{ fontSize: 12, color: colors.muted2, marginTop: 2 }} numberOfLines={1}>
                 {club.handle}{club.city ? ` · ${club.city}` : ''}
@@ -123,11 +120,13 @@ export function ClubProfilePlayerView({
               </Pressable>
             )}
             <Pressable onPress={onOpenFollowers} style={{ alignItems: 'flex-end', minWidth: 60 }}>
-              <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{club.followers.toLocaleString('es-AR')}</Text>
+              {/* `colors.accentText` (lima en oscuro, navy en claro) — mismo
+                  criterio que los stats del perfil de jugador (2026-09-10). */}
+              <Text style={{ fontSize: 18, fontWeight: '800', color: colors.accentText }}>{club.followers.toLocaleString('es-AR')}</Text>
               <Text style={{ fontSize: 10, fontWeight: '700', color: colors.muted2, letterSpacing: 0.8 }}>SEGUIDORES</Text>
             </Pressable>
             <Pressable onPress={onOpenFollowing} style={{ alignItems: 'flex-end', minWidth: 60 }}>
-              <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{(club.followingCount ?? 0).toLocaleString('es-AR')}</Text>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: colors.accentText }}>{(club.followingCount ?? 0).toLocaleString('es-AR')}</Text>
               <Text style={{ fontSize: 10, fontWeight: '700', color: colors.muted2, letterSpacing: 0.8 }}>SIGUIENDO</Text>
             </Pressable>
           </View>

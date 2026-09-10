@@ -58,9 +58,11 @@ export function GamesScreen({
   if (role === 'player') {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
-        {/* Header: título + acción Reservar (crear un juego). */}
+        {/* Header: título + acción Reservar (crear un juego).
+            ⚠️ `colors.bg`, no `colors.surface` — ver el comentario equivalente
+            en HomeScreen.tsx (2026-09-09). */}
         <View style={{
-          backgroundColor: colors.surface, paddingHorizontal: 20, paddingVertical: 14,
+          backgroundColor: colors.bg, paddingHorizontal: 20, paddingVertical: 14,
           flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
         }}>
           <View style={{ flex: 1, minWidth: 0 }}>
@@ -144,7 +146,9 @@ export function GamesScreen({
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
-      <View style={{ backgroundColor: colors.surface, paddingHorizontal: 20, paddingVertical: 14 }}>
+      {/* ⚠️ `colors.bg`, no `colors.surface` — ver el comentario equivalente en
+          HomeScreen.tsx (2026-09-09). */}
+      <View style={{ backgroundColor: colors.bg, paddingHorizontal: 20, paddingVertical: 14 }}>
         <Text style={{ color: colors.text, fontSize: 24, fontWeight: '800', letterSpacing: -0.5 }}>Juegos</Text>
         <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', backgroundColor: colors.bg2, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, marginTop: 14 }}>
           <Search size={18} color={colors.muted2} />

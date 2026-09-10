@@ -58,7 +58,7 @@ export function MyLibraryScreen({
   onBack, onCreateHighlight, onRegisterResult, onToggleVisibility, onEditDescription, onOpenItem,
   activeTab, onChangeTab,
 }: MyLibraryScreenProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [open, setOpen] = React.useState<Record<SectionKey, boolean>>({
     matches: true, highlights: true,
   });
@@ -91,11 +91,16 @@ export function MyLibraryScreen({
           backgroundColor: colors.bg2, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
           marginBottom: 12,
         }}>
+          {/* Oscuro: fondo `colors.bg` (#08203E), ícono lima — ver el
+              comentario equivalente en ChatsInboxScreen.tsx (2026-09-09).
+              Claro: INVERTIDO a pedido (2026-09-10) — fondo lima, candado
+              navy (#08203E), no `colors.ink` (#001449, un tono distinto). */}
           <View style={{
-            width: 36, height: 36, borderRadius: 10, backgroundColor: colors.ink,
+            width: 36, height: 36, borderRadius: 10,
+            backgroundColor: isDark ? colors.bg : colors.accent,
             alignItems: 'center', justifyContent: 'center',
           }}>
-            <Lock size={18} color={colors.accent}/>
+            <Lock size={18} color={isDark ? colors.accent : '#08203E'}/>
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text }}>

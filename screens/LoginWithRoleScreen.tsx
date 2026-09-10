@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, ScrollView, Image, Pressable, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Mail, Lock, User as UserIcon, Home, AlertTriangle } from 'lucide-react-native';
+import { Mail, Lock, User as UserIcon, Home } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { Button, Input, SocialButton } from '../components/ui';
 import { useAuth, type LoginResult } from '../contexts/AuthContext';
@@ -276,19 +276,6 @@ export function LoginWithRoleScreen({ onLogin, onRegister, onNeedsRegistration, 
               onPress={() => handleSocial('apple')}
             />
           )}
-        </View>
-
-        {/* Info banner */}
-        <View style={{
-          flexDirection: 'row', alignItems: 'flex-start', gap: 8,
-          backgroundColor: colors.accent, padding: 12, borderRadius: 12,
-        }}>
-          <AlertTriangle size={16} color={colors.warnFg} />
-          <Text style={{ flex: 1, fontSize: 12, color: colors.warnFg, lineHeight: 17 }}>
-            {isPlayer
-              ? 'Los Players entran al instante, sin aprobación.'
-              : 'Los clubes pasan por aprobación manual del admin (<24h).'}
-          </Text>
         </View>
 
         <View style={{ flex: 1 }} />
