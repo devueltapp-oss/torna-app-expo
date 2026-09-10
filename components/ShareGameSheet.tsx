@@ -61,7 +61,7 @@ const SEARCH_DEBOUNCE_MS = 350;
 export function ShareGameSheet({
   visible, items, loading = false, onClose, onSend, onSearch,
   title = 'Compartir partido',
-  subtitle = 'Se envía por chat, con el partido adjunto para que lo abran de una.',
+  subtitle = 'Se envía por chat, con el partido adjunto.',
   sendLabel,
 }: ShareGameSheetProps) {
   const { colors, radii } = useTheme();

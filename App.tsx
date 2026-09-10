@@ -1365,7 +1365,7 @@ function MainPlayer({ navigation, route }: any) {
           }));
         }}
         title="Invitar a la partida"
-        subtitle="Se envía por chat, con la partida adjunta para que se postulen de una."
+        subtitle="Se envía por chat, con la partida adjunta."
         sendLabel="Invitar"
       />
     </>
@@ -1564,7 +1564,7 @@ function ReserveOkContainer({ route, navigation }: { route: any; navigation: any
           }));
         }}
         title="Invitar a jugar"
-        subtitle="Se envía por chat, con la partida adjunta para que la abran de una."
+        subtitle="Se envía por chat, con la partida adjunta."
         sendLabel="Invitar"
       />
     </>
