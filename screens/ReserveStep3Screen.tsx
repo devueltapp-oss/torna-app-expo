@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronDown, AlertTriangle, Radio, Plus } from 'lucide-react-native';
+import { ChevronLeft, ChevronDown, AlertTriangle, Radio, Plus, X } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { Button, AppHeader, Avatar, Switch } from '../components/ui';
 import { PlayerSearchOverlay } from '../components/PlayerSearchOverlay';
@@ -106,6 +106,7 @@ export function ReserveStep3Screen({
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       {/* Sin barra de avance ni "2/2" — ver la nota en `ReserveBlocksScreen`. */}
       <AppHeader title="Jugadores"
+        flush
         left={<Pressable onPress={onBack}><ChevronLeft size={22} color={colors.text}/></Pressable>}
       />
 
@@ -173,12 +174,15 @@ export function ReserveStep3Screen({
           onClose={() => setLevelSheet(false)}
         />
 
-        {/* Required partner */}
+        {/* Required partner — se puede quitar igual que un rival (2026-09-11),
+            pero "Confirmar reserva" queda bloqueado sin uno (ver más abajo):
+            es obligatorio para el backend, así que quitarlo no puede dejar la
+            reserva en un estado que el servidor va a rechazar igual. */}
         <View>
           <Text style={{ fontSize: 11, fontWeight: '700', color: colors.muted2, letterSpacing: 0.8, marginBottom: 6 }}>
             TU COMPAÑERO · OBLIGATORIO
           </Text>
-          <PlayerSlot player={partner} onChange={() => setSearchSlot('partner')}/>
+          <PlayerSlot player={partner} onChange={() => setSearchSlot('partner')} onRemove={() => setPartner(null)}/>
         </View>
 
         {/* Opponents only when full party */}
@@ -188,8 +192,8 @@ export function ReserveStep3Screen({
               RIVALES
             </Text>
             <View style={{ gap: 8 }}>
-              <PlayerSlot player={opp1} onChange={() => setSearchSlot('opp1')}/>
-              <PlayerSlot player={opp2} onChange={() => setSearchSlot('opp2')}/>
+              <PlayerSlot player={opp1} onChange={() => setSearchSlot('opp1')} onRemove={() => setOpp1(null)}/>
+              <PlayerSlot player={opp2} onChange={() => setSearchSlot('opp2')} onRemove={() => setOpp2(null)}/>
             </View>
           </View>
         ) : (
@@ -220,6 +224,11 @@ export function ReserveStep3Screen({
         paddingHorizontal: 16, paddingTop: 12, paddingBottom: 18,
         borderTopWidth: 1, borderTopColor: colors.line, backgroundColor: colors.surface, gap: 8,
       }}>
+        {!partner && (
+          <Text style={{ fontSize: 12, color: colors.muted2, textAlign: 'center' }}>
+            Elige un compañero para confirmar.
+          </Text>
+        )}
         {!category && (
           <Text style={{ fontSize: 12, color: colors.muted2, textAlign: 'center' }}>
             Elige el nivel de la partida para confirmar.
@@ -228,10 +237,13 @@ export function ReserveStep3Screen({
         <Button
           fullWidth
           size="lg"
-          variant={category ? 'primary' : 'disabled'}
+          variant={category && partner ? 'primary' : 'disabled'}
           onPress={() => {
             // Sin nivel no se reserva: es obligatorio, igual que en el desktop.
-            if (!category) return;
+            // Sin compañero tampoco: se puede quitar (ver `PlayerSlot` de
+            // arriba), pero el backend lo exige siempre — no se puede confirmar
+            // sin volver a elegir uno.
+            if (!category || !partner) return;
             onConfirm?.({
               mode: searching ? 'search-opponents' : 'full',
               partnerUserId: partner?.id,
@@ -260,7 +272,17 @@ export function ReserveStep3Screen({
   );
 }
 
-function PlayerSlot({ player, onChange }: { player: InvitablePlayer | null; onChange: () => void }) {
+/**
+ * `onRemove` es opcional, pero hoy los tres slots (compañero y los dos
+ * rivales) lo reciben: "Cambiar" abre el buscador de nuevo, y hasta el
+ * 2026-09-11 no había forma de vaciar un slot ya elegido sin reemplazarlo por
+ * otra persona — bug reportado puntualmente para el compañero (los rivales sí
+ * lo tenían desde antes). El compañero sigue siendo OBLIGATORIO para el
+ * backend (regla de negocio — ver el comentario de `onConfirm` más abajo):
+ * quitarlo vacía el slot en la UI, pero "Confirmar reserva" queda bloqueado
+ * hasta elegir uno de nuevo.
+ */
+function PlayerSlot({ player, onChange, onRemove }: { player: InvitablePlayer | null; onChange: () => void; onRemove?: () => void }) {
   const { colors } = useTheme();
   if (!player) {
     return (
@@ -289,11 +311,28 @@ function PlayerSlot({ player, onChange }: { player: InvitablePlayer | null; onCh
           {player.username}{player.rating != null ? ` · ★ ${player.rating}` : ''}
         </Text>
       </View>
-      <Pressable onPress={onChange} style={{
-        backgroundColor: colors.bg2, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
-      }}>
-        <Text style={{ color: colors.text2, fontSize: 11, fontWeight: '700' }}>Cambiar</Text>
-      </Pressable>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Pressable onPress={onChange} style={{
+          backgroundColor: colors.bg2, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
+        }}>
+          <Text style={{ color: colors.text2, fontSize: 11, fontWeight: '700' }}>Cambiar</Text>
+        </Pressable>
+        {onRemove && (
+          <Pressable
+            onPress={onRemove}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Quitar jugador"
+            style={{
+              width: 28, height: 28, borderRadius: 8,
+              alignItems: 'center', justifyContent: 'center',
+              backgroundColor: colors.bg2,
+            }}
+          >
+            <X size={14} color={colors.muted2}/>
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 }
