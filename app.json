@@ -63,7 +63,7 @@
             ]
           },
           {
-            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestampAPIs",
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
             "NSPrivacyAccessedAPITypeReasons": [
               "C617.1"
             ]
