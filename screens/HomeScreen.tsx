@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, Pressable, RefreshControl } from 'react-native';
+import { View, Text, Image, ScrollView, Animated, Pressable, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import { Search } from 'lucide-react-native';
@@ -12,6 +12,17 @@ import { VideoPreviewModal } from '../components/VideoPreviewModal';
 import type { FeedPost as FeedPostData, UpcomingGamePlayer, UpcomingGameData } from '../data/types';
 
 const tornaLogo = require('../assets/torna-icon.png');
+// Imagotipo (ícono + wordmark "torna") — reemplaza el texto "Torna" del header
+// del Inicio (2026-09-11). Dos variantes según el modo: la clara es navy sobre
+// transparente (pensada para fondo blanco/claro) y la oscura es lima + blanco
+// sobre transparente (pensada para el navy oscuro de `darkColors.bg`).
+const imagotipoLight = require('../assets/imagotipo-light.png');
+const imagotipoDark = require('../assets/imagotipo-dark.png');
+
+// Alto del header (logo + búsqueda + campanita), para ocultarlo al scrollear
+// (2026-09-11) — ver el comentario en el `Animated.View` del header más abajo.
+// `paddingTop` + el más alto de sus hijos (los botones de 40) + `paddingBottom`.
+const HEADER_HEIGHT = 8 + 40 + 14;
 
 export type { UpcomingGamePlayer, UpcomingGameData } from '../data/types';
 
@@ -73,38 +84,71 @@ export function HomeScreen({
   unreadNotifications = 0,
   onOpenNotifications,
 }: Props) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const isFocused = useIsFocused();
   const [highlightModal, setHighlightModal] = React.useState<{ url: string; title: string; id: string } | null>(null);
 
+  // Header (logo + búsqueda + campanita) fijo → se ocultaba tapando contenido
+  // sin aportar nada mientras se lee el feed (2026-09-11). Se sube fuera de
+  // pantalla a medida que se scrollea, y vuelve solo al volver arriba: no hace
+  // falta trackear la dirección del scroll, alcanza con la posición.
+  const scrollY = React.useRef(new Animated.Value(0)).current;
+  const headerTranslateY = scrollY.interpolate({
+    inputRange: [0, HEADER_HEIGHT],
+    outputRange: [0, -HEADER_HEIGHT],
+    extrapolate: 'clamp',
+  });
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [0, HEADER_HEIGHT * 0.6, HEADER_HEIGHT],
+    outputRange: [1, 1, 0],
+    extrapolate: 'clamp',
+  });
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
-      {/* Header */}
+      {/* Header — flotante (2026-09-11): antes vivía en el flujo normal y se
+          quedaba fijo tapando la pantalla todo el scroll. Ahora es absoluto,
+          por ENCIMA del feed (`zIndex`), y se traduce fuera de pantalla según
+          `scrollY` — así el feed puede ocupar todo el alto y el header se
+          esconde con la transición al bajar (ver `headerTranslateY` arriba). */}
       {/* ⚠️ `colors.bg`, NO `colors.surface` (2026-09-09): en claro son el mismo
           blanco, pero en oscuro `surface` (#0E2646) desentonaba contra el resto
           de la pantalla — la barra de búsqueda/notificaciones quedaba con un
           tono de "caja" en vez de fundirse con el fondo general (#08203E). */}
-      <View style={{
+      <Animated.View style={{
+        position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
         backgroundColor: colors.bg, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 14,
+        transform: [{ translateY: headerTranslateY }], opacity: headerOpacity,
       }}>
         {/* ⛔ Acá había un "Hola / <tu nombre>". Se eliminó el 2026-09-02: le
             decía al usuario cómo se llama, que es lo único que ya sabe, y se
             comía la franja más valiosa de la pantalla — la de arriba de todo,
             que ahora es para las próximas partidas. No lo repongas. */}
-        <Text style={{ color: colors.text, fontSize: 22, fontWeight: '800', letterSpacing: -0.3 }}>
-          Inicio
-        </Text>
+        {/* Imagotipo a la izquierda (2026-09-11; antes centrado — reemplazaba
+            el rótulo "Inicio", 2026-09-10). Reducido un 30% (2026-09-11): a
+            40 de alto —igual que los botones de la derecha— quedaba
+            demasiado grande para un header; 28 sigue leyéndose bien. */}
+        <Image
+          source={isDark ? imagotipoDark : imagotipoLight}
+          style={{ width: 158, height: 28 }}
+          resizeMode="contain"
+        />
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <Pressable onPress={onOpenSearch} style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: colors.bg2, alignItems: 'center', justifyContent: 'center' }}>
             <Search size={20} color={colors.text} />
           </Pressable>
           <NotificationBell count={unreadNotifications} onPress={onOpenNotifications} />
         </View>
-      </View>
+      </Animated.View>
 
-      <ScrollView
-        contentContainerStyle={{ paddingTop: 4, paddingBottom: 20, gap: 14 }}
+      <Animated.ScrollView
+        contentContainerStyle={{ paddingTop: HEADER_HEIGHT + 4, paddingBottom: 20, gap: 14 }}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true },
+        )}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -183,7 +227,7 @@ export function HomeScreen({
             )}
           </>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
 
       {onChangeTab && <BottomTabBar active={activeTab} onChange={onChangeTab} role="player"/>}
 

@@ -6,7 +6,10 @@ import { useTheme } from '../theme';
 import { Button, Input, SocialButton } from '../components/ui';
 import { useAuth, type LoginResult } from '../contexts/AuthContext';
 
-const tornaLogo = require('../assets/torna-icon.png');
+// Logo de marca (ícono + wordmark apilados) para la pantalla de entrada.
+// Dos variantes según el modo — ver el comentario donde se usan más abajo.
+const logoLight = require('../assets/logo-light.png');
+const logoDark = require('../assets/logo-dark.png');
 
 export type LoginRole = 'player' | 'club';
 
@@ -43,7 +46,7 @@ interface Props {
  * Error messages are rendered inline (no alert dialogs).
  */
 export function LoginWithRoleScreen({ onLogin, onRegister, onNeedsRegistration, onForgot }: Props) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { loginWithEmailPassword, loginWithGoogle, loginWithApple, isLoading: authLoading } = useAuth();
 
   const [role, setRole] = React.useState<LoginRole>('player');
@@ -128,15 +131,18 @@ export function LoginWithRoleScreen({ onLogin, onRegister, onNeedsRegistration, 
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >
-        {/* Logo */}
+        {/* Logo de marca (2026-09-11): ícono + wordmark apilados, en vez del
+            ícono suelto sobre una caja blanca fija. Las dos variantes ya
+            traen el color correcto para su fondo (navy sobre transparente en
+            claro, blanco/lima sobre transparente en oscuro), así que no hace
+            falta ninguna caja de contraste — se apoyan directo sobre
+            `colors.bg`. */}
         <View style={{ alignItems: 'center', marginBottom: 8 }}>
-          <View style={{
-            width: 64, height: 64, borderRadius: 18, backgroundColor: '#FFFFFF',
-            borderWidth: 1, borderColor: colors.line,
-            alignItems: 'center', justifyContent: 'center',
-          }}>
-            <Image source={tornaLogo} style={{ width: 42, height: 42 }} />
-          </View>
+          <Image
+            source={isDark ? logoDark : logoLight}
+            style={{ width: 88, height: 76 }}
+            resizeMode="contain"
+          />
         </View>
 
         {/* Title */}
