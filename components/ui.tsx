@@ -443,20 +443,39 @@ export function SectionHeader({ title, action }: { title: string; action?: React
 
 /* ─────────────────────────  App Header  ───────────────────────────── */
 
-export function AppHeader({ title, left, right }: {
+export function AppHeader({ title, left, right, flush, titleAlign = 'center' }: {
   title: string;
   left?: React.ReactNode;
   right?: React.ReactNode;
+  /**
+   * Sin franja: fondo `colors.bg` (el de la pantalla) y sin línea divisoria,
+   * en vez de `colors.surface` + `borderBottomWidth` (2026-09-11). Por
+   * default el header queda como estaba — `surface` es un tono más claro que
+   * `bg` en oscuro (ver `darkColors` en `tokens.ts`) y ahí la franja se nota;
+   * pásalo en pantallas donde ese contraste no aporta nada (Chats,
+   * Notificaciones) y el header debe fundirse con el resto de la pantalla.
+   */
+  flush?: boolean;
+  /**
+   * 'left' pega el título contra el borde izquierdo (Chats, 2026-09-11) en
+   * vez de centrarlo. Sin `left`, el espaciador de 36 que normalmente
+   * balancea el centrado se omite del todo — si no, el título quedaría
+   * corrido por ese hueco vacío en vez de pegado al padding de la pantalla.
+   */
+  titleAlign?: 'center' | 'left';
 }) {
   const { colors } = useTheme();
   return (
     <View style={{
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
       paddingHorizontal: 16, paddingVertical: 12, minHeight: 52,
-      backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.line,
+      backgroundColor: flush ? colors.bg : colors.surface,
+      borderBottomWidth: flush ? 0 : 1, borderBottomColor: colors.line,
     }}>
-      <View style={{ width: 36, alignItems: 'flex-start' }}>{left}</View>
-      <Text style={{ flex: 1, textAlign: 'center', fontWeight: '800', fontSize: 17, letterSpacing: -0.2, color: colors.text }}>
+      {(left || titleAlign === 'center') && (
+        <View style={{ width: 36, alignItems: 'flex-start' }}>{left}</View>
+      )}
+      <Text style={{ flex: 1, textAlign: titleAlign, fontWeight: '800', fontSize: 17, letterSpacing: -0.2, color: colors.text }}>
         {title}
       </Text>
       <View style={{ width: 36, alignItems: 'flex-end' }}>{right}</View>
@@ -712,9 +731,13 @@ export function TabStrip({ tabs, active, onChange }: TabStripProps) {
           <Pressable key={tab.id} onPress={() => onChange(tab.id)} style={{
             flex: 1, paddingVertical: 12, alignItems: 'center', gap: 4, position: 'relative',
           }}>
+            {/* La pestaña activa toma el mismo verde que los números del hero
+                (`HeroStat`) — `colors.accentText` y no `colors.accent` a
+                secas, que sobre blanco en modo claro da 1.20:1 de contraste y
+                queda invisible. La inactiva usa `colors.text` (2026-09-11). */}
             <Text style={{
               fontSize: 11, fontWeight: '800', letterSpacing: 1.2,
-              color: on ? colors.text : colors.muted2,
+              color: on ? colors.accentText : colors.text,
             }}>{tab.label}</Text>
             {on ? (
               <View style={{

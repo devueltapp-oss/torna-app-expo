@@ -85,6 +85,7 @@ export function ReserveClubPickerScreen({
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <AppHeader
         title="Reservar"
+        flush
         left={
           <Pressable onPress={onBack}>
             <ChevronLeft size={22} color={colors.text} />

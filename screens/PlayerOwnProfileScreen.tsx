@@ -82,8 +82,7 @@ export function PlayerOwnProfileScreen({
    * distinguir dirección. `activeOffsetX` + `failOffsetY` para no pelear con
    * el scroll vertical del `ScrollView` que envuelve toda la pantalla: el
    * gesto solo se activa si el movimiento es sobre todo horizontal; si es
-   * vertical, cede al scroll (mismo patrón que el swipe-back de
-   * `FollowListSheet`).
+   * vertical, cede al scroll.
    */
   const swipeTabs = React.useMemo(() => Gesture.Pan()
     .activeOffsetX([-20, 20])
@@ -107,8 +106,31 @@ export function PlayerOwnProfileScreen({
         <View style={{ backgroundColor: colors.bg, padding: 16, paddingBottom: 18, overflow: 'hidden' }}>
           {/* Acá no va "volver" (esto es un tab raíz, no una pantalla apilada):
               el lugar de los dos íconos de arriba lo ocupan las únicas acciones
-              que existen solo sobre la cuenta propia. */}
-          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+              que existen solo sobre la cuenta propia.
+              Username + nivel como título de la fila (2026-09-11): antes iba
+              el nombre acá y username/nivel bajo el avatar — se invirtió.
+              `minHeight: 52` iguala la altura al resto de los headers de la
+              app (`AppHeader`), para que Inicio/Juegos/Chats/Perfil no salten
+              de alto al cambiar de pestaña.
+
+              Antes, junto al username, se pintaba `club · ciudad`, pero la
+              ciudad venía de `User.region` — un dato viejo cargado a mano (a
+              alguien de Ciudad Guayana le decía "caracas") que la app ya no
+              edita: el único uso de la ubicación es el aviso de partidas
+              cercanas, que es aproximado y no se muestra. `ProfileOwner.club`
+              además llega siempre vacío en la app.
+
+              ⚠️ Nivel con default 7 (2026-09-10): `category` es nullable
+              (nadie lo declaró todavía) y antes, sin nivel, el "· CAT. N"
+              directamente desaparecía — mostrar SIEMPRE algo, 7 = iniciación
+              (el mismo default que usa el manual de pádel para "sin declarar"). */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 52 }}>
+            <Text
+              style={{ flex: 1, fontWeight: '800', fontSize: 17, letterSpacing: -0.2, color: colors.text }}
+              numberOfLines={1}
+            >
+              {owner.username} · CAT. {owner.category ?? 7}
+            </Text>
             <HeroIconButton onPress={onOpenLibrary} dot>
               <Lock size={16} color={colors.text}/>
             </HeroIconButton>
@@ -138,26 +160,12 @@ export function PlayerOwnProfileScreen({
           </View>
 
           <View style={{ marginTop: 12 }}>
+            {/*
+              ⛔ Bajo el avatar va el **nombre**, nada más (2026-09-11) —
+              username + nivel ya se muestran arriba, como título de la fila.
+            */}
             <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, letterSpacing: -0.4 }} numberOfLines={1}>
               {owner.name}
-            </Text>
-            {/*
-              ⛔ Bajo el nombre va **username + nivel**, nada más.
-
-              Antes se pintaba `club · ciudad`, pero la ciudad venía de
-              `User.region` — un dato viejo cargado a mano (a alguien de
-              Ciudad Guayana le decía "caracas") que la app ya no edita: el
-              único uso de la ubicación es el aviso de partidas cercanas,
-              que es aproximado y no se muestra. `ProfileOwner.club` además
-              llega siempre vacío en la app.
-
-              ⚠️ Nivel con default 7 (2026-09-10): `category` es nullable
-              (nadie lo declaró todavía) y antes, sin nivel, el "· CAT. N"
-              directamente desaparecía — mostrar SIEMPRE algo, 7 = iniciación
-              (el mismo default que usa el manual de pádel para "sin declarar").
-            */}
-            <Text style={{ fontSize: 12, color: colors.muted2, marginTop: 2 }} numberOfLines={1}>
-              {owner.username} · CAT. {owner.category ?? 7}
             </Text>
           </View>
         </View>

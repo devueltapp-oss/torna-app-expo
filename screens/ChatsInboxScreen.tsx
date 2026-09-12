@@ -75,6 +75,8 @@ export function ChatsInboxScreen({
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <AppHeader
         title="Chats"
+        flush
+        titleAlign="left"
         right={
           <Pressable onPress={onNewChat} hitSlop={10} accessibilityLabel="Nuevo chat">
             <PenSquare size={22} color={colors.text} />

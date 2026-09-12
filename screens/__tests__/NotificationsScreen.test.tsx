@@ -103,12 +103,16 @@ describe('NotificationsScreen', () => {
   });
 
   /**
-   * ⛔ Ya no hay flecha propia: se vuelve con el botón atrás del sistema. El
-   * test que probaba `onBack` se eliminó con ella.
+   * La flecha de volver propia (2026-09-11): antes esta pantalla dependía del
+   * botón atrás del sistema, que en iOS no existe como affordance visible
+   * (solo el swipe-back nativo) — sin flecha, no había forma de saber cómo
+   * volver. Mismo patrón que el resto de la app (`ChevronLeft` + `onBack`).
    */
-  it('no dibuja una flecha de volver propia', () => {
-    const { queryByLabelText } = renderScreen();
-    expect(queryByLabelText('Volver')).toBeNull();
+  it('el botón de volver llama a onBack', () => {
+    const onBack = jest.fn();
+    const { getByTestId } = renderScreen({ onBack });
+    fireEvent.press(getByTestId('notifications-back'));
+    expect(onBack).toHaveBeenCalledTimes(1);
   });
 
   /**

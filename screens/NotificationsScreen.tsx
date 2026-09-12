@@ -3,6 +3,7 @@ import { View, Text, FlatList, Pressable, RefreshControl, ActivityIndicator, Ale
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   CheckCheck, Bell, Radio, CalendarPlus, CalendarX, Video, Trophy, UserPlus, Trash2,
+  ChevronLeft, Heart, MessageCircle,
 } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
@@ -46,6 +47,8 @@ const ICONS: Record<AppNotificationType, typeof Bell> = {
   GAME_PLAYER_LEFT: CalendarX,
   GAME_PAIR_CANCELLED: CalendarX,
   GAME_APPLICATION_RECEIVED: UserPlus,
+  HIGHLIGHT_LIKED: Heart,
+  HIGHLIGHT_COMMENTED: MessageCircle,
 };
 
 /**
@@ -66,7 +69,12 @@ export function NotificationsScreen({
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <AppHeader
         title="Notificaciones"
-        /* Sin flecha propia: se vuelve con el botón atrás del sistema. */
+        flush
+        left={
+          <Pressable onPress={onBack} hitSlop={10} testID="notifications-back" accessibilityLabel="Volver">
+            <ChevronLeft size={22} color={colors.text} />
+          </Pressable>
+        }
         right={
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
             {unreadCount > 0 && (

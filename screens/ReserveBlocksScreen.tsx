@@ -110,6 +110,7 @@ export function ReserveBlocksScreen({
       {/* ⚠️ Sin barra de avance ni "1/2". Son dos pantallas y cada una dice en
           el título qué se elige; el andamiaje de pasos solo agregaba ruido. */}
       <AppHeader title="Elige un bloque"
+        flush
         left={<Pressable onPress={onBack}><ChevronLeft size={22} color={colors.text} /></Pressable>}
       />
 

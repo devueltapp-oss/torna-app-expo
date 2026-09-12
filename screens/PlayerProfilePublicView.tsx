@@ -83,11 +83,24 @@ export function PlayerProfilePublicView({
         <View style={{ backgroundColor: colors.bg, padding: 16, paddingBottom: 18, overflow: 'hidden' }}>
           {/* ⛔ Acá había un botón de "···" que no hacía NADA — se sacó junto
               con el resto de botones muertos de la app (mismo criterio que el
-              chrome del visor). El hueco de la derecha se deja vacío. */}
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              chrome del visor).
+              Username + nivel como título de la fila (2026-09-11): antes iba
+              el nombre acá y username/club/nivel bajo el avatar — se invirtió
+              (mismo cambio que `PlayerOwnProfileScreen.tsx`). `minHeight: 52`
+              iguala la altura al resto de los headers de la app (`AppHeader`).
+              El hueco de la derecha (mismo ancho que el botón de volver) es
+              solo para centrar el título — no hace nada. */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 52 }}>
             <Pressable onPress={onBack} style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: colors.bg2, alignItems: 'center', justifyContent: 'center' }}>
               <ChevronLeft size={18} color={colors.text}/>
             </Pressable>
+            <Text
+              style={{ flex: 1, textAlign: 'center', fontWeight: '800', fontSize: 17, letterSpacing: -0.2, color: colors.text }}
+              numberOfLines={1}
+            >
+              {[player.username, player.club, `CAT. ${player.category ?? 7}`].filter(Boolean).join(' · ')}
+            </Text>
+            <View style={{ width: 34 }}/>
           </View>
 
           {/* Avatar + stats en la MISMA fila (2026-09-10, estilo Instagram) —
@@ -116,8 +129,14 @@ export function PlayerProfilePublicView({
           </View>
 
           <View style={{ marginTop: 12 }}>
+            {/* Username/club/nivel ya se muestran arriba, como título de la
+                fila (ver más arriba) — acá solo va el nombre (+ badge de club).
+                ⚠️ Nivel con default 7 (2026-09-10) — ver el comentario
+                equivalente en PlayerOwnProfileScreen.tsx. */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-              <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, letterSpacing: -0.4, flexShrink: 1 }} numberOfLines={1}>{player.name}</Text>
+              <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, letterSpacing: -0.4, flexShrink: 1 }} numberOfLines={1}>
+                {player.name}
+              </Text>
               {/* En claro el lima es casi invisible sobre blanco (1.20:1,
                   ver brand.accentStrong en tokens.ts) — se pisa con el navy
                   de fondo del modo oscuro (#08203E) a pedido (2026-09-10).
@@ -126,16 +145,6 @@ export function PlayerProfilePublicView({
                 <BadgeCheck size={18} color={isDark ? colors.accent : '#08203E'} fill="none" accessibilityLabel="Cuenta de club"/>
               )}
             </View>
-            {/* La categoría va como texto y no con CategoryBadge: acá el hero
-                usa el mismo fondo que el badge (`colors.bg`/`colors.text`), así
-                que el badge se vería duplicado — este texto ya cumple lo mismo.
-                ⚠️ Nivel con default 7 (2026-09-10) — ver el comentario
-                equivalente en PlayerOwnProfileScreen.tsx. */}
-            <Text style={{ fontSize: 12, color: colors.muted2, marginTop: 2 }} numberOfLines={1}>
-              {[player.username, player.club, `CAT. ${player.category ?? 7}`]
-                .filter(Boolean)
-                .join(' · ')}
-            </Text>
             {hasLive && (
               <Pressable
                 onPress={() => onOpenLive?.(player.liveGame!.id)}

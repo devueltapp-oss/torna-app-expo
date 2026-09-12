@@ -67,9 +67,6 @@ export function GamesScreen({
         }}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={{ color: colors.text, fontSize: 24, fontWeight: '800', letterSpacing: -0.5 }}>Juegos</Text>
-            <Text style={{ color: colors.muted2, fontSize: 13, marginTop: 2 }}>
-              Tus partidas y partidos abiertos para sumarte
-            </Text>
           </View>
           <Pressable
             onPress={onReserve}

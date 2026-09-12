@@ -81,6 +81,7 @@ export function MyLibraryScreen({
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <AppHeader
         title="Mi biblioteca"
+        flush
         left={<Pressable onPress={onBack}><ChevronLeft size={22} color={colors.text}/></Pressable>}
       />
 
