@@ -120,6 +120,11 @@ export function resolvePushTarget(data: PushData | null | undefined): PushTarget
     // highlight suelto (se ven dentro de un perfil/librería), así que el lugar
     // útil es el perfil del autor: ahí está arriba de todo en su grid.
     case 'NEW_HIGHLIGHT_PUBLISHED':
+    // "A alguien le gustó / comentó TU highlight" (2026-09-11) — mismo caso: sin
+    // pantalla para un highlight suelto, así que se abre el perfil de quien
+    // interactuó (`actorId` = quien dio el like / comentó, no el dueño).
+    case 'HIGHLIGHT_LIKED':
+    case 'HIGHLIGHT_COMMENTED':
       return data?.actorId
         ? { name: 'PlayerProfile', params: { playerId: data.actorId } }
         : null;

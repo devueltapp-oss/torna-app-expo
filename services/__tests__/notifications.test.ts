@@ -61,11 +61,24 @@ describe('resolvePushTarget', () => {
     });
   });
 
+  it('manda al perfil de quien interactuó cuando le dan like o comentan uno de mis highlights', () => {
+    expect(resolvePushTarget({ type: 'HIGHLIGHT_LIKED', actorId: 'u10' })).toEqual({
+      name: 'PlayerProfile',
+      params: { playerId: 'u10' },
+    });
+    expect(resolvePushTarget({ type: 'HIGHLIGHT_COMMENTED', actorId: 'u11' })).toEqual({
+      name: 'PlayerProfile',
+      params: { playerId: 'u11' },
+    });
+  });
+
   it('no navega si falta el dato que la pantalla necesita', () => {
     expect(resolvePushTarget({ type: 'STREAMING_STARTED' })).toBeNull();
     expect(resolvePushTarget({ type: 'NEW_CHAT_MESSAGE' })).toBeNull();
     expect(resolvePushTarget({ type: 'NEW_DM_MESSAGE' })).toBeNull();
     expect(resolvePushTarget({ type: 'NEW_HIGHLIGHT_PUBLISHED' })).toBeNull();
+    expect(resolvePushTarget({ type: 'HIGHLIGHT_LIKED' })).toBeNull();
+    expect(resolvePushTarget({ type: 'HIGHLIGHT_COMMENTED' })).toBeNull();
   });
 
   it('ignora tipos desconocidos y payloads vacíos', () => {

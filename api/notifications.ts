@@ -74,7 +74,11 @@ export type AppNotificationType =
   | 'GAME_CANCELLED'
   | 'GAME_PLAYER_LEFT'
   | 'GAME_PAIR_CANCELLED'
-  | 'GAME_APPLICATION_RECEIVED';
+  | 'GAME_APPLICATION_RECEIVED'
+  /** Alguien le dio like a uno de mis highlights (2026-09-11). */
+  | 'HIGHLIGHT_LIKED'
+  /** Alguien comentó uno de mis highlights, o respondió a mi comentario (2026-09-11). */
+  | 'HIGHLIGHT_COMMENTED';
 
 export interface AppNotification {
   id: string;
