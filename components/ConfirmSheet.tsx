@@ -7,7 +7,7 @@
  * que queremos en una acción destructiva, donde el botón peligroso tiene que
  * *verse* peligroso.
  *
- * Mismo patrón que `FollowListSheet`/`ApplyMatchSheet`: `Modal` transparente,
+ * Mismo patrón que `ApplyMatchSheet`: `Modal` transparente,
  * velo azul de marca, hoja de abajo con esquinas redondeadas y drag handle. Tocar
  * fuera o el botón de cancelar cierra.
  *

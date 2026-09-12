@@ -34,7 +34,7 @@ import {
   HomeScreen, ClubHomeScreen,
   GamesScreen, GameChatScreen, GameDetailScreen, CourtsScreen, ProfileScreen,
   ClubProfilePlayerView, PlayerProfilePublicView, GlobalSearchScreen,
-  ChatsInboxScreen, DirectChatScreen, NotificationsScreen,
+  ChatsInboxScreen, DirectChatScreen, NotificationsScreen, FollowListScreen,
   ReserveClubPickerScreen, ReserveBlocksScreen, ReserveStep3Screen, ReserveSuccessScreen,
   VideoEditorScreen,
   PlayerOwnProfileScreen, MyLibraryScreen, PlayerSettingsScreen,
@@ -42,7 +42,6 @@ import {
   type GameDetailData,
 } from './screens';
 import { TabId } from './components/BottomTabBar';
-import { FollowListSheet } from './components/FollowListSheet';
 import { VideoPreviewModal } from './components/VideoPreviewModal';
 import { UpcomingMatchSheet } from './components/UpcomingMatchSheet';
 import { useLiveGames } from './hooks/useLiveGames';
@@ -183,6 +182,8 @@ type AppStackParamList = {
   Notifications: undefined;
   ClubProfile: { clubId: string };
   PlayerProfile: { playerId: string };
+  /** Seguidores/seguidos de un perfil (propio o ajeno) — ver el comentario en `FollowListScreen`. */
+  FollowList: { title: string; users: FollowItem[] };
   GlobalSearch: { mode?: 'chat' } | undefined;
   ReservePickClub: undefined;
   /** Bloques del día del club. `courtId` = filtro inicial (CTA de una cancha puntual). */
@@ -298,7 +299,6 @@ function PlayerProfileScreen({ navigation, playerId }: { navigation: any; player
   const [overrides, setOverrides] = React.useState<
     Partial<Pick<PlayerPublic, 'isFollowing' | 'followers' | 'notifyOnMatch'>>
   >({});
-  const [sheet, setSheet] = React.useState<'followers' | 'following' | null>(null);
   const [clipModal, setClipModal] = React.useState<{ url: string; title: string; id?: string } | null>(null);
 
   const view: PlayerPublic | null = fetched ? { ...fetched, ...overrides } : null;
@@ -340,26 +340,17 @@ function PlayerProfileScreen({ navigation, playerId }: { navigation: any; player
         onOpenLive={(gameId) => navigation.navigate('GameDetail', { gameId })}
         onOpenClip={(clip) => setClipModal({ url: clip.videoUrl ?? '', title: clip.title, id: clip.id })}
         onOpenMatch={(m) => setClipModal({ url: m.recordingUrl, title: m.title })}
-        onOpenFollowers={() => setSheet('followers')}
-        onOpenFollowing={() => setSheet('following')}
-      />
-      <FollowListSheet
-        visible={sheet !== null}
-        title={sheet === 'followers' ? 'Seguidores' : 'Siguiendo'}
-        users={sheet === 'followers' ? view.followersList : view.followingList}
-        onClose={() => setSheet(null)}
-        onOpenProfile={(id) => {
-          setSheet(null);
-          // ⚠️ `push`, NO `navigate` (2026-09-10): la lista de seguidores es
-          // recursiva (un perfil abre la de OTRO). `navigate` sobre una ruta
-          // ya presente en la pila la reutiliza y solo actualiza sus params
-          // (por eso este screen usa `key={playerId}` para forzar el remount)
-          // — la pila nunca crecía, así que "atrás" desde un perfil visitado
-          // así saltaba directo a lo que había ANTES del primero, no al
-          // anterior de la cadena. Se sentía como "no hay forma de volver" en
-          // iPhone. `push` sí agrega una entrada nueva siempre.
-          navigation.push('PlayerProfile', { playerId: id });
-        }}
+        // `push`, NO `navigate` (2026-09-10): la lista de seguidores es
+        // recursiva (un perfil abre la de OTRO). `navigate` sobre una ruta
+        // ya presente en la pila la reutiliza y solo actualiza sus params
+        // (por eso este screen usa `key={playerId}` para forzar el remount)
+        // — la pila nunca crecía, así que "atrás" desde un perfil visitado
+        // así saltaba directo a lo que había ANTES del primero, no al
+        // anterior de la cadena. `push` sí agrega una entrada nueva siempre.
+        // `FollowList` es una `AppStack.Screen` (no un `<Modal>`), así que
+        // hereda el swipe-back nativo — ver el comentario en `FollowListScreen`.
+        onOpenFollowers={() => navigation.push('FollowList', { title: 'Seguidores', users: view.followersList })}
+        onOpenFollowing={() => navigation.push('FollowList', { title: 'Siguiendo', users: view.followingList })}
       />
       <VideoPreviewModal
         visible={clipModal !== null}
@@ -389,7 +380,6 @@ function ClubProfileScreen({ navigation, clubId }: { navigation: any; clubId: st
   const [overrides, setOverrides] = React.useState<
     Partial<Pick<PlayerPublic, 'isFollowing' | 'followers'>>
   >({});
-  const [sheet, setSheet] = React.useState<'followers' | 'following' | null>(null);
   const [clipModal, setClipModal] = React.useState<{ url: string; title: string; id: string } | null>(null);
   const [courts, setCourts] = React.useState<ClubCourtPublic[]>([]);
   // Partidas del club: en vivo (carrusel) + próximas (lista).
@@ -460,20 +450,10 @@ function ClubProfileScreen({ navigation, clubId }: { navigation: any; clubId: st
         onReserveCourt={(courtId) => navigation.navigate('ReserveBlocks', { clubId: view.id, courtId })}
         onOpenLive={(gameId) => navigation.navigate('GameDetail', { gameId })}
         onOpenClip={(clip) => setClipModal({ url: clip.videoUrl ?? '', title: clip.title, id: clip.id })}
-        onOpenFollowers={() => setSheet('followers')}
-        onOpenFollowing={() => setSheet('following')}
-      />
-      <FollowListSheet
-        visible={sheet !== null}
-        title={sheet === 'followers' ? 'Seguidores' : 'Siguiendo'}
-        users={sheet === 'followers' ? view.followersList : view.followingList}
-        onClose={() => setSheet(null)}
-        onOpenProfile={(id) => {
-          setSheet(null);
-          // `push`, no `navigate` — ver el comentario equivalente en
-          // PlayerProfileScreen (2026-09-10).
-          navigation.push('PlayerProfile', { playerId: id });
-        }}
+        // `push`, no `navigate` — ver el comentario equivalente en
+        // PlayerProfileScreen (2026-09-10).
+        onOpenFollowers={() => navigation.push('FollowList', { title: 'Seguidores', users: view.followersList })}
+        onOpenFollowing={() => navigation.push('FollowList', { title: 'Siguiendo', users: view.followingList })}
       />
       <VideoPreviewModal
         visible={clipModal !== null}
@@ -780,7 +760,16 @@ function AuthNavigator() {
   const { colors } = useTheme();
   return (
     <AuthStack.Navigator
-      screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: colors.bg },
+        // `slide_from_right` explícito (2026-09-11): sin esto, `animation`
+        // queda en 'default', que en Android hace un fade + leve reveal
+        // vertical (no el slide lateral de iOS) — se sentía como que la
+        // pantalla nueva "cargaba de arriba hacia abajo" en vez de deslizar
+        // directo. Forzarlo iguala la transición en las dos plataformas.
+        animation: 'slide_from_right',
+      }}
       initialRouteName="LoginWithRole"
     >
       <AuthStack.Screen name="LoginWithRole">
@@ -909,7 +898,6 @@ function MainPlayer({ navigation, route }: any) {
     navigation.setParams({ initialTab: undefined });
   }, [route?.params?.initialTab, navigation]);
   const [profileView, setProfileView] = React.useState<'profile' | 'library' | 'settings'>('profile');
-  const [ownSheet, setOwnSheet] = React.useState<'followers' | 'following' | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   // Partidas en vivo reales (GET /game/live). Si viene vacío, HomeScreen
@@ -1281,32 +1269,18 @@ function MainPlayer({ navigation, route }: any) {
           );
         }
         return (
-          <>
-            <PlayerOwnProfileScreen
-              owner={owner}
-              matches={matches} highlights={highlights}
-              onOpenLibrary={() => setProfileView('library')}
-              onOpenSettings={() => setProfileView('settings')}
-              onOpenItem={openPreview}
-              onOpenFollowers={() => setOwnSheet('followers')}
-              onOpenFollowing={() => setOwnSheet('following')}
-              activeTab="profile" onChangeTab={handleTab}
-            />
-            <FollowListSheet
-              visible={ownSheet !== null}
-              title={ownSheet === 'followers' ? 'Seguidores' : 'Siguiendo'}
-              users={ownSheet === 'followers' ? (ownProfile?.followersList ?? []) : (ownProfile?.followingList ?? [])}
-              onClose={() => setOwnSheet(null)}
-              onOpenProfile={(id) => {
-                setOwnSheet(null);
-                // `push`, no `navigate` — ver el comentario en
-                // PlayerProfileScreen (2026-09-10): esta pantalla es un tab
-                // raíz, no está en la pila, pero el destino (PlayerProfile) sí
-                // puede quedar reusado si ya se visitó otro antes.
-                navigation.push('PlayerProfile', { playerId: id });
-              }}
-            />
-          </>
+          <PlayerOwnProfileScreen
+            owner={owner}
+            matches={matches} highlights={highlights}
+            onOpenLibrary={() => setProfileView('library')}
+            onOpenSettings={() => setProfileView('settings')}
+            onOpenItem={openPreview}
+            // `FollowList` es una `AppStack.Screen` (native swipe-back), no un
+            // `<Modal>` — ver el comentario en `FollowListScreen`.
+            onOpenFollowers={() => navigation.push('FollowList', { title: 'Seguidores', users: ownProfile?.followersList ?? [] })}
+            onOpenFollowing={() => navigation.push('FollowList', { title: 'Siguiendo', users: ownProfile?.followingList ?? [] })}
+            activeTab="profile" onChangeTab={handleTab}
+          />
         );
       }
       default:
@@ -1676,7 +1650,16 @@ function AppNavigator() {
 
   return (
     <AppStack.Navigator
-      screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: colors.bg },
+        // `slide_from_right` explícito (2026-09-11): sin esto, `animation`
+        // queda en 'default', que en Android hace un fade + leve reveal
+        // vertical (no el slide lateral de iOS) — se sentía como que la
+        // pantalla nueva "cargaba de arriba hacia abajo" en vez de deslizar
+        // directo. Forzarlo iguala la transición en las dos plataformas.
+        animation: 'slide_from_right',
+      }}
       initialRouteName={initialRoute}
     >
       {/* Main tab containers */}
@@ -1746,6 +1729,17 @@ function AppNavigator() {
             key={route.params?.playerId ?? ''}
             navigation={navigation}
             playerId={route.params?.playerId ?? ''}
+          />
+        )}
+      </AppStack.Screen>
+
+      <AppStack.Screen name="FollowList">
+        {({ navigation, route }) => (
+          <FollowListScreen
+            title={route.params?.title ?? ''}
+            users={route.params?.users ?? []}
+            onBack={() => navigation.goBack()}
+            onOpenProfile={(id) => navigation.push('PlayerProfile', { playerId: id })}
           />
         )}
       </AppStack.Screen>

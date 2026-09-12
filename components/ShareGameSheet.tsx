@@ -9,7 +9,7 @@
  * se hace en el momento y a más de uno, y obligar a repetir el flujo por cada
  * persona sería absurdo.
  *
- * Mismo patrón visual que `FollowListSheet`/`ConfirmSheet`: Modal transparente,
+ * Mismo patrón visual que `ConfirmSheet`: Modal transparente,
  * velo azul de marca, hoja de abajo con drag handle.
  *
  * ⚠️ Fuera de la app (WhatsApp y compañía) **todavía no**: haría falta una URL

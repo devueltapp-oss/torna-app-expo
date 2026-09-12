@@ -14,7 +14,7 @@
  *    "Nivel 4 · Intermedio alto — Juegas con constancia" se truncaban justo en
  *    la parte que explica el número, que es lo único que lo hace elegible.
  *
- * Es el mismo patrón que [[ConfirmSheet]]/`FollowListSheet`: `Modal`
+ * Es el mismo patrón que [[ConfirmSheet]]: `Modal`
  * transparente, velo azul de marca y hoja de abajo. El nombre y la descripción
  * van en **dos líneas propias**, así no hay nada que truncar.
  */

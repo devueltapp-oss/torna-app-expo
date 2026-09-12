@@ -22,6 +22,7 @@ export { ProfileScreen, type ClubProfile } from './ProfileScreen';
 // Player views
 export { ClubProfilePlayerView } from './ClubProfilePlayerView';
 export { PlayerProfilePublicView } from './PlayerProfilePublicView';
+export { FollowListScreen, type FollowListScreenProps } from './FollowListScreen';
 export { GlobalSearchScreen, type GlobalSearchScreenProps } from './GlobalSearchScreen';
 export { ChatsInboxScreen, type ChatsInboxScreenProps } from './ChatsInboxScreen';
 export { DirectChatScreen, type DirectChatScreenProps } from './DirectChatScreen';
