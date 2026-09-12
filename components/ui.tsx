@@ -13,6 +13,7 @@ import {
 import Svg, { Path } from 'react-native-svg';
 import { Heart, Bell, ChevronDown } from 'lucide-react-native';
 import { useTheme } from '../theme';
+import { fonts } from '../theme/tokens';
 
 /* ─────────────────────────────  Button  ───────────────────────────── */
 
@@ -444,7 +445,13 @@ export function SectionHeader({ title, action }: { title: string; action?: React
 /* ─────────────────────────  App Header  ───────────────────────────── */
 
 export function AppHeader({ title, left, right, flush, titleAlign = 'center' }: {
-  title: string;
+  /**
+   * Normalmente un string (se pinta centrado/alineado con el estilo de
+   * título de siempre). Puede ser un nodo propio (2026-09-11: `DirectChatScreen`
+   * pone ahí el avatar + nombre del otro usuario, tocable) — en ese caso el
+   * nodo se dibuja tal cual, sin el estilo de texto por default.
+   */
+  title: React.ReactNode;
   left?: React.ReactNode;
   right?: React.ReactNode;
   /**
@@ -475,9 +482,15 @@ export function AppHeader({ title, left, right, flush, titleAlign = 'center' }: 
       {(left || titleAlign === 'center') && (
         <View style={{ width: 36, alignItems: 'flex-start' }}>{left}</View>
       )}
-      <Text style={{ flex: 1, textAlign: titleAlign, fontWeight: '800', fontSize: 17, letterSpacing: -0.2, color: colors.text }}>
-        {title}
-      </Text>
+      {typeof title === 'string' ? (
+        <Text style={{ flex: 1, textAlign: titleAlign, fontFamily: fonts.bold, fontSize: 17, letterSpacing: -0.2, color: colors.text }}>
+          {title}
+        </Text>
+      ) : (
+        <View style={{ flex: 1, alignItems: titleAlign === 'left' ? 'flex-start' : 'center' }}>
+          {title}
+        </View>
+      )}
       <View style={{ width: 36, alignItems: 'flex-end' }}>{right}</View>
     </View>
   );

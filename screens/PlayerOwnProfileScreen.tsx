@@ -33,6 +33,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Lock, Settings } from 'lucide-react-native';
 import { useTheme } from '../theme';
+import { fonts } from '../theme/tokens';
 import { Avatar, TabStrip } from '../components/ui';
 import { ImageViewerModal } from '../components/ImageViewerModal';
 import { ContentThumb } from '../components/ContentThumb';
@@ -126,7 +127,7 @@ export function PlayerOwnProfileScreen({
               (el mismo default que usa el manual de pádel para "sin declarar"). */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 52 }}>
             <Text
-              style={{ flex: 1, fontWeight: '800', fontSize: 17, letterSpacing: -0.2, color: colors.text }}
+              style={{ flex: 1, fontFamily: fonts.bold, fontSize: 17, letterSpacing: -0.2, color: colors.text }}
               numberOfLines={1}
             >
               {owner.username} · CAT. {owner.category ?? 7}

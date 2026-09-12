@@ -12,6 +12,7 @@
  * la lógica de destrabe de `useLiveStreamRecovery`.
  */
 import React from 'react';
+import { InteractionManager } from 'react-native';
 import { useEventListener } from 'expo';
 import { useVideoPlayer, VideoView, type VideoContentFit } from 'expo-video';
 
@@ -41,8 +42,21 @@ export function InlineVideo({
   const player = useVideoPlayer(uri, (p) => {
     p.muted = muted;
     p.loop = loop;
-    p.play();
   });
+
+  /**
+   * `play()` arranca el decode/conexión HLS — nada gratis. Llamado en el
+   * initializer de `useVideoPlayer` corre SINCRÓNICO durante el montaje, así
+   * que en Inicio (donde cada card "En vivo" monta su propio reproductor) el
+   * tab-switch queda bloqueado un instante montando N streams a la vez —
+   * eso es lo que se veía como un destello de la pantalla anterior al volver
+   * rápido a Inicio (2026-09-12). Diferir a `runAfterInteractions` deja que
+   * el cambio de tab pinte primero; el video arranca un instante después.
+   */
+  React.useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => player.play());
+    return () => task.cancel();
+  }, [player]);
 
   useEventListener(player, 'statusChange', ({ status, error }) => {
     if (status === 'error' || error) onError?.();

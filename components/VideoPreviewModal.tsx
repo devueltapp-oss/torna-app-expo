@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   Modal, View, Text, Pressable, Platform, ActivityIndicator,
-  FlatList, TextInput, KeyboardAvoidingView, Keyboard, Animated,
+  FlatList, TextInput, Keyboard, Animated,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -196,12 +196,31 @@ export function VideoPreviewModal({
   const [showCommentsPanel, setShowCommentsPanel] = React.useState(false);
   // Teclado abierto: se usa para apartar los controles de abajo mientras se escribe.
   const [kbVisible, setKbVisible] = React.useState(false);
+  // Alto real del teclado — ver el useEffect de abajo para por qué se mide a mano
+  // en vez de usar `KeyboardAvoidingView`.
+  const [kbHeight, setKbHeight] = React.useState(0);
 
   const threads = React.useMemo(() => buildThreads(comments), [comments]);
 
+  // ⚠️ Este panel vive dentro de un `<Modal>` de RN — y `KeyboardAvoidingView` mide su
+  // propio frame en la ventana equivocada ahí adentro (en iOS un `Modal` se presenta en
+  // un `UIWindow` separado del root, así que `measureInWindow` da coordenadas que no
+  // coinciden con las del teclado). El síntoma es exactamente "el teclado sube pero tapa
+  // el input": el padding que calcula solo, mal, no compensa lo que hace falta. Por eso
+  // acá el alto se toma directo del evento nativo (que sí es correcto) y se aplica como
+  // `paddingBottom` a mano — ver `renderCommentSection`. `keyboardWillShow/Hide` (solo
+  // iOS) para que el corrimiento arranque junto con la animación del teclado, no después.
   React.useEffect(() => {
-    const show = Keyboard.addListener('keyboardDidShow', () => setKbVisible(true));
-    const hide = Keyboard.addListener('keyboardDidHide', () => setKbVisible(false));
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvt, (e) => {
+      setKbVisible(true);
+      setKbHeight(e?.endCoordinates?.height ?? 0);
+    });
+    const hide = Keyboard.addListener(hideEvt, () => {
+      setKbVisible(false);
+      setKbHeight(0);
+    });
     return () => { show.remove(); hide.remove(); };
   }, []);
 
@@ -387,11 +406,11 @@ export function VideoPreviewModal({
   /** Barra de like + contador, lista de comentarios (threaded) y composer. Reutilizable
    *  tanto en la vista normal (bajo el video) como en el panel de pantalla completa. */
   const renderCommentSection = () => (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
-    >
+    // `paddingBottom: kbHeight` en vez de `KeyboardAvoidingView` — ver el comentario del
+    // listener de teclado más arriba. El panel ya está anclado a `bottom: 0` de la
+    // pantalla, así que empujar su contenido con este padding sube el composer justo
+    // por encima del teclado, sin depender de una medición de frame que acá adentro da mal.
+    <View style={{ flex: 1, paddingBottom: kbHeight }}>
       {/* Like + contador de comentarios */}
       <View style={{
         flexDirection: 'row', alignItems: 'center', gap: 16,
@@ -519,7 +538,7 @@ export function VideoPreviewModal({
           </Pressable>
         </View>
       </>
-    </KeyboardAvoidingView>
+    </View>
   );
 
   return (

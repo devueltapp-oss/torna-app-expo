@@ -60,24 +60,28 @@ export function GamesScreen({
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
         {/* Header: título + acción Reservar (crear un juego).
             ⚠️ `colors.bg`, no `colors.surface` — ver el comentario equivalente
-            en HomeScreen.tsx (2026-09-09). */}
+            en HomeScreen.tsx (2026-09-09).
+            `minHeight: 52` + `paddingVertical: 12` (2026-09-11): igual altura
+            que el resto de los headers de la app (`AppHeader`, p. ej. Chats)
+            — antes el título más grande y el botón más alto hacían que esta
+            fila quedara visiblemente más alta que las demás. */}
         <View style={{
-          backgroundColor: colors.bg, paddingHorizontal: 20, paddingVertical: 14,
+          backgroundColor: colors.bg, paddingHorizontal: 20, paddingVertical: 12, minHeight: 52,
           flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
         }}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={{ color: colors.text, fontSize: 24, fontWeight: '800', letterSpacing: -0.5 }}>Juegos</Text>
+            <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: 17, letterSpacing: -0.2 }}>Juegos</Text>
           </View>
           <Pressable
             onPress={onReserve}
             accessibilityLabel="Reservar cancha"
             style={({ pressed }) => ({
               flexDirection: 'row', alignItems: 'center', gap: 6,
-              backgroundColor: colors.accent, paddingHorizontal: 12, paddingVertical: 9,
+              backgroundColor: colors.accent, paddingHorizontal: 12, paddingVertical: 7,
               borderRadius: 10, opacity: pressed ? 0.85 : 1,
             })}
           >
-            <CalendarPlus size={16} color={colors.ink} />
+            <CalendarPlus size={15} color={colors.ink} />
             <Text style={{ color: colors.ink, fontWeight: '800', fontSize: 13 }}>Reservar</Text>
           </Pressable>
         </View>
@@ -146,7 +150,7 @@ export function GamesScreen({
       {/* ⚠️ `colors.bg`, no `colors.surface` — ver el comentario equivalente en
           HomeScreen.tsx (2026-09-09). */}
       <View style={{ backgroundColor: colors.bg, paddingHorizontal: 20, paddingVertical: 14 }}>
-        <Text style={{ color: colors.text, fontSize: 24, fontWeight: '800', letterSpacing: -0.5 }}>Juegos</Text>
+        <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: 17, letterSpacing: -0.2 }}>Juegos</Text>
         <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', backgroundColor: colors.bg2, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, marginTop: 14 }}>
           <Search size={18} color={colors.muted2} />
           <TextInput placeholder="Buscar por ID, cancha o jugador…" placeholderTextColor={colors.muted}

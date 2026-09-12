@@ -16,7 +16,11 @@ export interface DirectChatScreenProps {
   /** Firebase UID del otro usuario. */
   userId: string;
   title?: string;
+  /** Foto del otro usuario, para el avatar del header (2026-09-11). */
+  profilePicture?: string;
   onBack?: () => void;
+  /** Toca el avatar/nombre del header → abre su perfil. Sin handler, no es tocable. */
+  onOpenProfile?: () => void;
   /** Abre un partido compartido en el chat. Sin handler, la tarjeta no navega. */
   onOpenGame?: (gameId: string) => void;
 }
@@ -33,7 +37,7 @@ function timeLabel(iso: string): string {
  * `useDirectChat` y sin modo solo-lectura (los DMs siempre se pueden escribir).
  * La lista va **`inverted`** por el mismo motivo — ver la nota en `GameChatScreen`.
  */
-export function DirectChatScreen({ userId, title, onBack, onOpenGame }: DirectChatScreenProps) {
+export function DirectChatScreen({ userId, title, profilePicture, onBack, onOpenProfile, onOpenGame }: DirectChatScreenProps) {
   const { colors } = useTheme();
   const { user } = useAuth();
   const sender = React.useMemo(
@@ -66,7 +70,20 @@ export function DirectChatScreen({ userId, title, onBack, onOpenGame }: DirectCh
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <AppHeader
-        title={title || 'Chat'}
+        title={
+          // Avatar + nombre del otro usuario, tocable → su perfil (2026-09-11).
+          // Sin `onOpenProfile` queda como texto plano (mismo look, sin tap).
+          <Pressable
+            onPress={onOpenProfile}
+            disabled={!onOpenProfile}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+          >
+            <Avatar name={title || '?'} size={28} imageUri={profilePicture} />
+            <Text style={{ fontWeight: '800', fontSize: 15, letterSpacing: -0.2, color: colors.text }} numberOfLines={1}>
+              {title || 'Chat'}
+            </Text>
+          </Pressable>
+        }
         left={<Pressable onPress={onBack}><ChevronLeft size={22} color={colors.text} /></Pressable>}
       />
 

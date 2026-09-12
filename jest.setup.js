@@ -34,6 +34,22 @@ jest.mock('expo-video', () => {
   };
 });
 
+// InteractionManager: `InlineVideo` difiere `player.play()` a
+// `runAfterInteractions` para no bloquear el commit del cambio de tab (ver su
+// comentario). Bajo `jest.useFakeTimers()` (p. ej. FeedPost.test.tsx) esa tarea
+// nunca se resuelve sola y cuelga el cleanup de RTL — en tests no hay una
+// "interacción" real que esperar, así que corre el callback al toque.
+jest.mock('react-native/Libraries/Interaction/InteractionManager', () => ({
+  __esModule: true,
+  default: {
+    runAfterInteractions: (cb) => { cb?.(); return { then: (f) => f?.(), done: (f) => f?.(), cancel: () => {} }; },
+    createInteractionHandle: jest.fn(),
+    clearInteractionHandle: jest.fn(),
+    addListener: jest.fn(() => ({ remove: () => {} })),
+    setDeadline: jest.fn(),
+  },
+}));
+
 // `useEventListener` de `expo`: en tests no adjuntamos listeners nativos.
 jest.mock('expo', () => ({
   ...jest.requireActual('expo'),

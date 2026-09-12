@@ -88,19 +88,18 @@ export function PlayerProfilePublicView({
               el nombre acá y username/club/nivel bajo el avatar — se invirtió
               (mismo cambio que `PlayerOwnProfileScreen.tsx`). `minHeight: 52`
               iguala la altura al resto de los headers de la app (`AppHeader`).
-              El hueco de la derecha (mismo ancho que el botón de volver) es
-              solo para centrar el título — no hace nada. */}
+              Alineado a la izquierda, no centrado (ajuste 2026-09-11, sin
+              spacer derecho — ya no hace falta para balancear un centrado). */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 52 }}>
             <Pressable onPress={onBack} style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: colors.bg2, alignItems: 'center', justifyContent: 'center' }}>
               <ChevronLeft size={18} color={colors.text}/>
             </Pressable>
             <Text
-              style={{ flex: 1, textAlign: 'center', fontWeight: '800', fontSize: 17, letterSpacing: -0.2, color: colors.text }}
+              style={{ flex: 1, fontWeight: '800', fontSize: 17, letterSpacing: -0.2, color: colors.text }}
               numberOfLines={1}
             >
               {[player.username, player.club, `CAT. ${player.category ?? 7}`].filter(Boolean).join(' · ')}
             </Text>
-            <View style={{ width: 34 }}/>
           </View>
 
           {/* Avatar + stats en la MISMA fila (2026-09-10, estilo Instagram) —

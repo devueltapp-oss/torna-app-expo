@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, Image, ScrollView, Animated, Pressable, RefreshControl } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import { Search } from 'lucide-react-native';
 import { useTheme } from '../theme';
@@ -48,6 +48,12 @@ interface Props {
   /** No leídos de la campanita (GET /notification/unread-count). */
   unreadNotifications?: number;
   onOpenNotifications?: () => void;
+  /**
+   * Cambia (cualquier valor nuevo) cuando tocás el tab Inicio estando YA en
+   * Inicio (2026-09-11) — mismo patrón que Instagram/Twitter: sube al tope
+   * del feed. `MainPlayer` sube un contador; acá solo importa que cambió.
+   */
+  scrollToTopSignal?: number;
 }
 
 /**
@@ -83,10 +89,30 @@ export function HomeScreen({
   onRefresh,
   unreadNotifications = 0,
   onOpenNotifications,
+  scrollToTopSignal,
 }: Props) {
   const { colors, isDark } = useTheme();
   const isFocused = useIsFocused();
   const [highlightModal, setHighlightModal] = React.useState<{ url: string; title: string; id: string } | null>(null);
+  // `any`: el ref de `Animated.ScrollView` no tipa `.scrollTo` directamente.
+  const scrollRef = React.useRef<any>(null);
+
+  // Tocar el tab Inicio estando ya en Inicio sube al tope del feed — ver el
+  // comentario de `scrollToTopSignal` en `Props`. `useEffect` con este valor
+  // como única dependencia: dispara solo cuando el padre lo cambia a
+  // propósito, no en cada render.
+  React.useEffect(() => {
+    if (scrollToTopSignal === undefined) return;
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollToTopSignal]);
+
+  // ⚠️ El header es `position: 'absolute'` (ver más abajo) — eso lo saca del
+  // padding que `SafeAreaView` les da a sus hijos en flujo normal, así que
+  // hay que sumarle `insets.top` a mano o el header queda pegado al borde
+  // físico de la pantalla, encima de la hora/batería del sistema (bug real
+  // 2026-09-11: "lo elevaste demasiado, está sobre la hora del dispositivo").
+  const insets = useSafeAreaInsets();
 
   // Header (logo + búsqueda + campanita) fijo → se ocultaba tapando contenido
   // sin aportar nada mientras se lee el feed (2026-09-11). Se sube fuera de
@@ -95,7 +121,11 @@ export function HomeScreen({
   const scrollY = React.useRef(new Animated.Value(0)).current;
   const headerTranslateY = scrollY.interpolate({
     inputRange: [0, HEADER_HEIGHT],
-    outputRange: [0, -HEADER_HEIGHT],
+    // -(HEADER_HEIGHT + insets.top), no solo -HEADER_HEIGHT: el header ya
+    // arranca corrido hacia abajo por `insets.top` (ver `top: insets.top` más
+    // abajo), así que ocultarlo del todo tiene que subir esa misma distancia
+    // de más — si no, un resto de esa altura se queda visible pegado arriba.
+    outputRange: [0, -(HEADER_HEIGHT + insets.top)],
     extrapolate: 'clamp',
   });
   const headerOpacity = scrollY.interpolate({
@@ -116,7 +146,7 @@ export function HomeScreen({
           de la pantalla — la barra de búsqueda/notificaciones quedaba con un
           tono de "caja" en vez de fundirse con el fondo general (#08203E). */}
       <Animated.View style={{
-        position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
+        position: 'absolute', top: insets.top, left: 0, right: 0, zIndex: 10,
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
         backgroundColor: colors.bg, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 14,
         transform: [{ translateY: headerTranslateY }], opacity: headerOpacity,
@@ -143,6 +173,7 @@ export function HomeScreen({
       </Animated.View>
 
       <Animated.ScrollView
+        ref={scrollRef}
         contentContainerStyle={{ paddingTop: HEADER_HEIGHT + 4, paddingBottom: 20, gap: 14 }}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],

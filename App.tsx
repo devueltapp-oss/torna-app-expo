@@ -279,6 +279,32 @@ function ProfileErrorScreen({ error, onBack, onRetry }: {
 
 /* ─────────── Auth stack navigator ─────────── */
 
+/* ─────────── Chat directo 1-a-1 ─────────── */
+
+/**
+ * Trae la foto de perfil del otro usuario (`useUserProfile`, mismo hook que
+ * `PlayerProfileScreen`) para el avatar tocable del header de `DirectChatScreen`
+ * (2026-09-11) — sin esto, entrar por un camino que no traía `profilePicture`
+ * en los params (búsqueda global, inbox) dejaba el header sin foto.
+ * Componente propio (no hooks sueltos en el render-prop children del
+ * `AppStack.Screen`) — mismo motivo que `PlayerProfileScreen`.
+ */
+function DirectChatContainer({ navigation, userId, title }: { navigation: any; userId: string; title?: string }) {
+  const { player } = useUserProfile(userId);
+  return (
+    // key={userId}: montaje fresco por conversación (evita arrastrar mensajes).
+    <DirectChatScreen
+      key={userId}
+      userId={userId}
+      title={title ?? player?.name ?? player?.username}
+      profilePicture={player?.profilePicture}
+      onBack={() => navigation.goBack()}
+      onOpenProfile={() => navigation.push('PlayerProfile', { playerId: userId })}
+      onOpenGame={(gameId) => navigation.navigate('GameDetail', { gameId })}
+    />
+  );
+}
+
 /* ─────────── Perfil público de otro player ─────────── */
 
 /**
@@ -870,6 +896,11 @@ function AuthNavigator() {
 
 function MainPlayer({ navigation, route }: any) {
   const [tab, setTab] = React.useState<TabId>(route?.params?.initialTab ?? 'home');
+  // Tocar Inicio estando YA en Inicio sube al tope del feed y refresca
+  // (2026-09-11, mismo patrón que Instagram/Twitter) — ver `handleTab` y el
+  // `scrollToTopSignal` de `HomeScreen`. Cualquier cambio de valor dispara el
+  // scroll; el número en sí no importa.
+  const [homeScrollSignal, setHomeScrollSignal] = React.useState(0);
 
   /**
    * Salir de la app pide DOS toques del atrás del sistema, y solo desde Inicio.
@@ -1157,6 +1188,15 @@ function MainPlayer({ navigation, route }: any) {
   const { logout } = useAuth();
 
   const handleTab = (id: TabId) => {
+    // Ya estás en Inicio y volviste a tocarlo: sube al tope + refresca, no hay
+    // tab al que "cambiar". Sin este early return, `setTab('home')` sobre un
+    // tab que ya es 'home' no dispara nada (mismo valor) y el toque no hacía
+    // absolutamente nada.
+    if (id === 'home' && tab === 'home') {
+      setHomeScrollSignal((s) => s + 1);
+      handleRefresh();
+      return;
+    }
     setTab(id);
     if (id === 'profile') {
       setProfileView('profile');
@@ -1183,6 +1223,7 @@ function MainPlayer({ navigation, route }: any) {
             onRefresh={handleRefresh}
             unreadNotifications={unreadNotifications}
             onOpenNotifications={() => navigation.navigate('Notifications')}
+            scrollToTopSignal={homeScrollSignal}
           />
         );
       case 'games':
@@ -1692,13 +1733,10 @@ function AppNavigator() {
 
       <AppStack.Screen name="DirectChat">
         {({ navigation, route }) => (
-          // key={userId}: montaje fresco por conversación (evita arrastrar mensajes).
-          <DirectChatScreen
-            key={route.params?.userId ?? ''}
+          <DirectChatContainer
+            navigation={navigation}
             userId={route.params?.userId ?? ''}
             title={route.params?.title}
-            onBack={() => navigation.goBack()}
-            onOpenGame={(gameId) => navigation.navigate('GameDetail', { gameId })}
           />
         )}
       </AppStack.Screen>
