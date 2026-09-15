@@ -18,6 +18,8 @@ interface Props {
   onOpenGame?: (id: string) => void;
   onChangeTab?: (id: TabId) => void;
   activeTab?: TabId;
+  /** `MainPlayer` renderiza una sola tab bar externa y fija: no dupliques la suya. */
+  hideBottomTabBar?: boolean;
   emptyImage?: any;
   role?: 'player' | 'club';
   /** (Player) Mis partidas activas — abre el sheet de gestión al tocar. */
@@ -47,7 +49,7 @@ const FILTER_LABEL: Record<Filter, string> = {
 };
 
 export function GamesScreen({
-  games, onOpenGame, onChangeTab, activeTab = 'games', emptyImage, role = 'club',
+  games, onOpenGame, onChangeTab, activeTab = 'games', hideBottomTabBar, emptyImage, role = 'club',
   myGames = [], openGames = [], onOpenMyGame, onReserve, nearbyPrompt,
 }: Props) {
   const { colors } = useTheme();
@@ -131,7 +133,7 @@ export function GamesScreen({
           )}
         </ScrollView>
 
-        {onChangeTab && <BottomTabBar role="player" active={activeTab} onChange={onChangeTab}/>}
+        {onChangeTab && !hideBottomTabBar && <BottomTabBar role="player" active={activeTab} onChange={onChangeTab}/>}
       </SafeAreaView>
     );
   }

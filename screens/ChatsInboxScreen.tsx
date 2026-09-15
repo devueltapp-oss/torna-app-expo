@@ -25,6 +25,8 @@ export interface ChatsInboxScreenProps {
   onDeleteChat?: (item: InboxItem) => void;
   activeTab?: TabId;
   onChangeTab?: (id: TabId) => void;
+  /** `MainPlayer` renderiza una sola tab bar externa y fija: no dupliques la suya. */
+  hideBottomTabBar?: boolean;
   role?: Role;
 }
 
@@ -51,7 +53,7 @@ type InboxFilter = 'game' | 'dm';
  */
 export function ChatsInboxScreen({
   items, loading, onOpenDm, onOpenGame, onNewChat, onRefresh, refreshing,
-  onDeleteChat, activeTab = 'chats', onChangeTab, role = 'player',
+  onDeleteChat, activeTab = 'chats', onChangeTab, hideBottomTabBar, role = 'player',
 }: ChatsInboxScreenProps) {
   const { colors, isDark } = useTheme();
   const [filter, setFilter] = React.useState<InboxFilter>('game');
@@ -84,7 +86,10 @@ export function ChatsInboxScreen({
         }
       />
 
-      <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingTop: 12 }}>
+      {/* `paddingBottom: 14` (2026-09-12, antes solo `paddingTop`): sin aire propio,
+          la separación con la lista dependía nada más del padding del `FlatList`
+          y el selector quedaba pegado a la primera fila. */}
+      <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingTop: 12, paddingBottom: 14 }}>
         <FilterTab
           label="Partidas" icon={Users} on={filter === 'game'} badge={unread.game}
           onPress={() => setFilter('game')}
@@ -150,7 +155,7 @@ export function ChatsInboxScreen({
         }}
       />
 
-      {onChangeTab && <BottomTabBar role={role} active={activeTab} onChange={onChangeTab} />}
+      {onChangeTab && !hideBottomTabBar && <BottomTabBar role={role} active={activeTab} onChange={onChangeTab} />}
     </SafeAreaView>
   );
 }

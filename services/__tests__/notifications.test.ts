@@ -72,6 +72,13 @@ describe('resolvePushTarget', () => {
     });
   });
 
+  it('manda a la pestaña Perfil (Mi Biblioteca) cuando te comparten un video', () => {
+    expect(resolvePushTarget({ type: 'GAME_VIDEO_SHARED', gameId: 'g1' })).toEqual({
+      name: 'MainPlayer',
+      params: { initialTab: 'profile' },
+    });
+  });
+
   it('no navega si falta el dato que la pantalla necesita', () => {
     expect(resolvePushTarget({ type: 'STREAMING_STARTED' })).toBeNull();
     expect(resolvePushTarget({ type: 'NEW_CHAT_MESSAGE' })).toBeNull();

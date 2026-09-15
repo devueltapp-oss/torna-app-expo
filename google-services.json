@@ -14,8 +14,12 @@
       },
       "oauth_client": [
         {
-          "client_id": "83738503515-bit0pprnegn1eg2r3eodqshfgk64eh4d.apps.googleusercontent.com",
-          "client_type": 3
+          "client_id": "83738503515-109uqnn39lpt6jhmip3gkb9idfobgkuk.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tornapp",
+            "certificate_hash": "b03c7027f75684eefc973498387bf5fc07dc92d2"
+          }
         }
       ],
       "api_key": [
@@ -26,46 +30,6 @@
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
-            {
-              "client_id": "83738503515-bit0pprnegn1eg2r3eodqshfgk64eh4d.apps.googleusercontent.com",
-              "client_type": 3
-            },
-            {
-              "client_id": "83738503515-5pdsdh9gumdctbpci6upucgpa41brbkc.apps.googleusercontent.com",
-              "client_type": 2,
-              "ios_info": {
-                "bundle_id": "io.torna"
-              }
-            }
-          ]
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:83738503515:android:62ca5790b2959c63d2127e",
-        "android_client_info": {
-          "package_name": "io.torna"
-        }
-      },
-      "oauth_client": [
-        {
-          "client_id": "83738503515-bit0pprnegn1eg2r3eodqshfgk64eh4d.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
-        {
-          "current_key": "AIzaSyDYOAnkuPFARLwuXLY9Ds9ksVSxRWaOXwY"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "83738503515-bit0pprnegn1eg2r3eodqshfgk64eh4d.apps.googleusercontent.com",
-              "client_type": 3
-            },
             {
               "client_id": "83738503515-5pdsdh9gumdctbpci6upucgpa41brbkc.apps.googleusercontent.com",
               "client_type": 2,

@@ -41,7 +41,8 @@ import {
   type LoginRole,
   type GameDetailData,
 } from './screens';
-import { TabId } from './components/BottomTabBar';
+import { TabId, BottomTabBar } from './components/BottomTabBar';
+import { AnimatedTabPane } from './components/AnimatedTabPane';
 import { VideoPreviewModal } from './components/VideoPreviewModal';
 import { UpcomingMatchSheet } from './components/UpcomingMatchSheet';
 import { useLiveGames } from './hooks/useLiveGames';
@@ -51,6 +52,7 @@ import { useMyGames } from './hooks/useMyGames';
 import { useClubGames } from './hooks/useClubGames';
 import { useFeed } from './hooks/useFeed';
 import { usePlayerMatches } from './hooks/usePlayerMatches';
+import { useIncomingVideoShares } from './hooks/useIncomingVideoShares';
 import * as gamesApi from './api/games';
 import { useGameDetail } from './hooks/useGameDetail';
 import { usePlayers } from './hooks/usePlayers';
@@ -894,6 +896,10 @@ function AuthNavigator() {
 
 /* ─────────── Main tabs · PLAYER ─────────── */
 
+// Orden real de la tab bar del player (ver `BottomTabBar`) — define la
+// dirección de la transición entre panes (`AnimatedTabPane`).
+const TAB_ORDER: TabId[] = ['home', 'games', 'chats', 'profile'];
+
 function MainPlayer({ navigation, route }: any) {
   const [tab, setTab] = React.useState<TabId>(route?.params?.initialTab ?? 'home');
   // Tocar Inicio estando YA en Inicio sube al tope del feed y refresca
@@ -901,6 +907,19 @@ function MainPlayer({ navigation, route }: any) {
   // `scrollToTopSignal` de `HomeScreen`. Cualquier cambio de valor dispara el
   // scroll; el número en sí no importa.
   const [homeScrollSignal, setHomeScrollSignal] = React.useState(0);
+
+  // Orden visual de la tab bar — determina de qué lado entra/sale cada pane
+  // en la transición (ver `AnimatedTabPane`). Un ref, no state: se lee en el
+  // mismo render que `setTab`, no hace falta que dispare uno propio.
+  const tabDirectionRef = React.useRef<1 | -1>(1);
+  const setTabWithDirection = React.useCallback((id: TabId) => {
+    setTab((prev) => {
+      const prevIndex = TAB_ORDER.indexOf(prev);
+      const nextIndex = TAB_ORDER.indexOf(id);
+      tabDirectionRef.current = nextIndex >= prevIndex ? 1 : -1;
+      return id;
+    });
+  }, []);
 
   /**
    * Salir de la app pide DOS toques del atrás del sistema, y solo desde Inicio.
@@ -915,7 +934,7 @@ function MainPlayer({ navigation, route }: any) {
    * El guard de foco vive dentro del hook — ver la nota ahí: sin él, esta
    * pantalla se comía el atrás de las que se apilan encima (chats, visor).
    */
-  const goHomeTab = React.useCallback(() => setTab('home'), []);
+  const goHomeTab = React.useCallback(() => setTabWithDirection('home'), [setTabWithDirection]);
   useBackToHomeTab(tab !== 'home', goHomeTab);
 
   // Un push de partida (cancelada / baja / pareja que se bajó) navega acá con
@@ -925,10 +944,19 @@ function MainPlayer({ navigation, route }: any) {
   React.useEffect(() => {
     const requested: TabId | undefined = route?.params?.initialTab;
     if (!requested) return;
-    setTab(requested);
+    setTabWithDirection(requested);
     navigation.setParams({ initialTab: undefined });
-  }, [route?.params?.initialTab, navigation]);
+  }, [route?.params?.initialTab, navigation, setTabWithDirection]);
   const [profileView, setProfileView] = React.useState<'profile' | 'library' | 'settings'>('profile');
+  // Misma lógica de dirección que `tabDirectionRef`, pero para las 3
+  // sub-vistas del pane de Perfil (2026-09-12): `profile` es la raíz (nivel 0)
+  // y `library`/`settings` son detalle (nivel 1) — entrar es "adelante" (1),
+  // volver es "atrás" (-1). No hay camino directo library↔settings.
+  const profileDirectionRef = React.useRef<1 | -1>(1);
+  const setProfileViewWithDirection = React.useCallback((next: 'profile' | 'library' | 'settings') => {
+    profileDirectionRef.current = next === 'profile' ? -1 : 1;
+    setProfileView(next);
+  }, []);
   const [refreshing, setRefreshing] = useState(false);
 
   // Partidas en vivo reales (GET /game/live). Si viene vacío, HomeScreen
@@ -993,6 +1021,28 @@ function MainPlayer({ navigation, route }: any) {
   }, [inviteGame, myGames]);
   const { matches: apiMatches, refresh: refreshMatches } = usePlayerMatches(user?.id);
 
+  /** Compartir el video de un partido propio con otro usuario. */
+  const [shareVideoMatch, setShareVideoMatch] = React.useState<LibraryMatch | null>(null);
+  const shareVideoTo = React.useCallback(async (userIds: string[]) => {
+    if (!shareVideoMatch) return false;
+    try {
+      // En serie, mismo motivo que inviteToGame: son pocos y así un fallo no
+      // deja la mitad mandada sin saber cuál.
+      for (const uid of userIds) await gamesApi.shareGameVideo(shareVideoMatch.id, uid);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [shareVideoMatch]);
+
+  // Videos que me compartieron y todavía no acepté/rechacé (Mi Biblioteca).
+  const {
+    shares: pendingVideoShares,
+    accept: acceptVideoShare,
+    reject: rejectVideoShare,
+    refresh: refreshVideoShares,
+  } = useIncomingVideoShares();
+
   // Mis highlights reales (GET /highlights/my): públicos + privados. Los públicos
   // se muestran en el perfil; los privados solo en la librería. Declarado acá (y no
   // más abajo, donde vivía antes) porque el `useEffect` de refresco por foco de más
@@ -1051,6 +1101,7 @@ function MainPlayer({ navigation, route }: any) {
       // hasta un pull-to-refresh manual o reiniciar la app.
       refreshMatches();
       refreshHighlights();
+      refreshVideoShares();
       // ⚠️ Mismo bug, no cubierto hasta el 2026-09-09: "Highlights · de tus
       // seguidos" (useFeed → GET /highlights/feed) también carga una sola vez al
       // montar. Si alguien que seguís publica un highlight público mientras
@@ -1067,6 +1118,7 @@ function MainPlayer({ navigation, route }: any) {
     refreshUpcomingFeed,
     refreshMatches,
     refreshHighlights,
+    refreshVideoShares,
     refreshFeed,
   ]);
 
@@ -1197,26 +1249,112 @@ function MainPlayer({ navigation, route }: any) {
       handleRefresh();
       return;
     }
-    setTab(id);
+    setTabWithDirection(id);
     if (id === 'profile') {
-      setProfileView('profile');
+      setProfileViewWithDirection('profile');
       // Conteos frescos al abrir el perfil desde otro tab (complementa el refresco
       // por foco, que cubre el regreso desde rutas pushadas como PlayerProfile).
       refreshOwnProfile();
     }
   };
 
-  function renderTabContent() {
-    switch (tab) {
-      case 'home':
-        return (
+  // Perfil tiene 3 sub-vistas (profile/library/settings). 2026-09-12: reciben
+  // la misma lógica de `AnimatedTabPane` que Inicio/Juegos/Chats/Perfil —
+  // quedan las 3 montadas y se anima solo cuál se ve — para que entrar a
+  // Biblioteca/Configuración y volver se sienta igual de fluido, y para que
+  // conserven su scroll/estado al ir y volver.
+  function renderProfilePane() {
+    return (
+      <>
+        <AnimatedTabPane active={profileView === 'profile'} direction={profileDirectionRef.current}>
+          <PlayerOwnProfileScreen
+            owner={owner}
+            matches={matches} highlights={highlights}
+            onOpenLibrary={() => setProfileViewWithDirection('library')}
+            onOpenSettings={() => setProfileViewWithDirection('settings')}
+            onOpenItem={openPreview}
+            // `FollowList` es una `AppStack.Screen` (native swipe-back), no un
+            // `<Modal>` — ver el comentario en `FollowListScreen`.
+            onOpenFollowers={() => navigation.push('FollowList', { title: 'Seguidores', users: ownProfile?.followersList ?? [] })}
+            onOpenFollowing={() => navigation.push('FollowList', { title: 'Siguiendo', users: ownProfile?.followingList ?? [] })}
+            activeTab="profile" onChangeTab={handleTab} hideBottomTabBar
+          />
+        </AnimatedTabPane>
+
+        <AnimatedTabPane active={profileView === 'library'} direction={profileDirectionRef.current}>
+          <MyLibraryScreen
+            matches={matches} highlights={highlights}
+            onBack={() => setProfileViewWithDirection('profile')}
+            onCreateHighlight={(m) => navigation.navigate('VideoEditor', {
+              gameId: m.id,
+              recordingUrl: m.recordingUrl,
+              durationSeconds: m.durationSeconds,
+              onHighlightCreated: (result: { streamUrl: string; durationSeconds: number; title: string; visibility: 'public' | 'private' }) => {
+                // Prepend optimista para feedback inmediato…
+                setHighlights(prev => [{
+                  id: 'H-' + Math.random().toString(36).slice(2, 6).toUpperCase(),
+                  kind: 'highlight' as const,
+                  title: result.title || 'Highlight',
+                  durationSeconds: result.durationSeconds,
+                  durationLabel: formatDurationLabel(result.durationSeconds),
+                  date: 'Recién',
+                  isPublic: result.visibility === 'public',
+                  streamUrl: result.streamUrl || undefined,
+                }, ...prev]);
+                // …y luego sincronizar con el backend (id/orden reales).
+                refreshHighlights();
+              },
+            })}
+            onRegisterResult={handleRegisterResult}
+            onToggleVisibility={toggleVisibility}
+            onEditDescription={handleEditDescription}
+            onOpenItem={openPreview}
+            onShareVideo={(m) => setShareVideoMatch(m)}
+            pendingShares={pendingVideoShares}
+            onAcceptShare={(id) => { acceptVideoShare(id); refreshMatches(); }}
+            onRejectShare={rejectVideoShare}
+            activeTab="profile" onChangeTab={handleTab} hideBottomTabBar
+          />
+        </AnimatedTabPane>
+
+        <AnimatedTabPane active={profileView === 'settings'} direction={profileDirectionRef.current}>
+          <PlayerSettingsScreen
+            owner={owner}
+            onBack={() => setProfileViewWithDirection('profile')}
+            onSignOut={async () => {
+              await logout();
+              // AuthProvider clears user → Root switches to AuthStack automatically
+            }}
+            activeTab="profile" onChangeTab={handleTab} hideBottomTabBar
+          />
+        </AnimatedTabPane>
+      </>
+    );
+  }
+
+  return (
+    <View style={{ flex: 1 }}>
+      {/*
+        Los 4 tabs quedan SIEMPRE montados una vez visitados (2026-09-12): antes
+        `renderTabContent` devolvía un solo `case` del switch, así que cambiar de
+        tab desmontaba la pantalla completa —scroll, filtros y estado local se
+        perdían— y no había transición, solo un corte seco. Ahora los cuatro
+        viven apilados con `position:absolute` dentro de este contenedor, y
+        `AnimatedTabPane` anima cuál se ve (fade + 8px) sin desmontar ninguno.
+        Los hooks de datos de arriba (useMyGames, useInbox, etc.) ya corrían
+        siempre, sin importar el tab activo — esto solo evita que la UI de cada
+        uno se tire a la basura y se reconstruya de cero.
+      */}
+      <View style={{ flex: 1 }}>
+        <AnimatedTabPane active={tab === 'home'} direction={tabDirectionRef.current}>
           <HomeScreen
             liveGames={liveGames}
             upcomingGames={proximas}
             onOpenUpcoming={(g) => setMyGameSheet(g)}
             feedPosts={feedPosts}
             onLikeHighlight={toggleFeedLike}
-            activeTab="home" onChangeTab={handleTab}
+            activeTab="home" onChangeTab={handleTab} hideBottomTabBar
+            isFocusedTab={tab === 'home'}
             onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id, liveStreamUrl: liveGames.find(g => g.id === id)?.streamUrl })}
             onOpenSearch={() => navigation.navigate('GlobalSearch')}
             refreshing={refreshing}
@@ -1225,10 +1363,10 @@ function MainPlayer({ navigation, route }: any) {
             onOpenNotifications={() => navigation.navigate('Notifications')}
             scrollToTopSignal={homeScrollSignal}
           />
-        );
-      case 'games':
-        return (
-          <GamesScreen games={[]} activeTab="games" onChangeTab={handleTab} role="player"
+        </AnimatedTabPane>
+
+        <AnimatedTabPane active={tab === 'games'} direction={tabDirectionRef.current}>
+          <GamesScreen games={[]} activeTab="games" onChangeTab={handleTab} hideBottomTabBar role="player"
             emptyImage={require('./assets/racket.png')}
             onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id, liveStreamUrl: liveGames.find(g => g.id === id)?.streamUrl })}
             myGames={myGames}
@@ -1249,89 +1387,31 @@ function MainPlayer({ navigation, route }: any) {
               onDismiss: nearby.dismissPrompt,
             } : undefined}
           />
-        );
-      case 'chats':
-        return (
+        </AnimatedTabPane>
+
+        <AnimatedTabPane active={tab === 'chats'} direction={tabDirectionRef.current}>
           <ChatsInboxScreen
             items={inbox} loading={inboxLoading}
-            activeTab="chats" onChangeTab={handleTab} role="player"
+            activeTab="chats" onChangeTab={handleTab} hideBottomTabBar role="player"
             refreshing={refreshing} onRefresh={handleRefresh}
             onOpenDm={(userId, title) => navigation.navigate('DirectChat', { userId, title })}
             onOpenGame={(gameId, title, readOnly) => navigation.navigate('GameChat', { gameId, title, readOnly })}
             onNewChat={() => navigation.navigate('GlobalSearch', { mode: 'chat' })}
             onDeleteChat={removeChat}
           />
-        );
-      case 'profile': {
-        if (profileView === 'settings') {
-          return (
-            <PlayerSettingsScreen
-              owner={owner}
-              onBack={() => setProfileView('profile')}
-              onSignOut={async () => {
-                await logout();
-                // AuthProvider clears user → Root switches to AuthStack automatically
-              }}
-              activeTab="profile" onChangeTab={handleTab}
-            />
-          );
-        }
-        if (profileView === 'library') {
-          return (
-            <MyLibraryScreen
-              matches={matches} highlights={highlights}
-              onBack={() => setProfileView('profile')}
-              onCreateHighlight={(m) => navigation.navigate('VideoEditor', {
-                gameId: m.id,
-                recordingUrl: m.recordingUrl,
-                durationSeconds: m.durationSeconds,
-                onHighlightCreated: (result: { streamUrl: string; durationSeconds: number; title: string; visibility: 'public' | 'private' }) => {
-                  // Prepend optimista para feedback inmediato…
-                  setHighlights(prev => [{
-                    id: 'H-' + Math.random().toString(36).slice(2, 6).toUpperCase(),
-                    kind: 'highlight' as const,
-                    title: result.title || 'Highlight',
-                    durationSeconds: result.durationSeconds,
-                    durationLabel: formatDurationLabel(result.durationSeconds),
-                    date: 'Recién',
-                    isPublic: result.visibility === 'public',
-                    streamUrl: result.streamUrl || undefined,
-                  }, ...prev]);
-                  // …y luego sincronizar con el backend (id/orden reales).
-                  refreshHighlights();
-                },
-              })}
-              onRegisterResult={handleRegisterResult}
-              onToggleVisibility={toggleVisibility}
-              onEditDescription={handleEditDescription}
-              onOpenItem={openPreview}
-              activeTab="profile" onChangeTab={handleTab}
-            />
-          );
-        }
-        return (
-          <PlayerOwnProfileScreen
-            owner={owner}
-            matches={matches} highlights={highlights}
-            onOpenLibrary={() => setProfileView('library')}
-            onOpenSettings={() => setProfileView('settings')}
-            onOpenItem={openPreview}
-            // `FollowList` es una `AppStack.Screen` (native swipe-back), no un
-            // `<Modal>` — ver el comentario en `FollowListScreen`.
-            onOpenFollowers={() => navigation.push('FollowList', { title: 'Seguidores', users: ownProfile?.followersList ?? [] })}
-            onOpenFollowing={() => navigation.push('FollowList', { title: 'Siguiendo', users: ownProfile?.followingList ?? [] })}
-            activeTab="profile" onChangeTab={handleTab}
-          />
-        );
-      }
-      default:
-        return null;
-    }
-  }
+        </AnimatedTabPane>
 
-  return (
-    <>
-      {renderTabContent()}
+        <AnimatedTabPane active={tab === 'profile'} direction={tabDirectionRef.current}>
+          {renderProfilePane()}
+        </AnimatedTabPane>
+      </View>
+
+      {/* Única tab bar, fija y fuera del área animada: no se desmonta ni
+          reconstruye nunca al cambiar de tab (antes cada pantalla traía la
+          suya, así que la barra entera desaparecía y volvía a aparecer con
+          cada switch). */}
+      <BottomTabBar role="player" active={tab} onChange={handleTab} />
+
       <VideoPreviewModal
         visible={!!previewVideo}
         url={previewVideo?.url ?? ''}
@@ -1383,7 +1463,27 @@ function MainPlayer({ navigation, route }: any) {
         subtitle="Se envía por chat, con la partida adjunta."
         sendLabel="Invitar"
       />
-    </>
+
+      {/* Compartir el video de un partido propio ya finalizado (Mi Biblioteca). */}
+      <ShareGameSheet
+        visible={shareVideoMatch !== null}
+        items={inbox}
+        loading={inboxLoading}
+        onClose={() => setShareVideoMatch(null)}
+        onSend={shareVideoTo}
+        onSearch={async (q) => {
+          const res = await searchUsers(q);
+          return res.map((u) => ({
+            id: u.id,
+            name: u.name ?? u.username,
+            avatar: u.profilePicture ?? undefined,
+          }));
+        }}
+        title="Compartir video"
+        subtitle="La otra persona podrá aceptarlo y le quedará guardado en su Biblioteca."
+        sendLabel="Compartir"
+      />
+    </View>
   );
 }
 

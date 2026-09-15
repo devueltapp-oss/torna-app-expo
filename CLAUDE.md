@@ -1407,7 +1407,7 @@ PATCH /notification/read-all        → { updated }
 | **Notificaciones** | `react-native-onesignal` ~5.5.x + `onesignal-expo-plugin` (push; registro vía `notificationID`). Ver "Notificaciones push (OneSignal)" arriba |
 | **Procesamiento de video** | **Server-side** en el backend (`POST /highlights/from-recording`: FFmpeg byte-range → B2). La app ya **no** usa `ffmpeg-kit-react-native` (crasheaba y estaba fuera de `package.json`). |
 | **Splash / icon** | `assets/torna-icon.png` (1024×1024) · fondo `#08203E` |
-| **Bundle IDs** | iOS: `io.torna` · Android package: `io.torna` |
+| **Bundle IDs** | iOS: `com.Tornapp` · Android package: `com.tornapp` (unificado 2026-09-12; antes `io.torna`, nunca publicado en Play Console) |
 | **Auth** | `@react-native-firebase/{app,auth}` **v22** · `@react-native-google-signin/google-signin` **v15** · `expo-apple-authentication`. `AuthContext.tsx` usa la **API namespaced** de RNFirebase (`firebaseAuth().signInWith…`, `firebaseAuth.GoogleAuthProvider`): v22 la mantiene, solo tira warnings de deprecación apuntando a la modular. Migrar a la modular es cleanup aparte, no bloquea |
 | **Storage** | `expo-secure-store` (auth tokens) · `@react-native-async-storage` (tema) |
 
@@ -1930,6 +1930,15 @@ npm start                   # arranca sin warnings en Metro
     de la cancha (0 si el club no lo configuró desde el desktop). Los clubs fake de los
     seeds no tienen canchas con `clubId` ni horario cargado, así que al reservar en ellos
     la lista de canchas sale vacía o sin slots (hay que cargar horario/`isActive`).
+
+16. **Bordes/divisores — pendiente de decidir cuáles (2026-09-12)**. Al pulir la
+    transición entre Inicio/Juegos/Chats/Perfil (`AnimatedTabPane` / `BottomTabBar`),
+    quedó pendiente "reducir ligeramente la presencia de algunos bordes/divisores" —
+    pedido explícito pero sin especificar cuáles. No se tocó nada a propósito:
+    `colors.line` se usa en varios headers (`AppHeader`, `BottomTabBar`) y bajarle el
+    contraste a ciegas es exactamente el tipo de cambio visual que puede salir mal sin
+    mirarlo en pantalla. Antes de tocarlo, pedirle al usuario que señale cuáles
+    bordes/divisores le llaman la atención (captura o nombre de pantalla).
 
 ---
 

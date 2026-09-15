@@ -10,6 +10,7 @@ import { render, fireEvent } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme';
 import { MyLibraryScreen } from '../MyLibraryScreen';
 import type { LibraryHighlight, LibraryMatch } from '../../data/types';
+import type { IncomingVideoShare } from '../../api/games';
 
 const privateHl: LibraryHighlight = {
   id: 'h1',
@@ -40,9 +41,16 @@ function renderLibrary(opts: {
   highlights?: LibraryHighlight[];
   onToggleVisibility?: jest.Mock;
   onOpenItem?: jest.Mock;
+  onShareVideo?: jest.Mock;
+  pendingShares?: IncomingVideoShare[];
+  onAcceptShare?: jest.Mock;
+  onRejectShare?: jest.Mock;
 }) {
   const onToggleVisibility = opts.onToggleVisibility ?? jest.fn();
   const onOpenItem = opts.onOpenItem ?? jest.fn();
+  const onShareVideo = opts.onShareVideo ?? jest.fn();
+  const onAcceptShare = opts.onAcceptShare ?? jest.fn();
+  const onRejectShare = opts.onRejectShare ?? jest.fn();
   const utils = render(
     <ThemeProvider initial="light">
       <MyLibraryScreen
@@ -52,10 +60,14 @@ function renderLibrary(opts: {
         onCreateHighlight={jest.fn()}
         onToggleVisibility={onToggleVisibility}
         onOpenItem={onOpenItem}
+        onShareVideo={onShareVideo}
+        pendingShares={opts.pendingShares ?? []}
+        onAcceptShare={onAcceptShare}
+        onRejectShare={onRejectShare}
       />
     </ThemeProvider>,
   );
-  return { ...utils, onToggleVisibility, onOpenItem };
+  return { ...utils, onToggleVisibility, onOpenItem, onShareVideo, onAcceptShare, onRejectShare };
 }
 
 describe('MyLibraryScreen — visibilidad (switch)', () => {
@@ -106,5 +118,65 @@ describe('MyLibraryScreen — reproducir desde la miniatura', () => {
     const { getByTestId, onOpenItem } = renderLibrary({ highlights: [publicHl] });
     fireEvent.press(getByTestId('library-thumb-highlight'));
     expect(onOpenItem).toHaveBeenCalledWith(expect.objectContaining({ id: 'h2' }));
+  });
+});
+
+describe('MyLibraryScreen — compartir el video de un partido', () => {
+  it('un partido con canShare muestra "Compartir" y llama onShareVideo con ese match', () => {
+    const shareable: LibraryMatch = { ...match, canShare: true };
+    const { getByTestId, onShareVideo } = renderLibrary({ matches: [shareable] });
+
+    fireEvent.press(getByTestId('share-video-m1'));
+
+    expect(onShareVideo).toHaveBeenCalledWith(expect.objectContaining({ id: 'm1' }));
+  });
+
+  it('un partido sin canShare NO muestra el botón "Compartir"', () => {
+    const { queryByTestId, queryByText } = renderLibrary({ matches: [match] });
+    expect(queryByTestId('share-video-m1')).toBeNull();
+    expect(queryByText('Compartir')).toBeNull();
+  });
+
+  it('un video que me compartieron muestra quién lo compartió y no ofrece re-compartirlo', () => {
+    const shared: LibraryMatch = {
+      ...match, id: 'm2', canShare: false,
+      sharedBy: { username: 'ortiz', name: 'Jesús Ortiz' },
+    };
+    const { getByText, queryByTestId } = renderLibrary({ matches: [shared] });
+
+    expect(getByText('Compartido por Jesús Ortiz')).toBeTruthy();
+    expect(queryByTestId('share-video-m2')).toBeNull();
+  });
+});
+
+describe('MyLibraryScreen — solicitudes de video pendientes', () => {
+  const pending: IncomingVideoShare = {
+    id: 'share-1',
+    createdAt: '2026-09-15T00:00:00Z',
+    fromUser: { id: 'u1', username: 'ortiz', name: 'Jesús Ortiz' },
+    game: { id: 'g1', createdAt: '2026-09-10T00:00:00Z' },
+  };
+
+  it('muestra la solicitud pendiente con nombre de quien comparte', () => {
+    const { getByText } = renderLibrary({ pendingShares: [pending] });
+    expect(getByText('Jesús Ortiz')).toBeTruthy();
+    expect(getByText('Te compartió el video de un partido')).toBeTruthy();
+  });
+
+  it('aceptar llama onAcceptShare con el id de la solicitud', () => {
+    const { getByTestId, onAcceptShare } = renderLibrary({ pendingShares: [pending] });
+    fireEvent.press(getByTestId('accept-share-share-1'));
+    expect(onAcceptShare).toHaveBeenCalledWith('share-1');
+  });
+
+  it('rechazar llama onRejectShare con el id de la solicitud', () => {
+    const { getByTestId, onRejectShare } = renderLibrary({ pendingShares: [pending] });
+    fireEvent.press(getByTestId('reject-share-share-1'));
+    expect(onRejectShare).toHaveBeenCalledWith('share-1');
+  });
+
+  it('sin solicitudes pendientes no se muestra la sección', () => {
+    const { queryByText } = renderLibrary({});
+    expect(queryByText('VIDEOS COMPARTIDOS CONTIGO')).toBeNull();
   });
 });

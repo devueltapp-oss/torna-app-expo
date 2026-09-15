@@ -82,7 +82,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFFFF"
       },
-      "package": "io.torna",
+      "package": "com.tornapp",
       "googleServicesFile": "./google-services.json"
     },
     "web": {

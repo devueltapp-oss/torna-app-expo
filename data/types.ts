@@ -310,6 +310,10 @@ export interface LibraryMatch extends LibraryItemBase {
   durationSeconds: number;
   /** True si ya se registró el resultado propio (gané/perdí) de esta partida. */
   resultRegistered?: boolean;
+  /** True si soy el capitán de esta partida (no una que me compartieron): puedo compartir su video. */
+  canShare?: boolean;
+  /** Presente solo si esta partida llegó por un video compartido que acepté. */
+  sharedBy?: { username: string; name: string | null } | null;
 }
 
 export interface LibraryHighlight extends LibraryItemBase {

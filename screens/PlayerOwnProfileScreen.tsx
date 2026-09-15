@@ -31,7 +31,7 @@ import React from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Lock, Settings } from 'lucide-react-native';
+import { Play, Settings } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { Avatar, TabStrip } from '../components/ui';
@@ -57,13 +57,15 @@ export interface PlayerOwnProfileScreenProps {
   onOpenFollowing?: () => void;
   activeTab: TabId;
   onChangeTab: (id: TabId) => void;
+  /** `MainPlayer` renderiza una sola tab bar externa y fija: no dupliques la suya. */
+  hideBottomTabBar?: boolean;
 }
 
 export function PlayerOwnProfileScreen({
   owner, matches, highlights,
   onOpenLibrary, onOpenSettings, onOpenItem,
   onOpenFollowers, onOpenFollowing,
-  activeTab, onChangeTab,
+  activeTab, onChangeTab, hideBottomTabBar,
 }: PlayerOwnProfileScreenProps) {
   const { colors } = useTheme();
   const [tab, setTab] = React.useState<TabKey>('highlights');
@@ -133,7 +135,7 @@ export function PlayerOwnProfileScreen({
               {owner.username} · CAT. {owner.category ?? 7}
             </Text>
             <HeroIconButton onPress={onOpenLibrary} dot>
-              <Lock size={16} color={colors.text}/>
+              <Play size={16} color={colors.text}/>
             </HeroIconButton>
             <HeroIconButton onPress={onOpenSettings}>
               <Settings size={16} color={colors.text}/>
@@ -176,8 +178,8 @@ export function PlayerOwnProfileScreen({
             solo repetía, en chiquito, algo que se ve. */}
         <TabStrip
           tabs={[
-            { id: 'highlights', label: '▶ HIGHLIGHTS' },
-            { id: 'matches',    label: '◫ PARTIDOS' },
+            { id: 'highlights', label: 'HIGHLIGHTS' },
+            { id: 'matches',    label: 'PARTIDOS' },
           ]}
           active={tab}
           onChange={(k) => setTab(k as TabKey)}
@@ -190,9 +192,9 @@ export function PlayerOwnProfileScreen({
               <View style={{ paddingHorizontal: 24, paddingVertical: 40, alignItems: 'center', gap: 6 }}>
                 <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>Nada por ahora</Text>
                 <Text style={{ fontSize: 12, color: colors.muted2, textAlign: 'center', lineHeight: 18 }}>
-                  Pasa a tu{' '}
+                  Pasa a tus{' '}
                   <Text onPress={onOpenLibrary} style={{ color: colors.accentText, fontWeight: '700' }}>
-                    biblioteca privada
+                    videos
                   </Text>
                   {' '}y marca algo como público para que aparezca aquí.
                 </Text>
@@ -218,7 +220,7 @@ export function PlayerOwnProfileScreen({
         </GestureDetector>
       </ScrollView>
 
-      <BottomTabBar role="player" active={activeTab} onChange={onChangeTab}/>
+      {!hideBottomTabBar && <BottomTabBar role="player" active={activeTab} onChange={onChangeTab}/>}
 
       <ImageViewerModal
         visible={viewer}

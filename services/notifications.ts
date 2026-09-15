@@ -143,6 +143,11 @@ export function resolvePushTarget(data: PushData | null | undefined): PushTarget
       // lugar útil es el hub de partidos, no el visor del stream.
       return { name: 'MainPlayer', params: { initialTab: gamesTab } };
 
+    // Te compartieron el video de una partida: se acepta/rechaza desde Mi
+    // Biblioteca (pestaña Perfil → Videos), no hay pantalla propia para esto.
+    case 'GAME_VIDEO_SHARED':
+      return { name: 'MainPlayer', params: { initialTab: 'profile' as TabId } };
+
     default:
       return null;
   }

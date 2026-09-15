@@ -20,6 +20,8 @@ interface PlayerMatchApi {
   cover: string | null;
   court: string | null;
   durationInSeconds: number;
+  canShare?: boolean;
+  sharedBy?: { username: string; name: string | null } | null;
 }
 
 function formatDurationLabel(sec: number): string {
@@ -54,6 +56,8 @@ function mapToLibraryMatch(item: PlayerMatchApi): LibraryMatch {
     durationSeconds: item.durationInSeconds ?? 0,
     durationLabel: formatDurationLabel(item.durationInSeconds ?? 0),
     date: formatDate(item.createdAt),
+    canShare: item.canShare ?? false,
+    sharedBy: item.sharedBy ?? null,
   };
 }
 

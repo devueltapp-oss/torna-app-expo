@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, Platform } from 'react-native';
+import { View, Pressable, Platform, Animated, LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Home, Crosshair, LayoutGrid, MessageCircle, User } from 'lucide-react-native';
 import { useTheme } from '../theme';
@@ -43,6 +43,14 @@ const TABS_BY_ROLE: Record<Role, TabDef[]> = {
   ],
 };
 
+const INDICATOR_WIDTH = 26;
+// Pedido 2026-09-12: nada de rebotes/overshoot. Color+texto en 120-160ms,
+// el indicador un poco más lento (desplazarse se nota menos que un fundido
+// brusco), y el ícono activo con una microanimación de escala 0.96→1.
+const COLOR_DURATION = 140;
+const INDICATOR_DURATION = 180;
+const SCALE_DURATION = 130;
+
 /**
  * ⚠️ **El padding inferior NO puede ser un número fijo.** Era `safeBottom = 18`
  * a secas, y con Android edge-to-edge (obligatorio desde API 35 / Android 15,
@@ -72,41 +80,124 @@ export function BottomTabBar({ active, onChange, role = 'club', safeBottom }: Pr
     Platform.OS === 'ios' ? insets.bottom + 8 : Math.max(insets.bottom, 8)
   );
   const tabs = TABS_BY_ROLE[role];
+  const activeIndex = Math.max(0, tabs.findIndex((t) => t.id === active));
+
+  // La barrita indicadora es UNA sola que se desliza al tab activo (en vez de
+  // aparecer/desaparecer de golpe en cada uno) — necesita el ancho real de la
+  // fila para calcular a qué X moverse.
+  const [rowWidth, setRowWidth] = React.useState(0);
+  const tabWidth = tabs.length ? rowWidth / tabs.length : 0;
+  const indicatorX = React.useRef(new Animated.Value(0)).current;
+  const indicatorPlaced = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!tabWidth) return;
+    const target = tabWidth * activeIndex + (tabWidth - INDICATOR_WIDTH) / 2;
+    if (!indicatorPlaced.current) {
+      // Primer layout conocido: ubicarla sin animar (si no, entraría
+      // deslizando desde el borde izquierdo apenas se mide la fila).
+      indicatorX.setValue(target);
+      indicatorPlaced.current = true;
+      return;
+    }
+    Animated.timing(indicatorX, {
+      toValue: target, duration: INDICATOR_DURATION, useNativeDriver: true,
+    }).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeIndex, tabWidth]);
+
+  const onRowLayout = (e: LayoutChangeEvent) => setRowWidth(e.nativeEvent.layout.width);
+
   return (
-    <View testID="bottom-tab-bar" style={{
-      flexDirection: 'row',
-      backgroundColor: colors.surface,
-      borderTopWidth: 1, borderTopColor: colors.line,
-      paddingTop: 10, paddingBottom: bottomPadding,
-    }}>
-      {tabs.map(({ id, label, Icon }) => {
-        const on = active === id;
-        return (
-          <Pressable key={id} onPress={() => onChange(id)}
-            style={{ flex: 1, alignItems: 'center', gap: 3, paddingTop: 6 }}>
-            {on && (
-              <View style={{
-                position: 'absolute', top: -10, width: 26, height: 3,
-                // La barrita es un BLOQUE de color, no texto: el lima sólido se
-                // ve bien en los dos temas y es la señal de marca.
-                backgroundColor: colors.accent, borderRadius: 2,
-              }} />
-            )}
-            {/*
-              ⚠️ `accentStrong`, NO `primary`.
-              `primary` es el lima `#BFFE3D`, que sobre la superficie clara del
-              navbar da **1.20:1** de contraste — o sea, el ítem activo no se
-              distinguía del inactivo en modo claro. `accentStrong` es verde
-              oscuro en claro (5.08:1) y vuelve a ser lima en oscuro (12.61:1
-              sobre la superficie navy `#0E2646`).
-            */}
-            <Icon size={22} strokeWidth={on ? 2.2 : 2} color={on ? colors.accentStrong : colors.muted} />
-            <Text style={{ fontSize: 10, fontWeight: on ? '800' : '600', color: on ? colors.accentStrong : colors.muted }}>
-              {label}
-            </Text>
-          </Pressable>
-        );
-      })}
+    <View
+      testID="bottom-tab-bar"
+      onLayout={onRowLayout}
+      style={{
+        flexDirection: 'row', backgroundColor: colors.surface,
+        borderTopWidth: 1, borderTopColor: colors.line,
+        paddingTop: 10, paddingBottom: bottomPadding,
+      }}
+    >
+      {tabWidth > 0 && (
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: 'absolute', top: 0, width: INDICATOR_WIDTH, height: 3, borderRadius: 2,
+            // La barrita es un BLOQUE de color, no texto: el lima sólido se
+            // ve bien en los dos temas y es la señal de marca.
+            backgroundColor: colors.accent,
+            transform: [{ translateX: indicatorX }],
+          }}
+        />
+      )}
+      {tabs.map(({ id, label, Icon }) => (
+        <TabButton
+          key={id}
+          label={label}
+          Icon={Icon}
+          active={active === id}
+          mutedColor={colors.muted}
+          // ⚠️ `accentStrong`, NO `primary`.
+          // `primary` es el lima `#BFFE3D`, que sobre la superficie clara del
+          // navbar da **1.20:1** de contraste — o sea, el ítem activo no se
+          // distinguía del inactivo en modo claro. `accentStrong` es verde
+          // oscuro en claro (5.08:1) y vuelve a ser lima en oscuro (12.61:1
+          // sobre la superficie navy `#0E2646`).
+          activeColor={colors.accentStrong}
+          onPress={() => onChange(id)}
+        />
+      ))}
     </View>
+  );
+}
+
+function TabButton({ label, Icon, active, mutedColor, activeColor, onPress }: {
+  label: string;
+  Icon: any;
+  active: boolean;
+  mutedColor: string;
+  activeColor: string;
+  onPress: () => void;
+}) {
+  // `progress` maneja el fundido cruzado ícono muted↔accent y el color/peso
+  // del label — todo junto porque ninguno de los dos admite native driver
+  // (interpolación de color). `scale` es aparte y SÍ va por native driver:
+  // es la única microanimación de transform (0.96 → 1 al activarse).
+  const progress = React.useRef(new Animated.Value(active ? 1 : 0)).current;
+  const scale = React.useRef(new Animated.Value(1)).current;
+  const wasActive = React.useRef(active);
+
+  React.useEffect(() => {
+    Animated.timing(progress, {
+      toValue: active ? 1 : 0, duration: COLOR_DURATION, useNativeDriver: false,
+    }).start();
+
+    // La microanimación de escala es SOLO al entrar al tab (no al salir, y no
+    // en el render inicial si ya nace activo — si no, Inicio "rebotaría" cada
+    // vez que se abre la app). Sin overshoot: 0.96 → 1, sin resorte.
+    if (active && !wasActive.current) {
+      scale.setValue(0.96);
+      Animated.timing(scale, { toValue: 1, duration: SCALE_DURATION, useNativeDriver: true }).start();
+    }
+    wasActive.current = active;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+
+  const textColor = progress.interpolate({ inputRange: [0, 1], outputRange: [mutedColor, activeColor] });
+
+  return (
+    <Pressable onPress={onPress} style={{ flex: 1, alignItems: 'center', gap: 3, paddingTop: 6 }}>
+      <Animated.View style={{ width: 22, height: 22, transform: [{ scale }] }}>
+        <Animated.View style={{ position: 'absolute', opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) }}>
+          <Icon size={22} strokeWidth={2} color={mutedColor} />
+        </Animated.View>
+        <Animated.View style={{ position: 'absolute', opacity: progress }}>
+          <Icon size={22} strokeWidth={2.2} color={activeColor} />
+        </Animated.View>
+      </Animated.View>
+      <Animated.Text style={{ fontSize: 10, fontWeight: active ? '800' : '600', color: textColor }}>
+        {label}
+      </Animated.Text>
+    </Pressable>
   );
 }

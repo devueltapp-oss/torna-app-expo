@@ -11,11 +11,13 @@
 import React from 'react';
 import { View, Text, Pressable, ScrollView, ActivityIndicator, Image, Alert, Switch, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { GestureDetector } from 'react-native-gesture-handler';
 import { ChevronLeft, ChevronRight, ChevronDown, Lock, Sun, Moon, MonitorSmartphone, MapPin } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme, ThemeMode } from '../theme';
 import { fonts } from '../theme/tokens';
 import { useNearbyLocation } from '../hooks/useNearbyLocation';
+import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { Avatar, Button, Input, AppHeader, SectionHeader } from '../components/ui';
 import { ImageViewerModal } from '../components/ImageViewerModal';
 import { ConfirmSheet } from '../components/ConfirmSheet';
@@ -38,9 +40,11 @@ export interface PlayerSettingsScreenProps {
   onSignOut?: () => void;
   activeTab?: TabId;
   onChangeTab?: (id: TabId) => void;
+  /** `MainPlayer` renderiza una sola tab bar externa y fija: no dupliques la suya. */
+  hideBottomTabBar?: boolean;
 }
 
-export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onChangeTab }: PlayerSettingsScreenProps) {
+export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onChangeTab, hideBottomTabBar }: PlayerSettingsScreenProps) {
   const { colors, mode, setMode } = useTheme();
   const { user, updateProfilePicture, updateFrontPage, changePassword, logout } = useAuth();
   const [section, setSection] = React.useState<Section>('overview');
@@ -212,7 +216,13 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
     else onBack();
   }
 
+  // Retroceso nativo de iPhone (swipe desde el borde izquierdo) — mismo
+  // destino que el `ChevronLeft` del header: primero sube de `profile`/
+  // `password` a `overview`, y recién desde ahí sale al perfil.
+  const swipeBack = useEdgeSwipeBack(back);
+
   return (
+    <GestureDetector gesture={swipeBack}>
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <AppHeader
         title={titleMap[section]}
@@ -263,7 +273,7 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
         )}
       </ScrollView>
 
-      {onChangeTab && <BottomTabBar role="player" active={activeTab ?? 'profile'} onChange={onChangeTab}/>}
+      {onChangeTab && !hideBottomTabBar && <BottomTabBar role="player" active={activeTab ?? 'profile'} onChange={onChangeTab}/>}
 
       <ImageViewerModal visible={viewer} uri={avatar} onClose={() => setViewer(false)}/>
 
@@ -282,6 +292,7 @@ export function PlayerSettingsScreen({ owner, onBack, onSignOut, activeTab, onCh
         onCancel={() => { if (!deleting) { setDeleteSheet(false); setDeleteError(null); } }}
       />
     </SafeAreaView>
+    </GestureDetector>
   );
 }
 

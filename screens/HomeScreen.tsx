@@ -22,7 +22,10 @@ const imagotipoDark = require('../assets/imagotipo-dark.png');
 // Alto del header (logo + búsqueda + campanita), para ocultarlo al scrollear
 // (2026-09-11) — ver el comentario en el `Animated.View` del header más abajo.
 // `paddingTop` + el más alto de sus hijos (los botones de 40) + `paddingBottom`.
-const HEADER_HEIGHT = 8 + 40 + 14;
+// 6+40+6=52 (2026-09-12): mismo alto total que Juegos/Chats/Perfil
+// (`minHeight: 52` en sus headers) — antes era 8+40+14=62 y la pantalla
+// saltaba de alto al cambiar de pestaña.
+const HEADER_HEIGHT = 6 + 40 + 6;
 
 export type { UpcomingGamePlayer, UpcomingGameData } from '../data/types';
 
@@ -43,6 +46,17 @@ interface Props {
   onOpenSearch?: () => void;
   onChangeTab?: (id: TabId) => void;
   activeTab?: TabId;
+  /** `MainPlayer` renderiza una sola tab bar externa y fija: no dupliques la suya. */
+  hideBottomTabBar?: boolean;
+  /**
+   * `false` cuando Inicio sigue montado pero OTRO tab es el visible
+   * (2026-09-12: los 4 tabs ahora quedan montados siempre — ver `MainPlayer`).
+   * `useIsFocused()` no alcanza para esto: reporta el foco de la RUTA de
+   * navegación (`MainPlayer` entero), no cuál de los 4 tabs internos se ve.
+   * Sin este freno, los previews de video en vivo del feed seguirían
+   * reproduciendo (y consumiendo red/batería) estando en Chats o Perfil.
+   */
+  isFocusedTab?: boolean;
   refreshing: boolean;
   onRefresh: () => void;
   /** No leídos de la campanita (GET /notification/unread-count). */
@@ -85,6 +99,8 @@ export function HomeScreen({
   onOpenSearch,
   onChangeTab,
   activeTab = 'home',
+  hideBottomTabBar,
+  isFocusedTab = true,
   refreshing,
   onRefresh,
   unreadNotifications = 0,
@@ -92,7 +108,8 @@ export function HomeScreen({
   scrollToTopSignal,
 }: Props) {
   const { colors, isDark } = useTheme();
-  const isFocused = useIsFocused();
+  // Ver el comentario de `isFocusedTab` en `Props`.
+  const isFocused = useIsFocused() && isFocusedTab;
   const [highlightModal, setHighlightModal] = React.useState<{ url: string; title: string; id: string } | null>(null);
   // `any`: el ref de `Animated.ScrollView` no tipa `.scrollTo` directamente.
   const scrollRef = React.useRef<any>(null);
@@ -148,7 +165,7 @@ export function HomeScreen({
       <Animated.View style={{
         position: 'absolute', top: insets.top, left: 0, right: 0, zIndex: 10,
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        backgroundColor: colors.bg, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 14,
+        backgroundColor: colors.bg, paddingHorizontal: 20, paddingTop: 6, paddingBottom: 6,
         transform: [{ translateY: headerTranslateY }], opacity: headerOpacity,
       }}>
         {/* ⛔ Acá había un "Hola / <tu nombre>". Se eliminó el 2026-09-02: le
@@ -260,7 +277,7 @@ export function HomeScreen({
         )}
       </Animated.ScrollView>
 
-      {onChangeTab && <BottomTabBar active={activeTab} onChange={onChangeTab} role="player"/>}
+      {onChangeTab && !hideBottomTabBar && <BottomTabBar active={activeTab} onChange={onChangeTab} role="player"/>}
 
       {/* No hay `UpcomingMatchSheet` acá: el strip delega en `onOpenUpcoming` y la
           hoja real vive en `MainPlayer`, una sola vez. Tener una copia local era

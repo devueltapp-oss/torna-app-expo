@@ -472,7 +472,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ------------------------------------------------------------------
   const loginWithGoogle = useCallback(async (): Promise<LoginResult> => {
     GoogleSignin.configure({
-      webClientId: '83738503515-bit0pprnegn1eg2r3eodqshfgk64eh4d.apps.googleusercontent.com',
+      webClientId: '83738503515-0pgnnn1m973bv3e9dak8arrcb2ogieu1.apps.googleusercontent.com',
     });
     await GoogleSignin.hasPlayServices();
     const response = await GoogleSignin.signIn();

@@ -19,3 +19,7 @@ yarn-error.*
 *.log
 # Proyecto en yarn — el package-lock.json de npm es espurio
 package-lock.json
+
+# Artefactos de build (.ipa/.apk locales) y memoria interna de agentes
+build/
+.claude/agent-memory/

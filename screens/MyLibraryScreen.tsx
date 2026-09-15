@@ -22,16 +22,19 @@
  * dos veces.
  */
 import React from 'react';
-import { View, Text, Pressable, ScrollView, Modal, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
+import { View, Text, Pressable, ScrollView, Modal, KeyboardAvoidingView, Platform, Keyboard, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronDown, Lock, Scissors, Trophy, Pencil, X } from 'lucide-react-native';
+import { GestureDetector } from 'react-native-gesture-handler';
+import { ChevronLeft, ChevronDown, Lock, Scissors, Trophy, Pencil, X, Share2, Check } from 'lucide-react-native';
 import { useTheme } from '../theme';
-import { Button, Input, AppHeader, Switch } from '../components/ui';
+import { Button, Input, AppHeader, Switch, Avatar } from '../components/ui';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import { ContentThumb } from '../components/ContentThumb';
+import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import type {
   LibraryItem, LibraryMatch, LibraryHighlight,
 } from '../data/types';
+import type { IncomingVideoShare } from '../api/games';
 
 type SectionKey = 'matches' | 'highlights';
 
@@ -49,14 +52,23 @@ export interface MyLibraryScreenProps {
   onEditDescription?: (item: LibraryHighlight, description: string) => void;
   /** Tap reproducir cualquier item. */
   onOpenItem?: (item: LibraryItem) => void;
+  /** Tap "Compartir" en un partido propio (solo visible si `match.canShare`). */
+  onShareVideo?: (match: LibraryMatch) => void;
+  /** Solicitudes de video compartido pendientes dirigidas a mí (GET /game/shares/incoming). */
+  pendingShares?: IncomingVideoShare[];
+  onAcceptShare?: (shareId: string) => void;
+  onRejectShare?: (shareId: string) => void;
   activeTab?: TabId;
   onChangeTab?: (id: TabId) => void;
+  /** `MainPlayer` renderiza una sola tab bar externa y fija: no dupliques la suya. */
+  hideBottomTabBar?: boolean;
 }
 
 export function MyLibraryScreen({
   matches, highlights,
   onBack, onCreateHighlight, onRegisterResult, onToggleVisibility, onEditDescription, onOpenItem,
-  activeTab, onChangeTab,
+  onShareVideo, pendingShares = [], onAcceptShare, onRejectShare,
+  activeTab, onChangeTab, hideBottomTabBar,
 }: MyLibraryScreenProps) {
   const { colors, isDark } = useTheme();
   const [open, setOpen] = React.useState<Record<SectionKey, boolean>>({
@@ -77,10 +89,15 @@ export function MyLibraryScreen({
     ...matches, ...highlights,
   ].filter(i => i.isPublic).length;
 
+  // Retroceso nativo de iPhone (swipe desde el borde izquierdo) — ver el
+  // comentario del hook. Mismo destino que el `ChevronLeft` del header.
+  const swipeBack = useEdgeSwipeBack(onBack);
+
   return (
+    <GestureDetector gesture={swipeBack}>
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <AppHeader
-        title="Mi biblioteca"
+        title="Videos"
         flush
         left={<Pressable onPress={onBack}><ChevronLeft size={22} color={colors.text}/></Pressable>}
       />
@@ -113,6 +130,20 @@ export function MyLibraryScreen({
           </View>
         </View>
 
+        {/* VIDEOS COMPARTIDOS CONTIGO (pendientes de aceptar/rechazar) */}
+        {pendingShares.length > 0 ? (
+          <View style={{ gap: 8, marginBottom: 4 }}>
+            <SectionHeader title="Videos compartidos contigo" count={pendingShares.length} collapsed={false} onToggle={() => {}} />
+            {pendingShares.map((s) => (
+              <PendingShareRow
+                key={s.id} share={s}
+                onAccept={onAcceptShare ? () => onAcceptShare(s.id) : undefined}
+                onReject={onRejectShare ? () => onRejectShare(s.id) : undefined}
+              />
+            ))}
+          </View>
+        ) : null}
+
         {/* MIS PARTIDOS */}
         <SectionHeader
           title="Mis partidos completos" count={matches.length}
@@ -127,6 +158,7 @@ export function MyLibraryScreen({
                 onRegisterResult={onRegisterResult ? () => onRegisterResult(m) : undefined}
                 onToggleVisibility={() => onToggleVisibility(m)}
                 onOpen={() => onOpenItem?.(m)}
+                onShareVideo={m.canShare && onShareVideo ? () => onShareVideo(m) : undefined}
               />
             ))}
           </View>
@@ -151,7 +183,7 @@ export function MyLibraryScreen({
         ) : null}
       </ScrollView>
 
-      {onChangeTab && <BottomTabBar role="player" active={activeTab ?? 'profile'} onChange={onChangeTab}/>}
+      {onChangeTab && !hideBottomTabBar && <BottomTabBar role="player" active={activeTab ?? 'profile'} onChange={onChangeTab}/>}
 
       {/* Modal de edición de descripción */}
       <Modal visible={editing !== null} transparent animationType="fade" onRequestClose={() => setEditing(null)}>
@@ -214,6 +246,7 @@ export function MyLibraryScreen({
         </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
+    </GestureDetector>
   );
 }
 
@@ -244,12 +277,13 @@ function SectionHeader({ title, count, collapsed, onToggle }: {
   );
 }
 
-function MatchRow({ match, onCreateHighlight, onRegisterResult, onToggleVisibility, onOpen }: {
+function MatchRow({ match, onCreateHighlight, onRegisterResult, onToggleVisibility, onOpen, onShareVideo }: {
   match: LibraryMatch;
   onCreateHighlight: () => void;
   onRegisterResult?: () => void;
   onToggleVisibility: () => void;
   onOpen: () => void;
+  onShareVideo?: () => void;
 }) {
   const { colors } = useTheme();
   return (
@@ -282,6 +316,11 @@ function MatchRow({ match, onCreateHighlight, onRegisterResult, onToggleVisibili
         {match.subtitle ? (
           <Text style={{ fontSize: 11, color: colors.muted2, lineHeight: 15 }}>{match.subtitle}</Text>
         ) : null}
+        {match.sharedBy ? (
+          <Text style={{ fontSize: 11, color: colors.muted2, lineHeight: 15 }}>
+            Compartido por {match.sharedBy.name ?? `@${match.sharedBy.username}`}
+          </Text>
+        ) : null}
         {match.highlightsCount > 0 ? (
           <Text style={{ fontSize: 10, color: colors.accentText, fontWeight: '800', marginTop: 2, letterSpacing: 0.6 }}>
             {match.highlightsCount} HIGHLIGHT{match.highlightsCount === 1 ? '' : 'S'} CREADO{match.highlightsCount === 1 ? '' : 'S'}
@@ -313,8 +352,56 @@ function MatchRow({ match, onCreateHighlight, onRegisterResult, onToggleVisibili
               <Text style={{ color: colors.text2, fontWeight: '700', fontSize: 11 }}>Registrar resultado</Text>
             </Pressable>
           ) : null}
+          {onShareVideo ? (
+            <Pressable onPress={onShareVideo} testID={`share-video-${match.id}`} style={{
+              flexDirection: 'row', alignItems: 'center', gap: 4,
+              borderWidth: 1, borderColor: colors.line, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+            }}>
+              <Share2 size={11} color={colors.text2}/>
+              <Text style={{ color: colors.text2, fontWeight: '700', fontSize: 11 }}>Compartir</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
+    </View>
+  );
+}
+
+function PendingShareRow({ share, onAccept, onReject }: {
+  share: IncomingVideoShare;
+  onAccept?: () => void;
+  onReject?: () => void;
+}) {
+  const { colors } = useTheme();
+  const name = share.fromUser.name ?? `@${share.fromUser.username}`;
+  return (
+    <View style={{
+      flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 14,
+      backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line,
+    }}>
+      <Avatar name={name} size={40} imageUri={share.fromUser.profilePicture ?? undefined} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text }} numberOfLines={1}>
+          {name}
+        </Text>
+        <Text style={{ fontSize: 11, color: colors.muted2 }}>Te compartió el video de un partido</Text>
+      </View>
+      <Pressable
+        onPress={onReject}
+        testID={`reject-share-${share.id}`}
+        hitSlop={8}
+        style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.line }}
+      >
+        <X size={16} color={colors.muted2}/>
+      </Pressable>
+      <Pressable
+        onPress={onAccept}
+        testID={`accept-share-${share.id}`}
+        hitSlop={8}
+        style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent }}
+      >
+        <Check size={16} color={colors.ink}/>
+      </Pressable>
     </View>
   );
 }

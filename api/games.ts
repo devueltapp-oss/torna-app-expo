@@ -8,6 +8,9 @@
  *   PATCH /game/:id/cancel                    → cancelar la partida entera (capitán)
  *   POST  /game/:id/leave                     → darme de baja (miembro no capitán)
  *   POST  /game/:id/cancel-pair               → dar de baja a la pareja retadora (equipo 2)
+ *   POST  /game/:id/share                     → compartir el video de una partida FINALIZADA (capitán)
+ *   GET   /game/shares/incoming                → solicitudes de video pendientes dirigidas a mí
+ *   PATCH /game/shares/:shareId/accept|reject  → aceptar/rechazar un video compartido
  *
  * El backend envuelve toda respuesta en { data, statusCode } (TransformInterceptor).
  */
@@ -199,6 +202,31 @@ export function leaveGame(gameId: string): Promise<unknown> {
 
 export function cancelChallengerPair(gameId: string): Promise<unknown> {
   return authedSend('POST', `/game/${gameId}/cancel-pair`);
+}
+
+/* ─────────── Compartir el video de una partida finalizada ─────────── */
+
+export interface IncomingVideoShare {
+  id: string;
+  createdAt: string;
+  fromUser: { id: string; username: string; name?: string | null; profilePicture?: string | null };
+  game: { id: string; createdAt: string; durationSeconds?: number | null };
+}
+
+export function shareGameVideo(gameId: string, toUserId: string): Promise<unknown> {
+  return authedSend('POST', `/game/${gameId}/share`, { toUserId });
+}
+
+export function fetchIncomingVideoShares(): Promise<IncomingVideoShare[]> {
+  return authedGet<IncomingVideoShare[]>('/game/shares/incoming');
+}
+
+export function acceptVideoShare(shareId: string): Promise<unknown> {
+  return authedSend('PATCH', `/game/shares/${shareId}/accept`);
+}
+
+export function rejectVideoShare(shareId: string): Promise<unknown> {
+  return authedSend('PATCH', `/game/shares/${shareId}/reject`);
 }
 
 /* ─────────── Comentarios de un partido (chat del stream) ─────────── */
