@@ -11,7 +11,9 @@
       "Bash(npm info *)",
       "Bash(cd C:\\\\Users\\\\casik\\\\Desktop\\\\Torna Design System\\\\expo *)",
       "Bash(grep -E \"\\\\.tsx$\")",
-      "Bash(Get-ChildItem *)"
+      "Bash(Get-ChildItem *)",
+      "WebSearch",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }

@@ -44,12 +44,18 @@ import {
 import { TabId, BottomTabBar } from './components/BottomTabBar';
 import { AnimatedTabPane } from './components/AnimatedTabPane';
 import { VideoPreviewModal } from './components/VideoPreviewModal';
+import { ClubPrepareGameContainer } from './components/ClubPrepareGameContainer';
+import { ClubCreateGameContainer } from './components/ClubCreateGameContainer';
+import { ClubAssignPlayersContainer } from './components/ClubAssignPlayersContainer';
+import { ClubEditCourtContainer } from './components/ClubEditCourtContainer';
+import { ClubCourtScheduleContainer } from './components/ClubCourtScheduleContainer';
 import { UpcomingMatchSheet } from './components/UpcomingMatchSheet';
 import { useLiveGames } from './hooks/useLiveGames';
 import { useOpenGames } from './hooks/useOpenGames';
 import { useMyGames } from './hooks/useMyGames';
 
 import { useClubGames } from './hooks/useClubGames';
+import { useCourtBlocksForDay } from './hooks/useCourtBlocksForDay';
 import { useFeed } from './hooks/useFeed';
 import { usePlayerMatches } from './hooks/usePlayerMatches';
 import { useIncomingVideoShares } from './hooks/useIncomingVideoShares';
@@ -176,7 +182,28 @@ type AppStackParamList = {
   /** `initialTab` lo usa el routing de push (partida cancelada / baja) para
    *  aterrizar en el hub de partidos en vez de en Inicio. */
   MainPlayer: { initialTab?: TabId } | undefined;
-  MainClub: undefined;
+  /** `initialTab` (2026-10-02, paridad con `MainPlayer`): agendar una partida
+   *  nueva vuelve a Juegos, donde aparece — no a Inicio. */
+  MainClub: { initialTab?: TabId } | undefined;
+  /** Enlazar cámara por BLE/WiFi vive INLINE dentro de esta pantalla (ver
+   *  `InlineCameraLink` en `ClubPrepareGameContainer.tsx`) — ya no hay una
+   *  ruta `ClubCameras` separada (eliminada 2026-10-03). */
+  ClubPrepareGame: { gameId: string };
+  /** Paso 1 de "Agendar partida" como club — mismo bloque libre que la reserva del player. */
+  ClubCreateGame: undefined;
+  ClubAssignPlayers: {
+    courtId: string;
+    courtLabel: string;
+    cameraOptions: { id: string; identifier: string }[];
+    date: string;
+    slotStart: string;
+    slotEnd: string;
+    durationMinutes: number;
+  };
+  /** Editar cancha (club) — cámaras asignadas + activar/desactivar. */
+  ClubEditCourt: { courtId: string; liveGameId?: string | null };
+  /** Horarios de cancha (club) — semanal + excepciones. */
+  ClubCourtSchedule: { courtId: string };
   GameDetail: { gameId: string; clipData?: GameDetailData; liveStreamUrl?: string };
   GameChat: { gameId: string; title?: string; readOnly?: boolean };
   DirectChat: { userId: string; title?: string };
@@ -642,58 +669,7 @@ function NotificationsContainer({ navigation }: { navigation: any }) {
 function ReserveBlocksContainer({ route, navigation }: { route: any; navigation: any }) {
   const { clubId, courtId } = route.params || {};
   const days = React.useMemo(() => buildDays(6), []);
-  const [courts, setCourts] = React.useState<ClubCourtPublic[]>([]);
-  const [courtSlots, setCourtSlots] = React.useState<CourtSlots<ClubCourtPublic>[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [clubName, setClubName] = React.useState('');
-  const [clubLoc, setClubLoc] = React.useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null });
-
-  React.useEffect(() => {
-    if (!clubId) { setLoading(false); return; }
-    let active = true;
-    setLoading(true);
-    // En RN el fetch a veces cuelga sin resolver: sin timeout el spinner quedaría para
-    // siempre. `withTimeout` garantiza que la carga SIEMPRE cierre.
-    const withTimeout = <T,>(p: Promise<T>, ms: number, fb: T): Promise<T> =>
-      Promise.race([p, new Promise<T>((r) => setTimeout(() => r(fb), ms))]);
-    (async () => {
-      const cs = await withTimeout(
-        fetchClubCourts(clubId).catch(() => [] as ClubCourtPublic[]), 6000, [],
-      );
-      const prof = await withTimeout(
-        fetchUserProfile(clubId)
-          .then((p) => ({ name: p.name ?? p.username, lat: p.latitude, lng: p.longitude }))
-          .catch(() => null),
-        6000, null,
-      );
-      if (!active) return;
-      // Cancha inactiva = sin slots ni reservas: no entra a la grilla (igual que el desktop).
-      setCourts(cs.filter((c) => c.active !== false));
-      if (prof) { setClubName(prof.name); setClubLoc({ lat: prof.lat, lng: prof.lng }); }
-    })();
-    return () => { active = false; };
-  }, [clubId]);
-
-  // Un token por carga: si el usuario cambia de día rápido, la respuesta vieja que llega
-  // tarde no debe pisar la nueva.
-  const loadToken = React.useRef(0);
-  const loadSlots = React.useCallback((iso: string | undefined, list: ClubCourtPublic[]) => {
-    const token = ++loadToken.current;
-    if (!iso || list.length === 0) { setCourtSlots([]); setLoading(false); return; }
-    setLoading(true);
-    Promise.all(
-      list.map(async (court) => ({
-        court,
-        slots: await fetchCourtSlots(court.id, iso).catch(() => []),
-      })),
-    ).then((res) => {
-      if (token !== loadToken.current) return;
-      setCourtSlots(res);
-      setLoading(false);
-    });
-  }, []);
-
-  React.useEffect(() => { loadSlots(days[0]?.iso, courts); }, [loadSlots, days, courts]);
+  const { clubName, clubLoc, courts, courtSlots, loading, loadSlots } = useCourtBlocksForDay(clubId, days);
 
   return (
     <ReserveBlocksScreen
@@ -1489,28 +1465,53 @@ function MainPlayer({ navigation, route }: any) {
 
 /* ─────────── Main tabs · CLUB ─────────── */
 
-function MainClub({ navigation }: any) {
-  const [tab, setTab] = React.useState<TabId>('home');
+function MainClub({ navigation, route }: any) {
+  const [tab, setTab] = React.useState<TabId>(route?.params?.initialTab ?? 'home');
   const { user } = useAuth();
   const clubId = user?.id;
 
+  // Crear una partida (`ClubAssignPlayersContainer`) resetea el stack a este
+  // route con `initialTab:'games'` + `ClubPrepareGame` encima, para que
+  // "volver" desde la preparación de cámaras aterrice en Juegos (donde la
+  // partida recién creada aparece) — mismo mecanismo que ya usa `MainPlayer`
+  // para pushes de partida.
+  React.useEffect(() => {
+    const requested: TabId | undefined = route?.params?.initialTab;
+    if (!requested) return;
+    setTab(requested);
+    navigation.setParams({ initialTab: undefined });
+  }, [route?.params?.initialTab, navigation]);
+
   // Datos reales del club autenticado (canchas, partidas).
-  const { games: clubGames } = useClubGames(clubId);
+  const { games: clubGames, loading: clubGamesLoading, error: clubGamesError, refresh: refreshClubGames } = useClubGames(clubId);
   const [courts, setCourts] = React.useState<CourtData[]>([]);
+  const [courtsLoading, setCourtsLoading] = React.useState(false);
+  const [courtsError, setCourtsError] = React.useState<string | null>(null);
   // Inbox de Chats del club (DMs 1-a-1 + chats grupales de partidas).
   const {
     items: clubInbox, loading: clubInboxLoading, refresh: refreshClubInbox, remove: removeClubChat,
   } = useInbox();
-  // Badge de la campanita del club (mismos endpoints que el player).
+  // Badge de la campanita del club (mismos endpoints que el player). Se
+  // refresca sola por AppState/push (ver el hook) — no hace falta sumarla al
+  // listener de foco de abajo.
   const { count: clubUnreadNotifications } = useNotificationBadge();
-  React.useEffect(() => {
-    if (!clubId) return;
+
+  // Paridad con Player (2026-10-02): un club también sigue jugadores/clubes y
+  // ve su feed de seguidos en Inicio. Mismos hooks que `MainPlayer`, sin tocarlos.
+  const { liveGames: followedLiveGames, refresh: refreshFollowedLive } = useLiveGames();
+  const { feed: clubFeedPosts, refresh: refreshClubFeed, toggleLike: toggleClubFeedLike } = useFeed(clubId);
+
+  const loadCourts = React.useCallback(() => {
+    if (!clubId) { setCourts([]); return; }
+    setCourtsLoading(true); setCourtsError(null);
     fetchClubCourts(clubId)
       .then((cs) => setCourts(cs.map((c) => ({
         id: c.id, name: c.name, cams: c.cams, next: c.nextSlot || null,
       }))))
-      .catch(() => setCourts([]));
+      .catch(() => { setCourtsError('No se pudieron cargar las canchas. Deslizá para reintentar.'); })
+      .finally(() => setCourtsLoading(false));
   }, [clubId]);
+  React.useEffect(() => { loadCourts(); }, [loadCourts]);
 
   // Perfil del club derivado del usuario autenticado (no hay mock).
   const clubProfile: ClubProfile = {
@@ -1521,6 +1522,98 @@ function MainClub({ navigation }: any) {
     description: '',
     region: user?.region ?? '',
   };
+
+  /**
+   * Perfil propio del club (2026-10-02, paridad Club/Player): mismos hooks que
+   * `MainPlayer` para el mismo dato — un club es un `User` más. `matches`
+   * siempre sale `[]` (el endpoint de historial es por `GamePlayer`, y un club
+   * no lo es) y hoy no hay ningún camino para que un club cree un highlight
+   * (el único flujo, `VideoEditorScreen`, parte de un partido jugado por un
+   * player) — ambas pestañas arrancan vacías por diseño, no por bug.
+   */
+  const { player: clubOwnProfile, refresh: refreshClubOwnProfile } = useUserProfile(clubId);
+  const { highlights: clubApiHighlights, refresh: refreshClubHighlights } = useMyHighlights(clubId);
+  const { matches: clubApiMatches } = usePlayerMatches(clubId);
+  const [clubHighlights, setClubHighlights] = React.useState<LibraryHighlight[]>([]);
+  React.useEffect(() => { setClubHighlights(clubApiHighlights); }, [clubApiHighlights]);
+  const [clubMatches, setClubMatches] = React.useState<LibraryMatch[]>([]);
+  React.useEffect(() => { setClubMatches(clubApiMatches); }, [clubApiMatches]);
+  const clubToggleVisibility = useHighlightVisibility(setClubHighlights, setClubMatches);
+  const clubEditDescription = React.useCallback((item: LibraryHighlight, description: string) => {
+    const prev = item.description ?? null;
+    setClubHighlights(xs => xs.map(h => (h.id === item.id ? { ...h, description } : h)));
+    updateHighlightMeta(item.id, { description }).catch(() => {
+      setClubHighlights(xs => xs.map(h => (h.id === item.id ? { ...h, description: prev } : h)));
+      Alert.alert('No se pudo guardar', 'Intenta de nuevo.');
+    });
+  }, []);
+  const clubOwner: ProfileOwner = {
+    name: user?.name ?? user?.username ?? '',
+    username: atHandle(user?.username),
+    club: '',
+    location: user?.region ?? '',
+    followers: clubOwnProfile?.followers ?? 0,
+    following: clubOwnProfile?.followingCount ?? 0,
+    profilePicture: user?.profilePicture,
+    category: null,
+  };
+  const [clubProfileView, setClubProfileView] = React.useState<'profile' | 'library' | 'settings'>('profile');
+  const [clubPreviewVideo, setClubPreviewVideo] = React.useState<{
+    url: string; title: string; durationSeconds: number; highlightId?: string;
+  } | null>(null);
+  const openClubPreview = React.useCallback((item: LibraryItem) => {
+    if (item.kind === 'match') {
+      setClubPreviewVideo({ url: item.recordingUrl, title: item.title, durationSeconds: item.durationSeconds });
+    } else if (item.kind === 'highlight') {
+      setClubPreviewVideo({
+        url: item.streamUrl ?? '', title: item.title,
+        durationSeconds: item.durationSeconds, highlightId: item.id,
+      });
+    }
+  }, []);
+  // Conteos de seguidores/seguidos siempre frescos al abrir Perfil (mismo
+  // criterio que `MainPlayer.handleTab`).
+  const handleClubTab = (id: TabId) => {
+    setTab(id);
+    if (id === 'profile') {
+      setClubProfileView('profile');
+      refreshClubOwnProfile();
+    }
+  };
+
+  // Cancelar (soft) la reserva de otro usuario en la propia cancha —
+  // `PATCH /game/:id/cancel-reservation`, distinto del cancel de jugador-dueño
+  // que ya usa `MainPlayer`. El sheet de confirmación vive dentro de
+  // `GamesScreen`; acá solo se pega al backend y se refresca la lista.
+  const handleCancelClubGame = React.useCallback(async (gameId: string) => {
+    await gamesApi.cancelClubReservation(user ?? null, gameId);
+    refreshClubGames();
+  }, [user, refreshClubGames]);
+
+  // Finalizar manualmente una partida EN VIVO — `PATCH /game/:id
+  // {status:'FINISHED'}`, única transición manual que existe sobre un vivo
+  // (no hay "detener sin finalizar" ni "reanudar": no existen en el backend).
+  const handleFinishClubGame = React.useCallback(async (gameId: string) => {
+    await gamesApi.finishClubGame(user ?? null, gameId);
+    refreshClubGames();
+  }, [user, refreshClubGames]);
+
+  // Refresco por foco (`MainClub` no se desmonta al apilar otra pantalla
+  // encima — mismo motivo que ya documenta `MainPlayer` para sus propios
+  // hooks): sin esto, volver de `GameDetail`/`PlayerProfile`/`ClubProfile` no
+  // actualizaba ni el feed de seguidos, ni las canchas/partidas, ni el perfil
+  // propio del club.
+  React.useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      refreshClubGames();
+      loadCourts();
+      refreshFollowedLive();
+      refreshClubFeed();
+      refreshClubOwnProfile();
+      refreshClubHighlights();
+    });
+    return unsubscribe;
+  }, [navigation, refreshClubGames, loadCourts, refreshFollowedLive, refreshClubFeed, refreshClubOwnProfile, refreshClubHighlights]);
 
   /**
    * Ubicación del club: se pide una vez, después del login, si falta. Sin ella el
@@ -1545,6 +1638,15 @@ function MainClub({ navigation }: any) {
         onClose={() => setLocationPostponed(true)}
         onSaved={() => setLocationPostponed(true)}
       />
+      <VideoPreviewModal
+        visible={!!clubPreviewVideo}
+        url={clubPreviewVideo?.url ?? ''}
+        title={clubPreviewVideo?.title ?? ''}
+        durationSeconds={clubPreviewVideo?.durationSeconds ?? 0}
+        highlightId={clubPreviewVideo?.highlightId}
+        showComments={!!clubPreviewVideo?.highlightId}
+        onClose={() => setClubPreviewVideo(null)}
+      />
     </>
   );
 
@@ -1556,27 +1658,44 @@ function MainClub({ navigation }: any) {
           clubName={clubProfile.name}
           liveGames={[]}
           todayReservations={[]}
-          activeTab="home" onChangeTab={setTab}
+          activeTab="home" onChangeTab={handleClubTab}
           onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id })}
           unreadNotifications={clubUnreadNotifications}
           onOpenNotifications={() => navigation.navigate('Notifications')}
+          games={clubGames} loading={clubGamesLoading} error={clubGamesError}
+          onRefresh={refreshClubGames}
+          onPrepareGame={(gameId) => navigation.navigate('ClubPrepareGame', { gameId })}
+          onCreateGame={() => navigation.navigate('ClubCreateGame')}
+          followedLiveGames={followedLiveGames}
+          feedPosts={clubFeedPosts}
+          onLikeHighlight={toggleClubFeedLike}
+          onOpenSearch={() => navigation.navigate('GlobalSearch')}
+          isActive={tab === 'home'}
         />
       );
     case 'games':
       return (
-        <GamesScreen games={clubGames} activeTab="games" onChangeTab={setTab} role="club"
+        <GamesScreen games={clubGames} loading={clubGamesLoading} error={clubGamesError} onRefresh={refreshClubGames}
+          onPrepareGame={(gameId) => navigation.navigate('ClubPrepareGame', { gameId })} activeTab="games" onChangeTab={handleClubTab} role="club"
           emptyImage={require('./assets/racket.png')}
           onOpenGame={(id) => navigation.navigate('GameDetail', { gameId: id })}
+          onCreateGame={() => navigation.navigate('ClubCreateGame')}
+          onCancelGame={handleCancelClubGame}
+          onFinishGame={handleFinishClubGame}
         />
       );
     case 'courts':
-      return <CourtsScreen courts={courts} activeTab="courts" onChangeTab={setTab} role="club"
-        onOpenCourt={(c) => c.live && navigation.navigate('GameDetail', { gameId: c.live.gameId })} />;
+      // Editar cancha (2026-10-02): tocar una cancha abre su edición
+      // (cámaras + activar/desactivar), no el visor — "Ver en vivo" vive
+      // DENTRO de esa pantalla cuando hay partida en curso.
+      return <CourtsScreen courts={courts.map(c => ({...c, live: clubGames.some(g => g.courtId === c.id && g.status === 'LIVE') ? {gameId: clubGames.find(g => g.courtId === c.id && g.status === 'LIVE')!.id} : null}))} loading={courtsLoading} error={courtsError} onRefresh={loadCourts} activeTab="courts" onChangeTab={handleClubTab} role="club"
+        onOpenSchedule={(c) => navigation.navigate('ClubCourtSchedule', { courtId: c.id })}
+        onOpenCourt={(c) => navigation.navigate('ClubEditCourt', { courtId: c.id, liveGameId: c.live?.gameId ?? null })} />;
     case 'chats':
       return (
         <ChatsInboxScreen
           items={clubInbox} loading={clubInboxLoading}
-          activeTab="chats" onChangeTab={setTab} role="club"
+          activeTab="chats" onChangeTab={handleClubTab} role="club"
           refreshing={clubInboxLoading} onRefresh={refreshClubInbox}
           onOpenDm={(userId, title) => navigation.navigate('DirectChat', { userId, title })}
           onOpenGame={(gameId, title, readOnly) => navigation.navigate('GameChat', { gameId, title, readOnly })}
@@ -1585,12 +1704,49 @@ function MainClub({ navigation }: any) {
         />
       );
     case 'profile':
+      // Perfil propio del club (2026-10-02, paridad Club/Player): mismas 3
+      // sub-vistas que `MainPlayer` (perfil/librería/ajustes), sin la
+      // maquinaria de `AnimatedTabPane` — `MainClub` ya monta/desmonta un
+      // solo screen por vez, a diferencia de `MainPlayer`.
+      if (clubProfileView === 'library') {
+        return (
+          <MyLibraryScreen
+            role="club"
+            matches={clubMatches} highlights={clubHighlights}
+            onBack={() => setClubProfileView('profile')}
+            onCreateHighlight={(m) => navigation.navigate('VideoEditor', {
+              gameId: m.id, recordingUrl: m.recordingUrl, durationSeconds: m.durationSeconds,
+              onHighlightCreated: () => refreshClubHighlights(),
+            })}
+            onToggleVisibility={clubToggleVisibility}
+            onEditDescription={clubEditDescription}
+            onOpenItem={openClubPreview}
+            activeTab="profile" onChangeTab={handleClubTab}
+          />
+        );
+      }
+      if (clubProfileView === 'settings') {
+        return (
+          <ProfileScreen
+            profile={clubProfile}
+            activeTab="profile"
+            onChangeTab={handleClubTab}
+            role="club"
+            onBack={() => setClubProfileView('profile')}
+          />
+        );
+      }
       return (
-        <ProfileScreen
-          profile={clubProfile}
-          activeTab="profile"
-          onChangeTab={setTab}
+        <PlayerOwnProfileScreen
           role="club"
+          owner={clubOwner}
+          matches={clubMatches} highlights={clubHighlights}
+          onOpenLibrary={() => setClubProfileView('library')}
+          onOpenSettings={() => setClubProfileView('settings')}
+          onOpenItem={openClubPreview}
+          onOpenFollowers={() => navigation.push('FollowList', { title: 'Seguidores', users: clubOwnProfile?.followersList ?? [] })}
+          onOpenFollowing={() => navigation.push('FollowList', { title: 'Siguiendo', users: clubOwnProfile?.followingList ?? [] })}
+          activeTab="profile" onChangeTab={handleClubTab}
         />
       );
     default:
@@ -1806,6 +1962,11 @@ function AppNavigator() {
       {/* Main tab containers */}
       <AppStack.Screen name="MainPlayer" component={MainPlayer} />
       <AppStack.Screen name="MainClub"   component={MainClub} />
+      {user?.isClub === true && <AppStack.Screen name="ClubPrepareGame" component={ClubPrepareGameContainer} />}
+      {user?.isClub === true && <AppStack.Screen name="ClubCreateGame" component={ClubCreateGameContainer} />}
+      {user?.isClub === true && <AppStack.Screen name="ClubAssignPlayers" component={ClubAssignPlayersContainer} />}
+      {user?.isClub === true && <AppStack.Screen name="ClubEditCourt" component={ClubEditCourtContainer} />}
+      {user?.isClub === true && <AppStack.Screen name="ClubCourtSchedule" component={ClubCourtScheduleContainer} />}
 
       {/* Game detail */}
       <AppStack.Screen name="GameDetail">

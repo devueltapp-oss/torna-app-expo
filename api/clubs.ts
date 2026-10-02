@@ -9,6 +9,8 @@
  * El backend envuelve toda respuesta en { data, statusCode } (TransformInterceptor).
  */
 import * as SecureStore from 'expo-secure-store';
+import { assertClub, type ClubIdentity } from '../lib/assertClub';
+import type { DaySchedule } from '../lib/schedule';
 import type { ClubCourtPublic, Slot, SearchableCourt, FollowItem, NearbyClub } from '../data/types';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
@@ -65,6 +67,49 @@ async function authedPost<T>(path: string, body: unknown): Promise<T> {
   return unwrap<T>(await res.json().catch(() => ({})));
 }
 
+async function authedPatch<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await token()}` },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { message?: string };
+    const err = new Error(payload.message ?? `HTTP ${res.status}`);
+    (err as any).status = res.status;
+    throw err;
+  }
+  return unwrap<T>(await res.json().catch(() => ({})));
+}
+
+async function authedPut<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await token()}` },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { message?: string };
+    const err = new Error(payload.message ?? `HTTP ${res.status}`);
+    (err as any).status = res.status;
+    throw err;
+  }
+  return unwrap<T>(await res.json().catch(() => ({})));
+}
+
+async function authedDelete(path: string): Promise<void> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${await token()}` },
+  });
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { message?: string };
+    const err = new Error(payload.message ?? `HTTP ${res.status}`);
+    (err as any).status = res.status;
+    throw err;
+  }
+}
+
 // La superficie de la cancha ya no se usa en la app (2026-08-30): el dato que
 // categoriza una partida es el **nivel 1–7** (`Game.category`). El backend sigue
 // devolviendo `surface`; acá simplemente no se mapea.
@@ -92,6 +137,7 @@ function mapCourt(c: BackendCourt): ClubCourtPublic {
     active: c.isActive ?? true,
     blockMinutes: c.blockMinutes,
     pricePerBlock: c.pricePerBlock,
+    cameras: c.cameras,
   };
 }
 
@@ -130,6 +176,86 @@ export async function fetchClubCourts(clubId: string): Promise<ClubCourtPublic[]
 export async function fetchCourt(courtId: string): Promise<ClubCourtPublic> {
   const c = await authedGet<BackendCourt>(`/padel-court/${encodeURIComponent(courtId)}`);
   return mapCourt(c);
+}
+
+/**
+ * Edita una cancha propia — `PATCH /padel-court/:id`, mismo `updatePadelCourt`
+ * que usa `CreateCourtDialog.jsx`/`src/views/settings/index.jsx` del desktop
+ * (confirmado: ahí se manda `{ isActive }` solo, en otro flujo `{ cameraIds }`
+ * — PATCH acepta cualquier subconjunto). No existe un "defaultCameraId": lo
+ * único que hay es QUÉ cámaras pertenecen a la cancha (`cameraIds`, el mismo
+ * multi-select del desktop) y si la cancha entera está activa.
+ */
+export async function updateCourt(
+  user: ClubIdentity | null,
+  courtId: string,
+  input: { cameraIds?: string[]; isActive?: boolean },
+): Promise<ClubCourtPublic> {
+  assertClub(user);
+  const c = await authedPatch<BackendCourt>(`/padel-court/${encodeURIComponent(courtId)}`, input);
+  return mapCourt(c);
+}
+
+/* ─────────── Horarios de la cancha (semanal + excepciones) ───────────
+ * Mismo modelo que `ScheduleDialog.jsx`/`WeeklyScheduleFields.jsx` y
+ * `ExceptionsDialog.jsx` del desktop — POR CANCHA individual, no por club
+ * (`ClubScheduleDialog.jsx` del desktop es solo un atajo de UI que llama este
+ * mismo endpoint en loop sobre todas las canchas; no hay ruta "club entero").
+ */
+
+export interface CourtSchedule {
+  blockMinutes: number;
+  pricePerBlock: number;
+  days: DaySchedule[]; // 7 entradas, una por día de semana
+}
+
+export interface ScheduleException {
+  date: string; // 'YYYY-MM-DD'
+  isOpen: boolean;
+  openMinute?: number;
+  closeMinute?: number;
+}
+
+/** Horario semanal configurado de una cancha. */
+export function fetchCourtSchedule(courtId: string): Promise<CourtSchedule> {
+  return authedGet<CourtSchedule>(`/padel-court/${encodeURIComponent(courtId)}/schedule`);
+}
+
+/**
+ * Guarda el horario semanal — `PUT` (reemplazo completo, no parcial como
+ * `updateCourt`): hay que mandar `blockMinutes`/`pricePerBlock` aunque no se
+ * estén editando, o el backend los perdería.
+ */
+export async function updateCourtSchedule(
+  user: ClubIdentity | null,
+  courtId: string,
+  input: CourtSchedule,
+): Promise<CourtSchedule> {
+  assertClub(user);
+  return authedPut<CourtSchedule>(`/padel-court/${encodeURIComponent(courtId)}/schedule`, input);
+}
+
+/** Excepciones por fecha concreta (cancha cerrada tal día, u horario especial). */
+export function fetchCourtExceptions(courtId: string): Promise<ScheduleException[]> {
+  return authedGet<ScheduleException[]>(`/padel-court/${encodeURIComponent(courtId)}/exceptions`);
+}
+
+export async function createCourtException(
+  user: ClubIdentity | null,
+  courtId: string,
+  input: ScheduleException,
+): Promise<ScheduleException> {
+  assertClub(user);
+  return authedPost<ScheduleException>(`/padel-court/${encodeURIComponent(courtId)}/exceptions`, input);
+}
+
+export async function deleteCourtException(
+  user: ClubIdentity | null,
+  courtId: string,
+  date: string,
+): Promise<void> {
+  assertClub(user);
+  await authedDelete(`/padel-court/${encodeURIComponent(courtId)}/exceptions/${encodeURIComponent(date)}`);
 }
 
 interface BackendNearbyClub {

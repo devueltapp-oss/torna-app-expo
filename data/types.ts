@@ -99,6 +99,13 @@ export interface ClubCourtPublic {
   blockMinutes?: number;
   /** Precio de UN bloque; el total de la reserva es precio × bloques. */
   pricePerBlock?: number;
+  /**
+   * Cámaras reales de esta cancha (id + identificador), 2026-10-02 — las
+   * necesita el club para elegir con cuál(es) transmitir al agendar una
+   * partida (`POST /game` exige `cameraIds`). Antes se descartaban en
+   * `mapCourt` (`api/clubs.ts`) y solo se guardaba el conteo en `cams`.
+   */
+  cameras?: { id: string; identifier: string }[];
 }
 export interface UpcomingPublicGame {
   id: string; court: string; time: string; date: string; players: number;

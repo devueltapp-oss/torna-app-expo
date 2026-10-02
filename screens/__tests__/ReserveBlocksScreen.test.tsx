@@ -143,4 +143,23 @@ describe('ReserveBlocksScreen — elegir un bloque libre', () => {
     fireEvent.press(getByText('27'));
     expect(onDayChange).toHaveBeenCalledWith(days[1]);
   });
+
+  /**
+   * Bug real (2026-10-03): elegir una cancha dentro de un bloque no se podía
+   * deshacer sin elegir OTRA — si te arrepentías, quedabas pegado a esa
+   * selección. Tocar la MISMA cancha ya elegida ahora deselecciona, igual
+   * que el filtro "Todas las canchas" / cualquier cancha de arriba.
+   */
+  it('tocar la misma cancha ya elegida la deselecciona (vuelve a "Elige un bloque libre")', () => {
+    const { getByText, getByTestId, queryByText } = renderScreen(base);
+
+    fireEvent.press(getByText('06:00 – 07:30'));
+    fireEvent.press(getByTestId('block-court-c1'));
+    expect(getByText('Duración')).toBeTruthy();
+    expect(getByText(/Cancha 1 · 06:00–07:30/)).toBeTruthy();
+
+    fireEvent.press(getByTestId('block-court-c1'));
+    expect(queryByText('Duración')).toBeNull();
+    expect(getByText('Elige un bloque libre')).toBeTruthy();
+  });
 });

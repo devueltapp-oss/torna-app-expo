@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, ScrollView, Image, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Lock, MapPin } from 'lucide-react-native';
+import { ChevronLeft, Lock, MapPin } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { Button, Input, SectionHeader } from '../components/ui';
 import { ConfirmSheet } from '../components/ConfirmSheet';
@@ -24,6 +24,13 @@ interface Props {
   onChangeTab?: (id: TabId) => void;
   activeTab?: TabId;
   role?: 'player' | 'club';
+  /**
+   * Flecha de volver en el header (2026-10-02): `ProfileScreen` pasó de ser
+   * la raíz del tab Perfil del club a ser su sub-vista "Ajustes", abierta
+   * desde el nuevo perfil propio (ver `PlayerOwnProfileScreen`). Sin esto
+   * queda exactamente igual que antes — no rompe al único uso previo.
+   */
+  onBack?: () => void;
 }
 
 const PASSWORD_RULES = (next: string, confirm: string) => [
@@ -58,7 +65,7 @@ function PasswordChecklist({ next, confirm }: { next: string; confirm: string })
   );
 }
 
-export function ProfileScreen({ profile, onSave, onChangePassword, onChangeTab, activeTab = 'profile', role = 'club' }: Props) {
+export function ProfileScreen({ profile, onSave, onChangePassword, onChangeTab, activeTab = 'profile', role = 'club', onBack }: Props) {
   const { colors } = useTheme();
   const { changePassword, logout } = useAuth();
   const [tab, setTab] = React.useState<'profile' | 'security'>('profile');
@@ -118,6 +125,11 @@ export function ProfileScreen({ profile, onSave, onChangePassword, onChangeTab, 
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       {/* Header */}
       <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: colors.surface }}>
+        {onBack && (
+          <Pressable onPress={onBack} testID="profile-back" accessibilityLabel="Volver">
+            <ChevronLeft size={22} color={colors.text}/>
+          </Pressable>
+        )}
         <View style={{ width: 72, height: 72, borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' }}>
           <Image source={tornaLogo} style={{ width: 50, height: 50 }}/>
         </View>

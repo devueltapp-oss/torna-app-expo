@@ -62,13 +62,15 @@ export interface MyLibraryScreenProps {
   onChangeTab?: (id: TabId) => void;
   /** `MainPlayer` renderiza una sola tab bar externa y fija: no dupliques la suya. */
   hideBottomTabBar?: boolean;
+  /** `'club'` (2026-10-02, paridad Club/Player): misma pantalla, la tab bar pasa a `role="club"`. */
+  role?: 'player' | 'club';
 }
 
 export function MyLibraryScreen({
   matches, highlights,
   onBack, onCreateHighlight, onRegisterResult, onToggleVisibility, onEditDescription, onOpenItem,
   onShareVideo, pendingShares = [], onAcceptShare, onRejectShare,
-  activeTab, onChangeTab, hideBottomTabBar,
+  activeTab, onChangeTab, hideBottomTabBar, role = 'player',
 }: MyLibraryScreenProps) {
   const { colors, isDark } = useTheme();
   const [open, setOpen] = React.useState<Record<SectionKey, boolean>>({
@@ -183,7 +185,7 @@ export function MyLibraryScreen({
         ) : null}
       </ScrollView>
 
-      {onChangeTab && !hideBottomTabBar && <BottomTabBar role="player" active={activeTab ?? 'profile'} onChange={onChangeTab}/>}
+      {onChangeTab && !hideBottomTabBar && <BottomTabBar role={role} active={activeTab ?? 'profile'} onChange={onChangeTab}/>}
 
       {/* Modal de edición de descripción */}
       <Modal visible={editing !== null} transparent animationType="fade" onRequestClose={() => setEditing(null)}>

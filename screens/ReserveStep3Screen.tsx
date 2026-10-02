@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, Text, ScrollView, Pressable } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, ScrollView, Pressable, Platform } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronDown, AlertTriangle, Radio, Plus, X } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { Button, AppHeader, Avatar, Switch } from '../components/ui';
@@ -67,6 +67,11 @@ export function ReserveStep3Screen({
   onConfirm,
 }: Props) {
   const { colors } = useTheme();
+  // Mismo bug/fix que `ReserveBlocksScreen`/`BottomTabBar`: footer fuera del
+  // SafeAreaView (`edges:['top']`), padding fijo tapado por la barra/gestos
+  // de Android edge-to-edge.
+  const insets = useSafeAreaInsets();
+  const footerPaddingBottom = Platform.OS === 'ios' ? insets.bottom + 18 : Math.max(insets.bottom, 18);
   const [searching, setSearching] = React.useState(false); // "Buscar rivales" switch
   // Categoría de la partida: 1 = más alta, 7 = iniciación (convención de pádel).
   // Arranca en el nivel del host (o 7 si no declaró uno) — sigue siendo
@@ -220,8 +225,8 @@ export function ReserveStep3Screen({
         </View>
       </ScrollView>
 
-      <View style={{
-        paddingHorizontal: 16, paddingTop: 12, paddingBottom: 18,
+      <View testID="reserve-step3-footer" style={{
+        paddingHorizontal: 16, paddingTop: 12, paddingBottom: footerPaddingBottom,
         borderTopWidth: 1, borderTopColor: colors.line, backgroundColor: colors.surface, gap: 8,
       }}>
         {!partner && (

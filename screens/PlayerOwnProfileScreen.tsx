@@ -59,6 +59,12 @@ export interface PlayerOwnProfileScreenProps {
   onChangeTab: (id: TabId) => void;
   /** `MainPlayer` renderiza una sola tab bar externa y fija: no dupliques la suya. */
   hideBottomTabBar?: boolean;
+  /**
+   * `'club'` (2026-10-02, paridad Club/Player): mismo layout, dos diferencias
+   * — la tab bar pasa a `role="club"` y se omite "· CAT. N" (un club no
+   * tiene nivel de juego). Default `'player'` para no romper `MainPlayer`.
+   */
+  role?: 'player' | 'club';
 }
 
 export function PlayerOwnProfileScreen({
@@ -66,6 +72,7 @@ export function PlayerOwnProfileScreen({
   onOpenLibrary, onOpenSettings, onOpenItem,
   onOpenFollowers, onOpenFollowing,
   activeTab, onChangeTab, hideBottomTabBar,
+  role = 'player',
 }: PlayerOwnProfileScreenProps) {
   const { colors } = useTheme();
   const [tab, setTab] = React.useState<TabKey>('highlights');
@@ -132,7 +139,7 @@ export function PlayerOwnProfileScreen({
               style={{ flex: 1, fontFamily: fonts.bold, fontSize: 17, letterSpacing: -0.2, color: colors.text }}
               numberOfLines={1}
             >
-              {owner.username} · CAT. {owner.category ?? 7}
+              {role === 'club' ? owner.username : `${owner.username} · CAT. ${owner.category ?? 7}`}
             </Text>
             <HeroIconButton onPress={onOpenLibrary} dot>
               <Play size={16} color={colors.text}/>
@@ -220,7 +227,7 @@ export function PlayerOwnProfileScreen({
         </GestureDetector>
       </ScrollView>
 
-      {!hideBottomTabBar && <BottomTabBar role="player" active={activeTab} onChange={onChangeTab}/>}
+      {!hideBottomTabBar && <BottomTabBar role={role} active={activeTab} onChange={onChangeTab}/>}
 
       <ImageViewerModal
         visible={viewer}

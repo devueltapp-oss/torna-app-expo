@@ -167,7 +167,7 @@ export function Input(p: InputProps) {
  * legible without introducing palette-foreign hues.
  */
 
-export type GameStatus = 'LIVE' | 'SCHEDULED' | 'STOPPED' | 'FINISHED' | 'PENDING';
+export type GameStatus = 'LIVE' | 'SCHEDULED' | 'STOPPED' | 'FINISHED' | 'PENDING' | 'CANCELLED';
 
 export function StatusBadge({ status, sub }: { status: GameStatus; sub?: string }) {
   const { colors } = useTheme();
@@ -178,6 +178,10 @@ export function StatusBadge({ status, sub }: { status: GameStatus; sub?: string 
     STOPPED:   { bg: 'transparent',     fg: colors.muted2, label: 'DETENIDA',   border: colors.line },
     FINISHED:  { bg: colors.bg3,        fg: colors.text2,  label: 'FINALIZADA' },
     PENDING:   { bg: 'transparent',     fg: colors.text,   label: 'PENDIENTE',  border: colors.lineStrong },
+    // Distinta de STOPPED (2026-10-02): cancelar una reserva mostraba "DETENIDA",
+    // como si la transmisión se hubiera cortado — confuso cuando "detener" pasa a
+    // ser una acción propia sobre una partida EN VIVO (ver GamesScreen, club).
+    CANCELLED: { bg: 'transparent',     fg: colors.muted2, label: 'CANCELADA',  border: colors.line },
   };
   const c = map[status];
   return (

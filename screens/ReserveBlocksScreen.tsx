@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, ScrollView, Pressable, ActivityIndicator, Platform } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronRight, Camera, Check } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
@@ -59,6 +59,14 @@ export function ReserveBlocksScreen({
   initialCourtId, onBack, onDayChange, onContinue,
 }: Props) {
   const { colors } = useTheme();
+  // ⚠️ Padding inferior real del dispositivo, no un número fijo — mismo bug y
+  // mismo fix que `BottomTabBar` (ver su comentario): con Android edge-to-edge
+  // (obligatorio desde API 35) un footer fuera del SafeAreaView (`edges:['top']`,
+  // a propósito, para que el fondo del scroll llegue hasta el borde) dibuja
+  // POR DEBAJO de la barra/gestos del sistema. `paddingBottom: 18` fijo tapaba
+  // "Continuar →" con los botones nativos de retroceso en vez de dejarlo arriba.
+  const insets = useSafeAreaInsets();
+  const footerPaddingBottom = Platform.OS === 'ios' ? insets.bottom + 18 : Math.max(insets.bottom, 18);
   const [dayIdx, setDayIdx] = React.useState(0);
   const [courtFilter, setCourtFilter] = React.useState<string>(initialCourtId ?? '');
   const [openKey, setOpenKey] = React.useState<string | null>(null);
@@ -190,7 +198,14 @@ export function ReserveBlocksScreen({
                   onToggle={() => setOpenKey(openKey === block.key ? null : block.key)}
                   pickedCourtId={picked?.blockKey === block.key ? picked.courtId : null}
                   onPickCourt={(courtId) => {
-                    setPicked({ blockKey: block.key, courtId });
+                    // Tocar la MISMA cancha ya elegida la deselecciona (igual
+                    // que el filtro de arriba) — antes, sin elegir otra, no
+                    // había forma de volver a "Elige un bloque libre".
+                    setPicked((prev) => (
+                      prev?.blockKey === block.key && prev.courtId === courtId
+                        ? null
+                        : { blockKey: block.key, courtId }
+                    ));
                     setBlocks(1);
                   }}
                   maxBlocks={maxBlocks}
@@ -204,8 +219,8 @@ export function ReserveBlocksScreen({
       </ScrollView>
 
       {/* Footer */}
-      <View style={{
-        paddingHorizontal: 16, paddingTop: 12, paddingBottom: 18,
+      <View testID="reserve-blocks-footer" style={{
+        paddingHorizontal: 16, paddingTop: 12, paddingBottom: footerPaddingBottom,
         borderTopWidth: 1, borderTopColor: colors.line, backgroundColor: colors.surface, gap: 8,
       }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>

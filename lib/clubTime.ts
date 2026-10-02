@@ -57,3 +57,19 @@ function toDate(iso?: string | null): Date | null {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? null : d;
 }
+
+/**
+ * `('2026-09-02', '12:30')` → `'2026-09-02T12:30:00.000Z'`. La operación
+ * INVERSA de `formatClubTime`/`formatClubDate` — hace falta porque `POST /game`
+ * (a diferencia de `POST /game/reserve`) espera `scheduledStartAt`/`scheduledEndAt`
+ * ya compuestos por el cliente, igual que hace `CreateGameDialog.jsx` del
+ * desktop (`bloque.scheduledStartAt.toISOString()`).
+ *
+ * ⚠️ Por CONCATENACIÓN de string, nunca `new Date(\`${date}T${hhmm}\`).toISOString()`:
+ * sin el sufijo `Z`, el motor interpreta la hora como LOCAL del dispositivo y
+ * la convierte — exactamente el bug ya documentado arriba (12:30→08:30 en
+ * Venezuela), pero en sentido de escritura en vez de lectura.
+ */
+export function toClubIsoLabel(date: string, hhmm: string): string {
+  return `${date}T${hhmm}:00.000Z`;
+}

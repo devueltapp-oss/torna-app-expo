@@ -1,0 +1,128 @@
+/**
+ * Bug real (2026-10-03): una partida DETENIDA (`STOPPED`) es una cámara que
+ * nunca se conectó o se cortó, no una partida terminada — el horario sigue
+ * siendo válido. Antes, `Preparation` trataba `STOPPED` igual que
+ * `FINISHED`/`CANCELLED` ("terminal") y mostraba "Esta partida ya terminó o
+ * fue cancelada" en vez de dejar reconectar la cámara.
+ *
+ * Bug real (2026-10-03, segundo): "Conectar cámara al WiFi" navegaba a una
+ * ruta `ClubCameras` aparte — el usuario pidió explícitamente no perder el
+ * foco entre vistas para enlazar por BLE. Ahora `InlineCameraLink` monta
+ * `ClubCamerasScreen` DENTRO de esta misma pantalla, sin `navigation.navigate`.
+ */
+import React from 'react';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { ClubPrepareGameContainer } from '../ClubPrepareGameContainer';
+import { ThemeProvider } from '../../theme';
+import { useAuth } from '../../contexts/AuthContext';
+import { fetchClubGames, fetchClubGameCameras, prepareClubGame } from '../../api/games';
+import { fetchClubCameras } from '../../api/cameras';
+
+jest.mock('../../contexts/AuthContext', () => ({ useAuth: jest.fn() }));
+jest.mock('../../api/games', () => ({
+  fetchClubGames: jest.fn(), fetchClubGameCameras: jest.fn(), prepareClubGame: jest.fn(),
+}));
+jest.mock('../../api/cameras', () => ({
+  fetchClubCameras: jest.fn(), fetchCameraCohn: jest.fn(), saveCameraCohn: jest.fn(), assignCameraWifi: jest.fn(async () => {}),
+  // `InlineCameraLink` monta `useClubCameras`, que además carga las
+  // configuraciones de WiFi guardadas — sin mockear esto, el hook se queda
+  // esperando para siempre y el test nunca asienta.
+  fetchCameraConfigs: jest.fn(async () => []), createCameraConfig: jest.fn(),
+}));
+
+function renderWithTheme(ui: React.ReactElement) {
+  return render(<ThemeProvider>{ui}</ThemeProvider>);
+}
+
+const stoppedGame = { gameId: 'g1', gameStatus: 'STOPPED', courtName: 'Cancha 1', court: 'CAM01', isReservation: false, players: [], createdAt: '' };
+const camera = { id: 'cam-1', identifier: 'CAM01', bleName: '1234' };
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  (useAuth as jest.Mock).mockReturnValue({ user: { id: 'club-1', isClub: true } });
+  (fetchClubGames as jest.Mock).mockResolvedValue([stoppedGame]);
+  (fetchClubCameras as jest.Mock).mockResolvedValue([camera]);
+  (fetchClubGameCameras as jest.Mock).mockResolvedValue([camera]);
+});
+
+test('una partida STOPPED NO se trata como terminal: se puede reconectar la cámara', async () => {
+  const utils = renderWithTheme(
+    <ClubPrepareGameContainer route={{ params: { gameId: 'g1' } }} navigation={{ goBack: jest.fn(), navigate: jest.fn(), addListener: jest.fn(() => () => {}) }} />,
+  );
+
+  await waitFor(() => expect(utils.getByText('Cancha 1 · —')).toBeTruthy());
+  // Antes esto mostraba "Esta partida ya terminó o fue cancelada" y bloqueaba todo.
+  expect(utils.queryByText('Esta partida ya terminó o fue cancelada.')).toBeNull();
+  expect(utils.getByText('Conectar cámara al WiFi')).toBeTruthy();
+});
+
+test('"Conectar cámara al WiFi" en una partida STOPPED abre el enlace INLINE (no navega a ninguna ruta)', async () => {
+  const navigate = jest.fn();
+  const utils = renderWithTheme(
+    <ClubPrepareGameContainer route={{ params: { gameId: 'g1' } }} navigation={{ goBack: jest.fn(), navigate, addListener: jest.fn(() => () => {}) }} />,
+  );
+  await waitFor(() => expect(utils.getByText('Conectar cámara al WiFi')).toBeTruthy());
+
+  fireEvent.press(utils.getByText('Conectar cámara al WiFi'));
+
+  // Mismo componente, SIN navegar: reemplaza la vista en el lugar.
+  await waitFor(() => expect(utils.getByText('Conectar cámara')).toBeTruthy());
+  expect(navigate).not.toHaveBeenCalledWith('ClubCameras', expect.anything());
+  expect(utils.queryByText(/El estado de la partida cambió/)).toBeNull();
+
+  // "Volver a la partida" cierra el enlace y vuelve a Preparar partida.
+  fireEvent.press(utils.getByText('Volver a la partida'));
+  await waitFor(() => expect(utils.getByText('Conectar cámara al WiFi')).toBeTruthy());
+});
+
+test('"Iniciar preparación de cámaras" llama a prepareClubGame (no marca LIVE, solo adjunta cámaras)', async () => {
+  (prepareClubGame as jest.Mock).mockResolvedValue(undefined);
+  const noPrep = { ...stoppedGame };
+  (fetchClubGameCameras as jest.Mock).mockResolvedValueOnce([]); // sin cámaras adjuntas aún → prepared=false
+  const utils = renderWithTheme(
+    <ClubPrepareGameContainer route={{ params: { gameId: 'g1' } }} navigation={{ goBack: jest.fn(), navigate: jest.fn(), addListener: jest.fn(() => () => {}) }} />,
+  );
+  await waitFor(() => expect(utils.getByText('Cámaras para esta partida')).toBeTruthy());
+
+  fireEvent.press(utils.getByText('CAM01'));
+  fireEvent.press(utils.getByText('Iniciar preparación de cámaras'));
+
+  await waitFor(() => expect(prepareClubGame).toHaveBeenCalledWith({ id: 'club-1', isClub: true }, 'g1', ['cam-1']));
+});
+
+test('shows an explicit BLE action that starts connection without WiFi configuration',async()=>{
+ const bluetooth = require('../../services/cohn/bluetooth');
+ const close = jest.fn(async()=>{});
+ const connect = jest.spyOn(bluetooth,'connectCameraFromPhone').mockResolvedValue({close,readNetwork:jest.fn(),configureWifi:jest.fn()});
+ const utils=renderWithTheme(<ClubPrepareGameContainer route={{params:{gameId:'g1'}}} navigation={{goBack:jest.fn(),navigate:jest.fn(),addListener:jest.fn(()=>()=>{})}}/>);
+ await waitFor(()=>expect(utils.getByText('Conectar cámara por Bluetooth')).toBeTruthy());
+ expect(connect).not.toHaveBeenCalled();
+ fireEvent.press(utils.getByText('Conectar cámara por Bluetooth'));
+ await waitFor(()=>expect(utils.getByText('Bluetooth conectado')).toBeTruthy());
+ expect(connect).toHaveBeenCalledWith({id:'club-1',isClub:true},'1234',expect.anything(),expect.any(Function),expect.any(Function));
+ utils.unmount();expect(close).toHaveBeenCalled();connect.mockRestore();
+});
+
+test('uses assigned WiFi without opening the WiFi selection view',async()=>{
+ const bluetooth=require('../../services/cohn/bluetooth');
+ (fetchClubCameras as jest.Mock).mockResolvedValue([{...camera,wifiSsid:'Jeyu',wifiPassword:'secret'}]);
+ const credentials={ipAddress:'192.168.1.2',username:'u',password:'p',certificate:'cert'};
+ const configureWifi=jest.fn(async()=>credentials);
+ const connect=jest.spyOn(bluetooth,'connectCameraFromPhone').mockResolvedValue({close:jest.fn(async()=>{}),readNetwork:jest.fn(async()=>null),configureWifi});
+ const utils=renderWithTheme(<ClubPrepareGameContainer route={{params:{gameId:'g1'}}} navigation={{goBack:jest.fn(),navigate:jest.fn(),addListener:jest.fn(()=>()=>{})}}/>);
+ await waitFor(()=>expect(utils.getByText('WiFi asignado: Jeyu')).toBeTruthy());
+ fireEvent.press(utils.getByText('Conectar cámara al WiFi'));
+ await waitFor(()=>expect(utils.getByText('WiFi listo para previsualizar')).toBeTruthy());
+ expect(configureWifi).toHaveBeenCalledWith('Jeyu','secret',expect.anything(),expect.any(Function));
+ expect(utils.getByText('Preparar partida')).toBeTruthy();
+ utils.unmount();connect.mockRestore();
+});
+
+test('can change WiFi even when the camera already has an assigned network',async()=>{
+ (fetchClubCameras as jest.Mock).mockResolvedValue([{...camera,wifiSsid:'Jeyu',wifiPassword:'secret',cameraConfigId:'cfg'}]);
+ const utils=renderWithTheme(<ClubPrepareGameContainer route={{params:{gameId:'g1'}}} navigation={{goBack:jest.fn(),navigate:jest.fn(),addListener:jest.fn(()=>()=>{})}}/>);
+ await waitFor(()=>expect(utils.getByText('Cambiar red WiFi')).toBeTruthy());
+ fireEvent.press(utils.getByText('Cambiar red WiFi'));
+ await waitFor(()=>expect(utils.getByText('Elegí la red WiFi para esta cámara')).toBeTruthy());
+ expect(utils.getByText('+ Nueva configuración de WiFi')).toBeTruthy();
+});

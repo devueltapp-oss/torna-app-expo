@@ -74,3 +74,26 @@ describe('ProfileScreen (club) — eliminar cuenta', () => {
     expect(mockLogout).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * `onBack` (2026-10-02): `ProfileScreen` pasó de ser la raíz del tab Perfil
+ * del club a ser su sub-vista "Ajustes", abierta desde el nuevo perfil
+ * propio. Sin `onBack` el header queda exactamente igual que antes.
+ */
+describe('ProfileScreen — flecha de volver (onBack)', () => {
+  it('sin onBack, no muestra ninguna flecha', () => {
+    const { queryByLabelText } = render(
+      <ThemeProvider initial="light"><ProfileScreen profile={profile} role="club" /></ThemeProvider>,
+    );
+    expect(queryByLabelText(/volver/i)).toBeNull();
+  });
+
+  it('con onBack, la flecha aparece y lo llama al tocarla', () => {
+    const onBack = jest.fn();
+    const { getByTestId } = render(
+      <ThemeProvider initial="light"><ProfileScreen profile={profile} role="club" onBack={onBack} /></ThemeProvider>,
+    );
+    fireEvent.press(getByTestId('profile-back'));
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+});

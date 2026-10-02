@@ -103,3 +103,41 @@ describe('PlayerOwnProfileScreen — nivel (categoría) con default (2026-09-10)
     expect(getByText('@ana · CAT. 2')).toBeTruthy();
   });
 });
+
+/**
+ * Paridad Club/Player (2026-10-02): mismo layout para `role="club"`, dos
+ * diferencias — la tab bar pasa a `role="club"` y se omite "· CAT. N" (un
+ * club no tiene nivel de juego).
+ */
+describe('PlayerOwnProfileScreen — role="club"', () => {
+  it('omite "· CAT. N" en el título (un club no tiene nivel de juego)', () => {
+    const { getByText, queryByText } = render(
+      <ThemeProvider initial="light">
+        <PlayerOwnProfileScreen
+          role="club"
+          owner={{ ...owner, username: '@clubjeyu', category: null }}
+          matches={[]} highlights={[]}
+          onOpenLibrary={jest.fn()} onOpenSettings={jest.fn()}
+          activeTab="profile" onChangeTab={jest.fn()}
+        />
+      </ThemeProvider>,
+    );
+    expect(getByText('@clubjeyu')).toBeTruthy();
+    expect(queryByText(/CAT\./)).toBeNull();
+  });
+
+  it('la tab bar del pie recibe role="club" (no "player")', () => {
+    const { getByText } = render(
+      <ThemeProvider initial="light">
+        <PlayerOwnProfileScreen
+          role="club"
+          owner={owner} matches={[]} highlights={[]}
+          onOpenLibrary={jest.fn()} onOpenSettings={jest.fn()}
+          activeTab="profile" onChangeTab={jest.fn()}
+        />
+      </ThemeProvider>,
+    );
+    // Tabs de club: Canchas · Juegos · Inicio · Chats · Perfil — "Canchas" solo existe en ese set.
+    expect(getByText('Canchas')).toBeTruthy();
+  });
+});

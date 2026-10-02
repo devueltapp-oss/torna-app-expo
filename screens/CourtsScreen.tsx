@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView } from 'react-native';
+import { View, Text, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
 import { CourtCard, CourtData } from '../components/cards';
@@ -7,13 +7,17 @@ import { BottomTabBar, TabId } from '../components/BottomTabBar';
 
 interface Props {
   courts: CourtData[];
+  loading?: boolean;
+  error?: string | null;
+  onRefresh?: () => void;
   onChangeTab?: (id: TabId) => void;
   activeTab?: TabId;
+  onOpenSchedule?: (c: CourtData) => void;
   onOpenCourt?: (c: CourtData) => void;
   role?: 'player' | 'club';
 }
 
-export function CourtsScreen({ courts, onChangeTab, activeTab = 'courts', onOpenCourt, role = 'club' }: Props) {
+export function CourtsScreen({ courts, loading = false, error, onRefresh, onChangeTab, activeTab = 'courts', onOpenCourt, onOpenSchedule, role = 'club' }: Props) {
   const { colors } = useTheme();
   const liveCount = courts.filter(c => c.live).length;
   return (
@@ -23,11 +27,18 @@ export function CourtsScreen({ courts, onChangeTab, activeTab = 'courts', onOpen
         <Text style={{ color: colors.muted2, fontSize: 13 }}>{courts.length} canchas · {liveCount} en vivo ahora</Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
+      <ScrollView refreshControl={onRefresh ? <RefreshControl refreshing={loading} onRefresh={onRefresh}/> : undefined} contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
+        {loading && <ActivityIndicator accessibilityLabel="Cargando canchas"/>}
+        {!!error && <Text accessibilityRole="alert" style={{color: colors.text}}>{error}</Text>}
+        {!loading && !error && !courts.length && <Text style={{color: colors.muted2}}>No hay canchas disponibles para mostrar.</Text>}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -5 }}>
           {courts.map(c => (
-            <View key={c.id} style={{ width: '50%', paddingHorizontal: 5, paddingVertical: 5 }}>
+            <View key={c.id} style={{ width: '100%', paddingHorizontal: 5, paddingVertical: 5, gap: 8 }}>
               <CourtCard court={c} onPress={onOpenCourt}/>
+              {role === 'club' && <View style={{flexDirection: 'row', gap: 16}}>
+                <Pressable accessibilityRole="button" onPress={() => onOpenCourt?.(c)} style={{padding: 12}}><Text style={{color: colors.accentText}}>Cámaras y disponibilidad</Text></Pressable>
+                <Pressable accessibilityRole="button" onPress={() => onOpenSchedule?.(c)} style={{padding: 12}}><Text style={{color: colors.accentText}}>Horarios</Text></Pressable>
+              </View>}
             </View>
           ))}
         </View>

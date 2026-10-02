@@ -13,6 +13,14 @@
       "backgroundColor": "#08203E"
     },
     "plugins": [
+      [
+        "react-native-ble-manager",
+        {
+          "neverForLocation": true,
+          "isBleRequired": false,
+          "bluetoothAlwaysPermission": "Torna usa Bluetooth para que los administradores de club enlacen sus cámaras GoPro al WiFi."
+        }
+      ],
       "expo-video",
       "expo-secure-store",
       [

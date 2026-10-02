@@ -10,7 +10,7 @@
  * Estos tests fuerzan la zona del "dispositivo" a una distinta de UTC: si
  * alguien vuelve a formatear en hora local, fallan.
  */
-import { formatClubDate, formatClubTime } from './clubTime';
+import { formatClubDate, formatClubTime, toClubIsoLabel } from './clubTime';
 
 const TZ_ORIGINAL = process.env.TZ;
 
@@ -58,5 +58,23 @@ describe('formatClubDate', () => {
   it('sin dato devuelve undefined (el llamador decide si mostrar algo)', () => {
     expect(formatClubDate(null)).toBeUndefined();
     expect(formatClubDate('no-es-una-fecha')).toBeUndefined();
+  });
+});
+
+/**
+ * `toClubIsoLabel` es la operación INVERSA: compone el string que `POST /game`
+ * espera (club admin agendando una partida) a partir de fecha + hora del
+ * bloque. Mismo bug en sentido de escritura si se hiciera con
+ * `new Date(...).toISOString()`: el runner ya está fijado en America/Caracas
+ * (ver `beforeAll` de arriba), así que un parseo sin sufijo correría la hora.
+ */
+describe('toClubIsoLabel', () => {
+  it('compone el string por concatenación, sin importar la zona del runner', () => {
+    expect(toClubIsoLabel('2026-09-02', '12:30')).toBe('2026-09-02T12:30:00.000Z');
+  });
+
+  it('formatClubTime(toClubIsoLabel(...)) es la identidad — van y vuelven sin perder la hora', () => {
+    expect(formatClubTime(toClubIsoLabel('2026-09-02', '08:00'))).toBe('08:00');
+    expect(formatClubTime(toClubIsoLabel('2026-09-02', '23:45'))).toBe('23:45');
   });
 });

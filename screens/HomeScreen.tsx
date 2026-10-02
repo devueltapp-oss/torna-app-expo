@@ -6,9 +6,9 @@ import { Search } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { SectionHeader, NotificationBell } from '../components/ui';
-import { LiveGameCard, FeedPost, LiveGameData } from '../components/cards';
+import { LiveGameData } from '../components/cards';
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
-import { VideoPreviewModal } from '../components/VideoPreviewModal';
+import { SocialFeedSections } from '../components/SocialFeedSections';
 import type { FeedPost as FeedPostData, UpcomingGamePlayer, UpcomingGameData } from '../data/types';
 
 const tornaLogo = require('../assets/torna-icon.png');
@@ -110,7 +110,6 @@ export function HomeScreen({
   const { colors, isDark } = useTheme();
   // Ver el comentario de `isFocusedTab` en `Props`.
   const isFocused = useIsFocused() && isFocusedTab;
-  const [highlightModal, setHighlightModal] = React.useState<{ url: string; title: string; id: string } | null>(null);
   // `any`: el ref de `Animated.ScrollView` no tipa `.scrollTo` directamente.
   const scrollRef = React.useRef<any>(null);
 
@@ -222,59 +221,25 @@ export function HomeScreen({
         {/* ⚠️ Sin `upcomingGames` en la condición: el estado vacío es el del
             FEED. Con el strip arriba, alguien con partidas agendadas y sin live
             ni highlights tiene que seguir viendo "Tu feed está vacío" abajo. */}
-        {liveGames.length === 0 && feedPosts.length === 0 ? (
-          <View style={{ alignItems: 'center', paddingHorizontal: 32, paddingVertical: 56, gap: 8 }}>
-            <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text }}>Tu feed está vacío</Text>
-            <Text style={{ fontSize: 13, color: colors.muted2, textAlign: 'center', lineHeight: 19 }}>
-              Sigue a jugadores y clubes para ver aquí sus transmisiones en vivo y sus highlights.
-            </Text>
-          </View>
-        ) : (
-          <>
-            {/* En vivo · de quienes seguís — cards a lo ancho, apiladas */}
-            {liveGames.length > 0 && (
-              <>
-                <View style={{ paddingHorizontal: 16 }}>
-                  {/* Sin acción "Ver todos": las cards ya están todas acá abajo,
-                      así que era un botón que no llevaba a nada nuevo. */}
-                  <SectionHeader title="En vivo · de quienes sigues" />
-                </View>
-                <View style={{ paddingHorizontal: 16, gap: 12 }}>
-                  {liveGames.map((g) => (
-                    <LiveGameCard key={g.id} game={g} onPress={onOpenGame} tornaLogo={tornaLogo} isActive={isFocused} />
-                  ))}
-                </View>
-              </>
-            )}
-
-            {/* ⚠️ Acá vivía "Próximos". Ahora está ARRIBA (`UpcomingStrip`), antes
-                del feed: al final había que bajar toda la pantalla para verlo. No
-                lo devuelvas a esta posición. */}
-
-            {/* Highlights · de tus seguidos — cards a lo ancho, apiladas */}
-            {feedPosts.length > 0 && (
-              <>
-                <View style={{ paddingHorizontal: 16 }}>
-                  <SectionHeader title="Highlights · de tus seguidos" />
-                </View>
-                <View style={{ paddingHorizontal: 16, gap: 12 }}>
-                  {feedPosts.map(p => (
-                    <FeedPost
-                      key={p.id}
-                      post={p}
-                      fullWidth
-                      isActive={isFocused}
-                      onOpen={p.type === 'highlight' && p.videoUrl
-                        ? () => setHighlightModal({ url: p.videoUrl!, title: p.caption ?? 'Highlight', id: p.id })
-                        : undefined}
-                      onLike={p.type === 'highlight' ? () => onLikeHighlight?.(p.id) : undefined}
-                    />
-                  ))}
-                </View>
-              </>
-            )}
-          </>
-        )}
+        <SocialFeedSections
+          liveGames={liveGames}
+          feedPosts={feedPosts}
+          onOpenGame={onOpenGame}
+          onLikeHighlight={onLikeHighlight}
+          isActive={isFocused}
+          tornaLogo={tornaLogo}
+          emptyState={
+            <View style={{ alignItems: 'center', paddingHorizontal: 32, paddingVertical: 56, gap: 8 }}>
+              <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text }}>Tu feed está vacío</Text>
+              <Text style={{ fontSize: 13, color: colors.muted2, textAlign: 'center', lineHeight: 19 }}>
+                Sigue a jugadores y clubes para ver aquí sus transmisiones en vivo y sus highlights.
+              </Text>
+            </View>
+          }
+        />
+        {/* ⚠️ Acá vivía "Próximos". Ahora está ARRIBA (`UpcomingStrip`), antes
+            del feed: al final había que bajar toda la pantalla para verlo. No
+            lo devuelvas a esta posición. */}
       </Animated.ScrollView>
 
       {onChangeTab && !hideBottomTabBar && <BottomTabBar active={activeTab} onChange={onChangeTab} role="player"/>}
@@ -284,16 +249,6 @@ export function HomeScreen({
           lo que arrastraba media docena de props (invitablePlayers,
           suggestedPartners, onSearchPartner, onAccept/RejectApplication…) que el
           Inicio no usa para nada más. */}
-
-      <VideoPreviewModal
-        visible={highlightModal !== null}
-        url={highlightModal?.url ?? ''}
-        title={highlightModal?.title ?? ''}
-        durationSeconds={0}
-        onClose={() => setHighlightModal(null)}
-        highlightId={highlightModal?.id}
-        showComments
-      />
     </SafeAreaView>
   );
 }

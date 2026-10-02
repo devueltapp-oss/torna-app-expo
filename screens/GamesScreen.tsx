@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, ScrollView, TextInput, Pressable, FlatList, Image } from 'react-native';
+import { View, Text, ScrollView, TextInput, Pressable, FlatList, Image, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, ChevronRight, Users, CalendarPlus, MapPin } from 'lucide-react-native';
+import { Swipeable } from 'react-native-gesture-handler';
+import { Search, ChevronRight, Users, CalendarPlus, MapPin, Trash2, CircleStop } from 'lucide-react-native';
 import { useTheme } from '../theme';
 import { fonts } from '../theme/tokens';
 import { GameListItem, GameListData } from '../components/cards';
@@ -9,12 +10,17 @@ import { EmptyState, StatusBadge, Avatar, SectionHeader, CategoryBadge, HostBadg
 import { BottomTabBar, TabId } from '../components/BottomTabBar';
 import { MapsButton } from '../components/MapsButton';
 import { NearbyPromptCard } from '../components/NearbyPromptCard';
+import { ConfirmSheet } from '../components/ConfirmSheet';
 import type { UpcomingGameData } from '../data/types';
 
-type Filter = 'TODAS' | 'LIVE' | 'SCHEDULED' | 'FINISHED';
+type Filter = 'TODAS' | 'LIVE' | 'SCHEDULED' | 'FINISHED' | 'CANCELLED';
 
 interface Props {
   games: GameListData[];
+  loading?: boolean;
+  error?: string | null;
+  onRefresh?: () => void;
+  onPrepareGame?: (id: string) => void;
   onOpenGame?: (id: string) => void;
   onChangeTab?: (id: TabId) => void;
   activeTab?: TabId;
@@ -42,19 +48,43 @@ interface Props {
     onEnable: () => void;
     onDismiss: () => void;
   };
+  /** (Club) Agenda una partida nueva en la propia cancha — botón "Agendar" en el header. */
+  onCreateGame?: () => void;
+  /**
+   * (Club) Cancela (soft) una reserva de otro usuario en la propia cancha.
+   * Solo filas `SCHEDULED` se pueden deslizar — sin esto, ninguna fila se
+   * envuelve en `Swipeable` (un swipe que no hace nada es peor que no tenerlo).
+   */
+  onCancelGame?: (id: string) => Promise<void>;
+  /**
+   * (Club) Finaliza manualmente una partida EN VIVO. Es la única transición
+   * manual que existe sobre un vivo — no hay "detener sin finalizar" ni
+   * "reanudar" (no existen en el backend): `FINISHED` es terminal, igual que
+   * `CANCELLED`, pero dispara el procesado de la grabación. Solo filas `LIVE`
+   * se pueden deslizar.
+   */
+  onFinishGame?: (id: string) => Promise<void>;
 }
 
 const FILTER_LABEL: Record<Filter, string> = {
   TODAS: 'Todas', LIVE: 'En vivo', SCHEDULED: 'Programadas', FINISHED: 'Finalizadas',
+  // Oculta por default (ver el filtro de abajo): una partida cancelada es un
+  // soft-delete — sigue en la base, pero mostrarla en "Todas" es trash visual
+  // para el día a día. Queda accesible a propósito, no desaparece del todo.
+  CANCELLED: 'Canceladas',
 };
 
 export function GamesScreen({
-  games, onOpenGame, onChangeTab, activeTab = 'games', hideBottomTabBar, emptyImage, role = 'club',
-  myGames = [], openGames = [], onOpenMyGame, onReserve, nearbyPrompt,
+  games, loading = false, error, onRefresh, onPrepareGame, onOpenGame, onChangeTab, activeTab = 'games', hideBottomTabBar, emptyImage, role = 'club',
+  myGames = [], openGames = [], onOpenMyGame, onReserve, nearbyPrompt, onCreateGame, onCancelGame, onFinishGame,
 }: Props) {
   const { colors } = useTheme();
   const [filter, setFilter] = React.useState<Filter>('TODAS');
   const [q, setQ] = React.useState('');
+  // Una sola hoja de confirmación para las dos acciones (cancelar/finalizar) —
+  // `kind` decide el texto, no hace falta duplicar el estado ni el sheet.
+  const [actionTarget, setActionTarget] = React.useState<{ id: string; kind: 'cancel' | 'finish' } | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
 
   // Vista del player: hub de partidos = Mis partidas + Abiertos para sumarme + Reservar.
   if (role === 'player') {
@@ -139,6 +169,12 @@ export function GamesScreen({
   }
 
   const filtered = games.filter(g => {
+    // Una cancelada es un soft-delete: sigue en la base, pero mostrarla junto
+    // al resto es trash visual (pedido explícito 2026-10-02) — queda afuera de
+    // TODOS los filtros salvo el suyo propio ("Canceladas"), que es cómo se
+    // busca algo que se sabe que está ahí pero no se quiere ver todo el tiempo.
+    if (g.status === 'CANCELLED') return filter === 'CANCELLED';
+    if (filter === 'CANCELLED') return false;
     if (filter !== 'TODAS') {
       if (filter === 'FINISHED' && !(g.status === 'FINISHED' || g.status === 'STOPPED')) return false;
       if (filter !== 'FINISHED' && g.status !== filter) return false;
@@ -152,10 +188,27 @@ export function GamesScreen({
       {/* ⚠️ `colors.bg`, no `colors.surface` — ver el comentario equivalente en
           HomeScreen.tsx (2026-09-09). */}
       <View style={{ backgroundColor: colors.bg, paddingHorizontal: 20, paddingVertical: 14 }}>
-        <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: 17, letterSpacing: -0.2 }}>Juegos</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: 17, letterSpacing: -0.2 }}>Juegos</Text>
+          {/* Agendar partida como club — mismo CTA que "Reservar" del player. */}
+          {onCreateGame && (
+            <Pressable
+              onPress={onCreateGame}
+              accessibilityLabel="Agendar partida"
+              style={({ pressed }) => ({
+                flexDirection: 'row', alignItems: 'center', gap: 6,
+                backgroundColor: colors.accent, paddingHorizontal: 12, paddingVertical: 7,
+                borderRadius: 10, opacity: pressed ? 0.85 : 1,
+              })}
+            >
+              <CalendarPlus size={15} color={colors.ink} />
+              <Text style={{ color: colors.ink, fontWeight: '800', fontSize: 13 }}>Agendar</Text>
+            </Pressable>
+          )}
+        </View>
         <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', backgroundColor: colors.bg2, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, marginTop: 14 }}>
           <Search size={18} color={colors.muted2} />
-          <TextInput placeholder="Buscar por ID, cancha o jugador…" placeholderTextColor={colors.muted}
+          <TextInput placeholder="Buscar por cancha o cámara…" placeholderTextColor={colors.muted}
             value={q} onChangeText={setQ}
             style={{ flex: 1, color: colors.text, fontSize: 14, padding: 0 }} />
         </View>
@@ -178,21 +231,128 @@ export function GamesScreen({
 
       <FlatList
         data={filtered} keyExtractor={g => g.id}
-        renderItem={({ item }) => <GameListItem game={item} onPress={onOpenGame} />}
+        refreshing={loading} onRefresh={onRefresh}
+        ListHeaderComponent={error ? <Text accessibilityRole="alert" style={{color: colors.text}}>{error}</Text> : null}
+        renderItem={({ item }) => (
+          <View style={{gap: 4}}>
+          <ClubGameRow
+            game={item}
+            colors={colors}
+            onPress={() => (item.status === 'SCHEDULED' || item.status === 'STOPPED') && onPrepareGame ? onPrepareGame(item.id) : onOpenGame?.(item.id)}
+            onDelete={onCancelGame && (item.status === 'SCHEDULED' || item.status === 'STOPPED') ? () => setActionTarget({ id: item.id, kind: 'cancel' }) : undefined}
+            onFinish={onFinishGame && item.status === 'LIVE' ? () => setActionTarget({ id: item.id, kind: 'finish' }) : undefined}
+          />
+          {/* DETENIDA (2026-10-03): la cámara quedó sin emitir (nunca se conectó
+              o se cortó) — no es un estado terminal, el horario sigue siendo
+              válido. Mismas dos salidas que una SCHEDULED: reconectar la
+              cámara (preparar) o liberar el horario (cancelar, swipe arriba). */}
+          {(item.status === 'SCHEDULED' || item.status === 'STOPPED') && onPrepareGame && <Pressable accessibilityRole="button" onPress={() => onPrepareGame(item.id)} style={{padding: 14, backgroundColor: colors.bg2, borderRadius: 10}}>
+            <Text style={{color: colors.accentText, fontWeight: '800'}}>{item.status === 'STOPPED' ? 'Reconectar cámara' : 'Iniciar partida · preparar cámaras'}</Text>
+          </Pressable>}
+          </View>
+        )}
         contentContainerStyle={{ padding: 16, gap: 8 }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         ListEmptyComponent={
           <EmptyState
-            title="Sin partidos en este filtro"
+            title={loading ? "Cargando partidas…" : error ? "Agenda no disponible" : "Sin partidos en este filtro"}
             message="Cuando alguien programe o inicie un partido, aparecerá aquí."
             imageSource={emptyImage}
           />
         }
       />
 
+      {/* Una sola hoja para cancelar/finalizar — no nombra la partida a
+          propósito, mismo criterio que borrar un chat: ya elegiste la fila.
+          `kind` decide el texto; "Finalizar" no tiene "reanudar" del otro
+          lado — es terminal, igual que cancelar, pero dispara el procesado
+          de la grabación del lado del backend. */}
+      <ConfirmSheet
+        visible={!!actionTarget}
+        title={actionTarget?.kind === 'finish' ? 'Finalizar esta partida' : 'Cancelar esta reserva'}
+        message={actionTarget?.kind === 'finish'
+          ? 'Corta la transmisión y queda como FINALIZADA. No se puede deshacer ni reanudar.'
+          : 'Se cancela y se avisa a los jugadores. No se puede deshacer.'}
+        confirmLabel={actionTarget?.kind === 'finish' ? 'Finalizar partida' : 'Cancelar reserva'}
+        destructive
+        loading={submitting}
+        onCancel={() => { if (!submitting) setActionTarget(null); }}
+        onConfirm={async () => {
+          if (!actionTarget) return;
+          const action = actionTarget.kind === 'finish' ? onFinishGame : onCancelGame;
+          if (!action) return;
+          setSubmitting(true);
+          try {
+            await action(actionTarget.id);
+            setActionTarget(null);
+          } finally {
+            setSubmitting(false);
+          }
+        }}
+      />
+
       {onChangeTab && <BottomTabBar role={role} active={activeTab} onChange={onChangeTab}/>}
     </SafeAreaView>
+  );
+}
+
+/**
+ * Fila de "Juegos" (club) — envuelve `GameListItem` en `Swipeable` SOLO si hay
+ * `onDelete` (mismo criterio que `ChatRow` de `ChatsInboxScreen`: un swipe que
+ * no hace nada es peor que no tenerlo). Mismo patrón de papelera creciendo con
+ * el gesto, `rightThreshold`/`overshootRight` para que un swipe corto vuelva
+ * solo, y la fila se cierra sola al tocar la papelera.
+ */
+/**
+ * Las dos acciones (cancelar/finalizar) son mutuamente excluyentes por
+ * construcción: el llamador solo pasa `onDelete` para filas `SCHEDULED` y
+ * `onFinish` para filas `LIVE` (ver el `renderItem` de arriba) — nunca las
+ * dos juntas. Mismo patrón que `ChatRow` de `ChatsInboxScreen`: sin acción,
+ * no se envuelve en `Swipeable` (un swipe que no hace nada es peor que no
+ * tenerlo).
+ */
+function ClubGameRow({
+  game, colors, onPress, onDelete, onFinish,
+}: {
+  game: GameListData;
+  colors: ReturnType<typeof useTheme>['colors'];
+  onPress: () => void;
+  onDelete?: () => void;
+  onFinish?: () => void;
+}) {
+  const swipeRef = React.useRef<Swipeable>(null);
+  const action = onDelete
+    ? { run: onDelete, label: 'Cancelar reserva', testId: `game-cancel-${game.id}`, Icon: Trash2 }
+    : onFinish
+      ? { run: onFinish, label: 'Finalizar partida', testId: `game-finish-${game.id}`, Icon: CircleStop }
+      : undefined;
+
+  const renderAction = (progress: Animated.AnimatedInterpolation<number>) => {
+    if (!action) return null;
+    const scale = progress.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1], extrapolate: 'clamp' });
+    return (
+      <Pressable
+        onPress={() => { swipeRef.current?.close(); action.run(); }}
+        accessibilityRole="button"
+        accessibilityLabel={action.label}
+        testID={action.testId}
+        style={{ width: 76, marginLeft: 8, borderRadius: 14, backgroundColor: colors.destructive, alignItems: 'center', justifyContent: 'center' }}
+      >
+        <Animated.View style={{ transform: [{ scale }] }}>
+          <action.Icon size={22} color={colors.destructiveFg} />
+        </Animated.View>
+      </Pressable>
+    );
+  };
+
+  const row = <GameListItem game={game} onPress={onPress} />;
+  if (!action) return row;
+
+  return (
+    <Swipeable ref={swipeRef} renderRightActions={renderAction} overshootRight={false} rightThreshold={40} friction={2}>
+      {row}
+    </Swipeable>
   );
 }
 

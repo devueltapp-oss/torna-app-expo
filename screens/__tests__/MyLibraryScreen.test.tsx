@@ -180,3 +180,21 @@ describe('MyLibraryScreen — solicitudes de video pendientes', () => {
     expect(queryByText('VIDEOS COMPARTIDOS CONTIGO')).toBeNull();
   });
 });
+
+/** Paridad Club/Player (2026-10-02): misma pantalla, la tab bar pasa a `role="club"`. */
+describe('MyLibraryScreen — role="club"', () => {
+  it('la tab bar del pie recibe role="club" (no "player")', () => {
+    const { getByText } = render(
+      <ThemeProvider initial="light">
+        <MyLibraryScreen
+          role="club"
+          matches={[]} highlights={[]}
+          onBack={jest.fn()} onCreateHighlight={jest.fn()} onToggleVisibility={jest.fn()}
+          activeTab="profile" onChangeTab={jest.fn()}
+        />
+      </ThemeProvider>,
+    );
+    // Tabs de club: Canchas · Juegos · Inicio · Chats · Perfil — "Canchas" solo existe en ese set.
+    expect(getByText('Canchas')).toBeTruthy();
+  });
+});

@@ -15,6 +15,7 @@
  * El backend envuelve toda respuesta en { data, statusCode } (TransformInterceptor).
  */
 import * as SecureStore from 'expo-secure-store';
+import { assertClub, type ClubIdentity } from '../lib/assertClub';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
 const TOKEN_KEY = 'torna_auth_token';
@@ -55,7 +56,7 @@ async function authedGet<T>(path: string, timeoutMs = 15000): Promise<T> {
 }
 
 async function authedSend<T>(
-  method: 'POST' | 'PATCH' | 'DELETE',
+  method: 'POST' | 'PATCH' | 'DELETE' | 'PUT',
   path: string,
   body?: unknown,
 ): Promise<T> {
@@ -129,6 +130,11 @@ export function fetchMyGames(): Promise<BackendMyGame[]> {
 export interface BackendClubGame {
   gameId: string;
   gameStatus: string;
+  courtId?: string | null;
+  courtName?: string | null;
+  scheduledStartAt?: string | null;
+  scheduledEndAt?: string | null;
+  isReservation?: boolean;
   court: string | null;
   players: Array<{
     id: string;
@@ -139,8 +145,97 @@ export interface BackendClubGame {
   createdAt: string;
 }
 
-export function fetchClubGames(clubId: string): Promise<BackendClubGame[]> {
-  return authedGet<BackendClubGame[]>(`/game/club/${encodeURIComponent(clubId)}`);
+export async function fetchClubGames(clubId: string): Promise<BackendClubGame[]> {
+  const result = await authedGet<BackendClubGame[] | {data: BackendClubGame[]}>(`/game/club/${encodeURIComponent(clubId)}`);
+  const rows = Array.isArray(result) ? result : result.data;
+  if (!Array.isArray(rows)) throw new Error('No se pudo leer la agenda del club.');
+  return rows;
+}
+
+/** Prepara una reserva como Desktop; no marca LIVE ni inicia RTMP. */
+export async function prepareClubGame(user: ClubIdentity | null, gameId: string, cameraIds: string[]) {
+  assertClub(user);
+  if (!cameraIds.length) throw new Error('Elegí al menos una cámara.');
+  return authedSend('POST', `/game/${encodeURIComponent(gameId)}/start-stream`, {cameraIds});
+}
+
+export async function fetchClubGameCameras(user: ClubIdentity | null, gameId: string): Promise<import('./cameras').ClubCamera[]> {
+  assertClub(user);
+  const rows = await authedGet<import('./cameras').ClubCamera[]>(`/game/${encodeURIComponent(gameId)}/cameras`);
+  if (!Array.isArray(rows)) throw new Error('No se pudieron leer las cámaras de la partida.');
+  return rows;
+}
+
+/**
+ * Mismo endpoint que usa Torna Desktop para marcar la partida EN VIVO (dispara
+ * `STREAMING_STARTED` del backend hacia los seguidores) o volverla a `STOPPED`.
+ * Llamar a `'start'` SOLO después de confirmar que la cámara ya está transmitiendo
+ * de verdad — este endpoint no lo verifica, confía en quien lo llama.
+ */
+export async function setGameLiveStatus(user: ClubIdentity | null, gameId: string, action: 'start' | 'stop') {
+  assertClub(user);
+  return authedSend('PUT', `/game/live/${encodeURIComponent(gameId)}/${action}`);
+}
+
+/* ─────────── Admin de partidas como club (crear + cancelar) ─────────── */
+
+/**
+ * Payload de `POST /game` — mismo contrato que usa `CreateGameDialog.jsx` del
+ * desktop para este caso de uso (admin de club creando una partida con
+ * jugadores reales, no el `POST /game/reserve` que usa el player). El
+ * backend ya soporta este endpoint hoy; nada nuevo de backend acá.
+ */
+export interface CreateClubGameInput {
+  jobId: string;
+  cameraIds: string[];
+  courtId: string;
+  /** Ya compuestos en UTC — ver `lib/clubTime.ts` → `toClubIsoLabel`. */
+  scheduledStartAt: string;
+  scheduledEndAt: string;
+  /** Nivel/categoría 1–7, obligatorio (1 = más alta, 7 = iniciación). */
+  category: number;
+}
+export interface CreateClubGameResult { id: string }
+
+/**
+ * Crea una partida como club, asignando jugadores reales de la app (no
+ * placeholders). Guarda `assertClub`: igual que `api/cameras.ts`, esta
+ * función muta datos de terceros (la partida queda a nombre de los
+ * `players`, no del club), así que amerita la misma defensa en profundidad
+ * — el backend es la autoridad real y deriva el club dueño del Bearer token,
+ * no de ningún campo de este body.
+ */
+export async function createClubGame(
+  user: ClubIdentity | null,
+  game: CreateClubGameInput,
+  players: { userId: string }[],
+): Promise<CreateClubGameResult> {
+  assertClub(user);
+  return authedSend<CreateClubGameResult>('POST', '/game', { game, players });
+}
+
+/**
+ * Cancela (soft) una reserva de OTRO usuario en la propia cancha del club —
+ * `PATCH /game/:id/cancel-reservation`, distinto del `PATCH /game/:id/cancel`
+ * que ya usa el player-dueño sobre sus propias partidas (ver `cancelGame` más
+ * abajo). Deja la partida en `CANCELLED` y el backend notifica a los jugadores.
+ */
+export async function cancelClubReservation(user: ClubIdentity | null, gameId: string): Promise<unknown> {
+  assertClub(user);
+  return authedSend('PATCH', `/game/${encodeURIComponent(gameId)}/cancel-reservation`);
+}
+
+/**
+ * Finaliza manualmente una partida EN VIVO — `PATCH /game/:id {status:'FINISHED'}`,
+ * mismo `editGame` que usa `GameId.jsx` del desktop (botón único de "Finalizar"
+ * que corta toda transmisión y dispara el procesado de la grabación en el
+ * backend). Es la ÚNICA transición manual que existe sobre una partida en vivo
+ * — no hay "detener sin finalizar" ni "reanudar": `FINISHED` es terminal, a
+ * diferencia de `CANCELLED` (terminal también, pero sin disparar nada más).
+ */
+export async function finishClubGame(user: ClubIdentity | null, gameId: string): Promise<unknown> {
+  assertClub(user);
+  return authedSend('PATCH', `/game/${encodeURIComponent(gameId)}`, { status: 'FINISHED' });
 }
 
 /* ─────────── Próximas partidas de un usuario (GET /game/:id/upcoming) ─────────── */

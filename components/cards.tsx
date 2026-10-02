@@ -256,6 +256,7 @@ export function LiveGameTile({ game, onPress, onDoubleTap, tornaLogo, isActive }
 /* ─────────────────  GameListItem  ───────────────── */
 
 export interface GameListData {
+  courtId?: string | null;
   id: string; court: string; cam: string;
   players: number; time: string; date: string; status: GameStatus;
 }

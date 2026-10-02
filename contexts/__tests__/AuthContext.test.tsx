@@ -62,6 +62,13 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn(async () => undefined),
 }));
 
+// Restaurar al terminar: sin esto, este mock quedaba filtrado al siguiente
+// archivo de test que corre en el mismo proceso (`--runInBand`), causando
+// fallas intermitentes en otros suites de `api/*` según el orden de
+// ejecución (mismo bug ya encontrado y corregido en `clubPreparation.test.ts`).
+const originalFetch = global.fetch;
+afterAll(() => { global.fetch = originalFetch; });
+
 global.fetch = jest.fn();
 
 function mockLoginResponse() {

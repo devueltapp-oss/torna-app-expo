@@ -55,7 +55,13 @@ con flujo `Register → Pending → MainClub`.
 - Listar partidos: en vivo, programados, finalizados.
 - Reproducir stream HLS con **swipe horizontal entre cámaras** (+ tabs como
   fallback). Cámaras tienen 2 estados: `available` ↔ `inactive`. La app
-  **NO** las inicia/detiene/configura.
+  **NO** las inicia/detiene desde el visor. Excepción para **Club** (2026-10-01,
+  consolidado 2026-10-03): enlazar cámara (WiFi/COHN por Bluetooth) vive **dentro**
+  de "Preparar partida" (`ClubPrepareGame`) — ya no hay una entrada suelta en
+  Inicio ("Enlazar GoPro" como card independiente se eliminó): conectar una cámara
+  solo tiene sentido en el contexto de una partida puntual. Player no tiene
+  entrada ni ruta. Ver `docs/cohn-mobile.md` para permisos, protocolo y
+  compilación nativa. Desktop sigue encargado de la transmisión RTMP real.
 - Seguir/dejar de seguir clubes y players.
 - Toggle Claro / Oscuro / Sistema persistido en `AsyncStorage` clave
   `@torna/theme-mode`.
@@ -156,17 +162,44 @@ con flujo `Register → Pending → MainClub`.
 **Solo Club:**
 - `ClubHomeScreen` — admin home: 3 stat cards (live, viewers, a cobrar) +
   carousel de partidos en vivo del club + lista de reservas del día con
-  badge A COBRAR / PAGADA.
-- `CourtsScreen` — canchas del club, **solo lectura** (no CRUD).
+  badge A COBRAR / PAGADA. **Paridad con Player (2026-10-02)**: debajo de
+  eso, el mismo feed de seguidos que `HomeScreen` — "En vivo · de quienes
+  sigues" + "Highlights · de tus seguidos" (`components/SocialFeedSections.tsx`,
+  extraído de `HomeScreen` para no duplicar; `liveGames` de `ClubHomeScreen`
+  sigue siendo el EN VIVO propio del club, distinto de `followedLiveGames`
+  que es el de quienes el club sigue). También suma el ícono de búsqueda del
+  header (seguir jugadores/clubes), igual que el player. **Lo único que NO
+  tiene** es reservar cancha en OTRO club como si fuera jugador — eso se
+  excluyó a propósito.
+- Perfil propio del club — mismo `PlayerOwnProfileScreen`/`MyLibraryScreen`
+  que el player, con un prop `role="club"` (cambia la tab bar del pie y omite
+  "· CAT. N", que no aplica a un club). `ProfileScreen` (editar perfil +
+  password) pasa a ser la sub-vista "Ajustes", abierta con el ⚙ del perfil
+  propio — ya no es la raíz del tab Perfil. ⚠️ La pestaña "Partidos" y la de
+  "Highlights" arrancan **vacías por diseño**: `usePlayerMatches` es por
+  `GamePlayer` (un club no lo es), y no hay ningún flujo para que un club
+  cree un highlight (el único, `VideoEditorScreen`, parte de un partido
+  jugado por un player). No es un bug.
+- `CourtsScreen` — canchas del club. Tocar una abre **editarla**
+  (2026-10-02, `ClubEditCourtScreen`): qué cámaras le pertenecen
+  (multi-select, `cameraIds`) y activar/desactivar la cancha entera
+  (`isActive`) — ver "Editar cancha" más abajo. Sigue sin poder
+  **crear/eliminar** canchas (eso sigue siendo del admin externo), y nombre/
+  descripción/superficie no se editan desde acá.
 - `PlayersScreen` — directorio de seguidores.
-- `ProfileScreen` — editar perfil + cambio de contraseña con checklist.
+- **Agendar y cancelar partidas en la propia cancha (2026-10-02)** — ver
+  "Admin de partidas (club)" más abajo.
 
 ### ❌ Lo que la app NO hace (admin panel externo)
 
-- NO crea/edita/elimina canchas.
-- NO inicia/detiene/configura cámaras (NO BLE).
+- NO **crea ni elimina** canchas. Sí **edita** una existente (cámaras +
+  activar/desactivar, 2026-10-02) — ver "Editar cancha" más abajo.
+- NO configura cámaras por BLE salvo la excepción ya documentada arriba
+  (enlazar por COHN dentro de "Preparar partida", solo Club) — fuera de eso,
+  no inicia/detiene streaming RTMP real.
 - NO procesa pagos.
 - NO modera jugadores.
+- NO deja que el club reserve cancha en OTRO club como si fuera jugador.
 
 Si alguien pide algo que pisa estas líneas, rechazar y pedir confirmación.
 
@@ -619,14 +652,105 @@ reserva de las **12:30** se mostraba como **08:30** en Venezuela (UTC−4) — b
 GET  /padel-court?clubId=            → canchas del club (trae isActive/blockMinutes/
                                        pricePerBlock/cameras). Solo las activas entran
                                        a la grilla de bloques
-GET  /padel-court/:id                → una cancha (`fetchCourt`; sin uso en pantalla hoy)
-GET  /padel-court/:id/slots?date=    → Slot[] del día de UNA cancha. La grilla sale del
-                                       horario configurable de la cancha (semanal +
-                                       excepción de la fecha); [] si inactiva/día cerrado
-POST /game/reserve  { courtId, date, slotStart, durationMinutes, mode,
+GET   /padel-court/:id                → una cancha (`fetchCourt`, usada por `ClubEditCourtContainer`)
+GET   /padel-court/:id/slots?date=    → Slot[] del día de UNA cancha. La grilla sale del
+                                        horario configurable de la cancha (semanal +
+                                        excepción de la fecha); [] si inactiva/día cerrado
+PATCH /padel-court/:id { cameraIds?, isActive? } → edita una cancha propia (updateCourt,
+                                        solo club). Mismo `updatePadelCourt` del desktop
+POST  /game/reserve  { courtId, date, slotStart, durationMinutes, mode,
                       partnerUserId?, opponentUserIds? } → crea la partida (ReserveStep3).
                       durationMinutes = block × N (1–4 bloques, multibloque)
 ```
+
+#### Editar cancha (club, 2026-10-02)
+
+Tocar una cancha en "Canchas" abre `ClubEditCourtScreen` — SOLO lo que existe de verdad
+en el backend, confirmado contra `CreateCourtDialog.jsx`/`src/views/settings/index.jsx`
+del desktop:
+
+- **Qué cámaras pertenecen a la cancha** (`cameraIds`, multi-select, mismo widget que el
+  desktop) — ⚠️ **no existe un "`defaultCameraId`"**: no hay campo de cámara por defecto
+  en ningún lado, ni en la cancha ni en la cámara. Lo más cerca que hay es que la
+  "principal" de una partida es la primera del array `cameraIds` que se manda a
+  `POST /game` al **crearla** — no es un dato que se guarde en la cancha.
+- **Activar/desactivar la cancha entera** (`isActive`) — es un campo de la **CANCHA**, no
+  de una cámara individual (no existe ese toggle a nivel cámara).
+- Ambos se guardan con el mismo `PATCH /padel-court/:id` (acepta cualquier subconjunto —
+  el desktop a veces manda solo `{isActive}`, otras veces solo `{cameraIds}`).
+- `ClubEditCourtContainer` trae la cancha (`fetchCourt`, ya con sus cámaras asignadas) +
+  **todas** las cámaras del club (`fetchClubCameras` de `api/cameras.ts`, el mismo cliente
+  que ya usa "Enlazar GoPro") para armar el multi-select.
+- Si la cancha tiene una partida EN VIVO, aparece un banner arriba ("Ver →") que navega
+  al visor — así tocar la cancha sigue dejando ver la transmisión, sin que sea la acción
+  primaria del tap (que ahora es editar).
+- Sigue sin existir **crear/eliminar** canchas, ni editar nombre/descripción/superficie
+  desde el móvil — eso sigue siendo del admin externo.
+- Cubierto por `api/__tests__/clubs.test.ts`, `screens/__tests__/ClubEditCourtScreen.test.tsx`
+  y `components/__tests__/ClubEditCourtContainer.test.tsx`.
+
+#### Horarios de cancha (club, 2026-10-02)
+
+Desde "Editar cancha" → fila **"Horarios"** se abre `ClubCourtScheduleScreen`: horario
+semanal (7 días) + excepciones por fecha. Mismo modelo que `ScheduleDialog.jsx`/
+`WeeklyScheduleFields.jsx`/`ExceptionsDialog.jsx` del desktop, confirmado contra el
+código real:
+
+```
+GET  /padel-court/:id/schedule            → { blockMinutes, pricePerBlock, days[7] }
+PUT  /padel-court/:id/schedule            → guarda el horario (updateCourtSchedule)
+GET  /padel-court/:id/exceptions          → ScheduleException[]
+POST /padel-court/:id/exceptions          → crea una excepción (createCourtException)
+DELETE /padel-court/:id/exceptions/:date  → la borra (deleteCourtException)
+```
+
+- **Es POR CANCHA individual, no por club** — confirmado: `ClubScheduleDialog.jsx` del
+  desktop (que sí parece "horario del club entero") es solo un atajo de UI que llama
+  este mismo `PUT /padel-court/:id/schedule` **en loop** sobre todas las canchas
+  activas. No hay ruta de "club entero" en el backend.
+- `days[i]` es `{ dayOfWeek: 0-6, isOpen, openMinute, closeMinute }` — **minutos desde
+  medianoche**, no `"HH:MM"` (`lib/schedule.ts` → `minuteToLabel`/`TIME_OPTIONS`, cada
+  30 min, mismo patrón de hoja que `LevelPickerSheet` — ningún picker nativo).
+  `dayOfWeek` sigue la convención de `Date.getDay()` (0 = domingo).
+- ⚠️ **`PUT /padel-court/:id/schedule` es reemplazo completo, no parcial** (a diferencia
+  de `updateCourt`, que es `PATCH`): hay que mandar `blockMinutes`/`pricePerBlock`
+  siempre, aunque no se estén editando, o el backend los perdería.
+  `ClubCourtScheduleContainer` los trae de `fetchCourt`/`fetchCourtSchedule` al montar y
+  los reenvía intactos en cada guardado del horario semanal.
+- Una excepción sin horas (`isOpen: false`) es "cerrado todo el día"; con horas, pisa el
+  horario semanal solo esa fecha puntual.
+- Cubierto por `lib/schedule.test.ts`, `api/__tests__/clubs.test.ts`,
+  `screens/__tests__/ClubCourtScheduleScreen.test.tsx` y
+  `components/__tests__/ClubCourtScheduleContainer.test.tsx`.
+
+#### Configuraciones de WiFi guardadas en "Enlazar GoPro" (club, 2026-10-02)
+
+`ClubCamerasScreen` ya **no** pide escribir el nombre y la contraseña del WiFi a mano.
+Confirmado contra `CameraDialog.jsx` del desktop: existe una entidad real `CameraConfig`
+(relación WiFi → cámara → cancha) con su propio `<Select>` "Configuración WiFi" +
+"Nueva configuración WiFi…" — se portó el mismo patrón.
+
+```
+GET  /camera-config            → configuraciones guardadas del club (fetchCameraConfigs)
+POST /camera-config { name, wifiSsid, wifiPassword } → crea una nueva (createCameraConfig)
+```
+
+- `useClubCameras` suma `configs`/`configsLoading`/`selectedConfigId`/`selectConfig`/
+  `createConfig`. Elegir una config completa `ssid`/`password` internamente — esos dos
+  siguen siendo el dato que de verdad usa el enlace BLE (`provisionFromPhone`), ahora
+  nunca tipeados a mano. `setSsid`/`setPassword` **se eliminaron** de la API pública del
+  hook: no hay ningún camino para escribir la red a mano, a propósito.
+- Sin configuraciones guardadas, la pantalla ofrece crear una (`+ Nueva configuración de
+  WiFi`): nombre + SSID + password, vía `createConfig` — queda guardada y seleccionada
+  en el mismo paso, lista para enlazar.
+- ⚠️ El backend devuelve `wifiPassword` en texto plano (igual que el desktop) — no se
+  loguea ni se muestra en ningún lado, mismo criterio ya establecido para las
+  credenciales COHN en `docs/cohn-mobile.md`.
+- No se cablea `cameraConfigId` a la `Camera` desde el móvil — esa relación la sigue
+  escribiendo el desktop al crear la cámara; acá solo se **lee** la lista para elegir
+  SSID/password, no se reasigna la config de una cámara existente.
+- Cubierto por `api/__tests__/cameras.test.ts`, `hooks/__tests__/useClubCameras.test.ts`
+  y `screens/__tests__/ClubCamerasScreen.test.tsx`.
 
 #### Reserva por bloques (espejo del desktop, 2026-08-26)
 
@@ -656,6 +780,33 @@ desktop (`BloquesDisponibles`), donde "crear partida" nace de un bloque libre.
   con la grilla real de casapadel) y `screens/__tests__/ReserveBlocksScreen.test.tsx`
   (UI: bloques, cancha ocupada no elegible, bloque en curso no elegible, slot combinado
   al continuar).
+- ⚠️ **Bug real (2026-10-03, corregido): no se podía deseleccionar una cancha
+  dentro de un bloque.** `onPickCourt` siempre pisaba la selección con la
+  nueva, nunca la vaciaba — una vez elegida una cancha, la única salida era
+  elegir OTRA; no había forma de volver a "Elige un bloque libre" sin
+  reservar. Ahora tocar la MISMA cancha ya elegida la deselecciona (mismo
+  criterio que el filtro "Todas las canchas" de arriba, que ya alternaba).
+  Cubierto por el test `'tocar la misma cancha ya elegida la deselecciona…'`
+  en `screens/__tests__/ReserveBlocksScreen.test.tsx`.
+- ⚠️ **Bug real (2026-10-03, corregido): el footer "Continuar →" quedaba en
+  el mismo lugar que los botones nativos de retroceso en Android.** Mismo
+  bug que ya se había encontrado y arreglado en `BottomTabBar` (ver su
+  comentario: con Android edge-to-edge, obligatorio desde API 35, un
+  `paddingBottom` fijo NO reserva espacio para la barra/gestos del sistema —
+  el contenido dibuja por debajo). `ReserveBlocksScreen` (`SafeAreaView
+  edges={['top']}`, footer fuera de ese área) tenía `paddingBottom: 18` fijo
+  — mismo patrón, mismo fix: `useSafeAreaInsets().bottom` real del
+  dispositivo (`Platform.OS==='ios' ? insets.bottom+18 : Math.max(insets.bottom,18)`).
+  **El mismo bug estaba copiado en 3 pantallas más** (footer idéntico,
+  literalmente el mismo `paddingBottom: 18`): `ReserveStep3Screen` (paso 2
+  del player), `ClubAssignPlayersScreen` (paso 2 del club) y
+  `ClubEditCourtScreen`; y en la hoja de excepción de
+  `ClubCourtScheduleScreen` (`position:'absolute', bottom:0`). Las 5 quedaron
+  arregladas igual. **Si agregás otra pantalla con un footer/hoja fijo fuera
+  del `SafeAreaView`, replicá esta fórmula — no un número fijo.** Cubierto
+  por `screens/__tests__/SafeAreaFooterPadding.test.tsx` (una pantalla por
+  `describe`, mismo patrón de `components/__tests__/BottomTabBar.test.tsx`:
+  `SafeAreaProvider` con `initialMetrics` para fijar el inset).
 
 ### Partidas: postular / mis partidas / bajas — `api/games.ts`
 
@@ -669,6 +820,136 @@ PATCH /game/:id/cancel                        → owner cancela toda la partida 
 POST  /game/:id/leave                         → miembro no-owner se da de baja
 POST  /game/:id/cancel-pair                   → la pareja retadora (team=2) se baja
 ```
+
+### Admin de partidas (club) — agendar + cancelar en la propia cancha (2026-10-02)
+
+El club puede, sobre partidas en SU cancha (de otros usuarios): **crear una
+partida nueva** asignando jugadores reales (no placeholders) y **cancelar**
+una reserva ya hecha. Mismo flujo que ya usa `CreateGameDialog.jsx` /
+`BloquesDisponibles.jsx` del desktop contra el **mismo backend** — no hubo
+que agregar nada del lado del servidor.
+
+```
+POST  /game { game: { jobId, cameraIds, courtId, scheduledStartAt,
+             scheduledEndAt, category }, players: [{ userId }] }
+                                               → crea la partida (createClubGame)
+PATCH /game/:id/cancel-reservation            → cancela (soft) una reserva de
+                                                 OTRO usuario en mi cancha (cancelClubReservation)
+PATCH /game/:id { status: 'FINISHED' }        → finaliza manualmente una partida
+                                                 EN VIVO (finishClubGame)
+```
+
+- **Entrada**: pestaña Juegos (rol club) → botón **"Agendar"** (`CalendarPlus`,
+  mismo CTA que "Reservar" del player) → reusa `ReserveBlocksScreen` **tal
+  cual** (elegir día + bloque libre + cancha — mismas reglas de multibloque
+  que ya usa el desktop para este mismo caso) → paso 2 propio,
+  `ClubAssignPlayersScreen`: categoría 1-7 obligatoria, **≥1 cámara** de esa
+  cancha, **≥1 jugador real** buscado por `GET /user/search` (`searchUsers`,
+  NUNCA `searchUsersAndClubs` — el club asigna jugadores, no otro club). Sin
+  pareja obligatoria ni rivales: ese esquema es de `ReserveStep3Screen`,
+  pensado para que un player reserve para sí mismo.
+- ⚠️ **Bug real (2026-10-03, corregido)**: al crear, `ClubAssignPlayersContainer`
+  navegaba a una pantalla de "¡listo!" estática (`ClubGameCreated`, **eliminada**)
+  y la cámara elegida en el paso 2 quedaba adjunta a la partida **sin estar
+  conectada** (sin WiFi/COHN ni stream arrancado) — la partida aparecía como
+  **"DETENIDA"** con un link de streaming que no existía, y nada llevaba al
+  club a configurarla. El paso correcto después de crear es **`ClubPrepareGame`**
+  (elegir cámaras → conectarlas al WiFi → revisar encuadre con el preview
+  local — ver "Preparar partida" más abajo): ahora `onConfirm` hace
+  `navigation.reset({ index: 1, routes: [{name:'MainClub', params:{initialTab:'games'}}, {name:'ClubPrepareGame', params:{gameId: created.id}}] })`
+  en vez de navegar a la pantalla eliminada. El `reset` (no `push`/`replace`)
+  descarta todo el flujo de agendar del stack, así "Volver a las partidas"
+  desde `ClubPrepareGame` aterriza en Juegos, no en un paso ya completado.
+- ⚠️ **"Cámara ocupada" al preparar — no es un bug del cliente, es dato real
+  del club.** `ClubPrepareGameContainer` (`ensureAvailable`) rechaza
+  "Conectar cámara al WiFi"/"Previsualizar" si esa MISMA cámara está adjunta
+  a OTRA partida del club con `gameStatus === 'LIVE'` — a propósito, para no
+  pisar una transmisión en curso. Si una partida vieja (de pruebas, o de
+  antes de este fix) quedó LIVE sin estar realmente transmitiendo, bloquea
+  **para siempre** el uso de esa cámara en cualquier partida nueva. Antes NO
+  había manera de liberarla desde el móvil. Ahora sí: Juegos → filtro "En
+  vivo" → deslizar esa fila → **Finalizar** (ver `finishClubGame` arriba) la
+  libera. Si "nunca puedo entrar a los flujos de enlazar/preview/COHN" para
+  una cámara puntual, revisar ahí primero antes de sospechar del código.
+- ⚠️ **`STOPPED` ("DETENIDA") NO es terminal** (2026-10-03, corregido): es una
+  cámara que nunca se conectó o se cortó — el horario de la cancha sigue
+  siendo válido, a diferencia de `FINISHED`/`CANCELLED`. Antes
+  `ClubPrepareGameContainer` la trataba igual que esos dos ("Esta partida ya
+  terminó o fue cancelada"), bloqueando toda acción. Ahora una fila `STOPPED`
+  en Juegos ofrece **las dos salidas** que un `SCHEDULED` (mismo
+  `onPrepareGame`/`onCancelGame` de `GamesScreen`, con el botón "Reconectar
+  cámara" en vez de "Iniciar partida · preparar cámaras"):
+  - **Cancelar** (swipe, libera el horario) — mismo `cancelClubReservation`.
+  - **Reconectar cámara** (tap en la fila, o el botón) → `ClubPrepareGame`,
+    que ya no bloquea `['SCHEDULED','WAITING','STOPPED']` en `ensureAvailable`.
+  Cubierto por `screens/__tests__/GamesScreenClubCancel.test.tsx` y
+  `components/__tests__/ClubPrepareGameContainer.test.tsx`.
+- **`cancel-reservation` ≠ `cancel`**: el player-dueño cancela su propia
+  partida con `PATCH /game/:id/cancel` (arriba); el club cancela la de un
+  tercero con esta otra ruta — son dos endpoints distintos a propósito.
+  Deja la partida en `CANCELLED` e igual notifica a los jugadores. La acción
+  vive en "Juegos" → deslizar una fila `SCHEDULED` hacia la izquierda
+  (mismo patrón swipe+papelera+`ConfirmSheet` que borrar un chat en
+  `ChatsInboxScreen` — no una hoja de detalle nueva: el club no es
+  `GamePlayer` de esa partida, es dueño de la cancha).
+- **Finalizar una partida EN VIVO** (`finishClubGame`, mismo `editGame` que
+  `GameId.jsx` del desktop): deslizar una fila `LIVE` hacia la izquierda,
+  misma mecánica swipe+papelera, con su propio ícono (`CircleStop`) y texto
+  en el `ConfirmSheet`. ⚠️ **No hay "detener" como algo separado de
+  finalizar, y "reanudar" NO EXISTE en ningún lado del sistema** (ni
+  desktop ni backend) — confirmado explícitamente: `FINISHED` y `CANCELLED`
+  son estados terminales, sin ninguna transición de vuelta a
+  SCHEDULED/LIVE. La diferencia real entre los dos: finalizar dispara el
+  procesado de la grabación y otros eventos del backend; cancelar no — es
+  un estado terminal sin efectos secundarios. No repongas "reanudar" sin
+  que el backend lo soporte primero.
+- **`jobId`**: UUID generado en el **cliente** (`expo-crypto` →
+  `Crypto.randomUUID()`), igual que hace el desktop con
+  `crypto.randomUUID()` — no hay coordinación de backend para esto.
+- **`scheduledStartAt`/`scheduledEndAt`**: a diferencia de
+  `POST /game/reserve` (que recibe `date`+`slotStart` sueltos), este endpoint
+  espera el string UTC ya compuesto por el cliente — `toClubIsoLabel(date,
+  hhmm)` en `lib/clubTime.ts`, por **concatenación de string**
+  (`` `${date}T${hhmm}:00.000Z` ``), nunca `new Date(...).toISOString()`: es
+  la operación inversa y simétrica del bug ya documentado arriba (horarios
+  corridos por el huso del dispositivo).
+- **Alcance**: ni `createClubGame` ni `cancelClubReservation` mandan
+  `clubId` — el backend lo deriva del Bearer token, igual que el resto de
+  `api/*.ts`. La UI tampoco puede ofrecer una cancha ajena: el paso 1 arma
+  los bloques con el `clubId` del usuario autenticado, no con un parámetro
+  navegable, y cancelar opera sobre filas que ya vienen de
+  `useClubGames(clubId)` con ese mismo id.
+- **`assertClub`** vive en `lib/assertClub.ts` (movido de
+  `services/cohn/provision.ts`, que lo re-exporta para no romper
+  `api/cameras.ts`): a partir de acá tiene dos consumidores sin relación
+  (COHN/BLE y partidas), así que dejó de ser "parte de COHN".
+- ✅ **Resuelto (2026-10-03)**: `GET /game/club/:id` ya puede traer
+  `courtName`/`scheduledStartAt`/`scheduledEndAt`/`isReservation` (todos
+  opcionales en `BackendClubGame`). `useClubGames`/`toGameListData` los usa
+  cuando están (`formatClubTime(g.scheduledStartAt)`), y cae a
+  `createdAt`/identificador de cámara solo si el backend no los manda para
+  esa fila — ya no es un "siempre creation time", es un fallback real.
+- Cubierto por `api/__tests__/games.test.ts`, `api/__tests__/clubPreparation.test.ts`,
+  `lib/clubTime.test.ts`, `screens/__tests__/ClubAssignPlayersScreen.test.tsx`,
+  `components/__tests__/ClubAssignPlayersContainer.test.tsx`,
+  `screens/__tests__/GamesScreenClubCancel.test.tsx` y
+  `components/__tests__/ClubCreateGameContainer.test.tsx`.
+- ⚠️ **Bug real (2026-10-02, corregido)**: cancelar mostraba la partida como
+  **"DETENIDA"** en vez de "CANCELADA" — `useClubGames` (`mapStatus`)
+  colapsaba `CANCELLED` en `STOPPED`, el mismo `GameStatus` que un stream
+  cortado. Ahora `GameStatus` (`components/ui.tsx`) tiene un valor
+  `CANCELLED` propio, con su badge "CANCELADA". Si agregás un nuevo estado
+  de backend, no lo colapses en uno existente solo porque visualmente se
+  parece — son conceptos distintos para quien cancela vs. para quien ve un
+  stream caído. Cubierto por `hooks/__tests__/useClubGames.test.ts`.
+- **Una `CANCELLED` es un soft-delete y queda OCULTA por default** (pedido
+  explícito 2026-10-02): verla junto al resto en "Juegos" (club) es trash
+  visual. `GamesScreen` suma un filtro propio **"Canceladas"** —
+  `CANCELLED` queda afuera de "Todas"/"Programadas"/"En vivo"/"Finalizadas"
+  y solo aparece eligiendo ese filtro a propósito. Confirmado con el
+  usuario: finalizar (`FINISHED`) dispara otros procesos en el backend
+  (grabación, notificaciones); cancelar no — es un estado terminal sin
+  efectos secundarios. Cubierto por `screens/__tests__/GamesScreenClubCancel.test.tsx`.
 
 ### Cercanía (`api/nearby.ts`)
 
@@ -1957,3 +2238,40 @@ Cuando trabajes con esta app:
   para `require()` de imagen y navigation params.
 - Cuando termines una pantalla, agregá su entry al barrel
   (`screens/index.ts`) y su route a `App.tsx`.
+
+### Flujo de club y preview local (2026-10-02, enlace inline 2026-10-03)
+
+Inicio/Juegos muestran la agenda real. "Iniciar partida · preparar cámaras"/"Reconectar
+cámara" abren `ClubPrepareGame`: adjuntar cámaras a la reserva, conectar por BLE y
+previsualizar una por vez — **todo dentro de la misma pantalla**, sin navegar a otra ruta.
+
+⚠️ **No existe ruta `ClubCameras` independiente** (eliminada 2026-10-03, pedido
+explícito: "no perder el foco entre vistas"). Antes "Conectar cámara al WiFi" navegaba
+a un screen aparte con `gameId`/`cameraId` como params; ahora `ClubPrepareGameContainer`
+monta `ClubCamerasScreen` **inline** (su propio `InlineCameraLink`, que llama
+`useClubCameras(user, {cameraId, onLinked})` directamente) reemplazando momentáneamente
+la vista de preparación, y vuelve sola al cerrar/enlazar — sin stack push, sin perder
+el estado de la partida que se está preparando. Si agregás un nuevo punto de entrada
+para enlazar una cámara, replicá este patrón inline, no una navegación a una ruta nueva.
+
+Android recibe UDP local mediante `expo-video` y el módulo nativo `TornaCohn`
+(certificado fijado por cámara); previsualizar por sí solo no inicia RTMP ni cambia la
+partida a LIVE — es solo encuadre, para el propio teléfono. iOS aún no tiene receptor
+UDP local (el botón de preview no aparece ahí). Las reglas anteriores que limitaban
+todo preview a Desktop quedan reemplazadas por este flujo. Canchas ofrece edición y
+horarios dentro de la app (ver "Editar cancha"/"Horarios de cancha" más arriba).
+
+**Transmisión real desde el móvil (2026-10-03).** El botón del preview ("Cerrar
+preview e iniciar transmisión") SÍ transmite: arranca el livestream nativo de la
+GoPro (`services/cohn/liveStream.ts`) — la cámara empuja RTMP a Wowza por su cuenta,
+por WiFi, sin relay del teléfono — y, solo si la cámara confirma
+`LIVE_STREAM_STATE_STREAMING` por BLE, llama `PUT /game/live/:id/start` (el mismo
+endpoint de Desktop, que dispara `STREAMING_STARTED` a los seguidores). Si algo falla
+antes de esa confirmación, no se marca LIVE ni se notifica a nadie. El protocolo BLE
+(comando protobuf `SET_LIVESTREAM_MODE` + disparador `SET_SHUTTER`) y sus tiempos están
+portados de `legacy-ble/python/native_stream.py` de torna-desktop, la única
+implementación verificada contra una GoPro real (HERO12). El origen de la URL RTMP y
+el perfil de encoding es `Camera.rtmpServer`/`resolution`/`lens`/`*BitRate` — las
+mismas columnas que ya usa Desktop, vía `GET /game/:id/cameras`; el móvil solo las lee.
+Ver `docs/cohn-mobile.md` para el detalle completo, incluida la salvedad de que esto no
+se probó contra hardware físico desde este cliente.
