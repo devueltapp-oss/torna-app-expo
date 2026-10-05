@@ -368,6 +368,55 @@ describe('GameDetailScreen — chrome del live', () => {
 });
 
 /**
+ * Bug real (2026-10-04): `camera.streamingUrl` es una propiedad de la CÁMARA,
+ * no del partido — sigue viva (y puede volver a transmitir) mucho después de
+ * que el partido termine. Entrar a un partido FINALIZADO/DETENIDO reproducía
+ * esa URL igual, así que si la misma cámara se reusaba para una partida nueva,
+ * se terminaba viendo un partido AJENO en vivo desde la pantalla de uno viejo.
+ * Sin partido en vivo, la fuente tiene que ser la grabación propia
+ * (`recordingUrl`), nunca la cámara.
+ */
+describe('GameDetailScreen — fuente del video: cámara en vivo vs. grabación propia', () => {
+  let logSpy: jest.SpyInstance;
+  beforeEach(() => { logSpy = jest.spyOn(console, 'log').mockImplementation(() => {}); });
+  afterEach(() => { logSpy.mockRestore(); });
+
+  const loggedStreamSrc = () => logSpy.mock.calls
+    .map((call) => call.join(' '))
+    .find((line) => line.includes('[STREAM DEBUG]') && line.includes('streamSrc='));
+
+  it('en vivo, usa el streamingUrl de la cámara activa (como siempre)', () => {
+    renderScreen();
+    expect(loggedStreamSrc()).toContain('https://x/y.m3u8');
+  });
+
+  it('NO en vivo, usa recordingUrl en vez del streamingUrl de la cámara', () => {
+    renderScreen({ game: { ...game, isLive: false }, recordingUrl: 'https://cdn/recording.mp4' });
+    const logged = loggedStreamSrc();
+    expect(logged).toContain('https://cdn/recording.mp4');
+    expect(logged).not.toContain('https://x/y.m3u8');
+  });
+
+  it('NO en vivo y sin recordingUrl, no intenta la cámara (mejor sin video que uno ajeno)', () => {
+    renderScreen({ game: { ...game, isLive: false }, recordingUrl: null });
+    expect(loggedStreamSrc()).toMatch(/streamSrc= ?(undefined)?$/);
+  });
+
+  it('NO en vivo, el selector de cámaras no se muestra (cambiar de "cámara" no movería la grabación)', () => {
+    const twoCams = { ...game, isLive: false, cameras: [...game.cameras, { id: 'cam2', number: 2, label: 'Secundaria', state: 'available', streamUrl: 'https://x/cam2.m3u8' } as any] };
+    const { queryByText } = renderScreen({ game: twoCams, recordingUrl: 'https://cdn/recording.mp4' });
+    expect(queryByText('CAM 1')).toBeNull();
+    expect(queryByText('CAM 2')).toBeNull();
+  });
+
+  it('en vivo con más de una cámara, el selector sigue disponible', () => {
+    const twoCams = { ...game, cameras: [...game.cameras, { id: 'cam2', number: 2, label: 'Secundaria', state: 'available', streamUrl: 'https://x/cam2.m3u8' } as any] };
+    const { getByText } = renderScreen({ game: twoCams });
+    expect(getByText('CAM 2')).toBeTruthy();
+  });
+});
+
+/**
  * Controles del reproductor (2026-09-02).
  *
  * Los botones de **pausa** y **zoom** se eliminaron: ahora son gestos sobre el

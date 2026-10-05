@@ -1912,6 +1912,7 @@ function GameDetailContainer({ navigation, route }: { navigation: any; route: an
     <GameDetailScreen
       game={game}
       fallbackStreamUrl={route.params?.liveStreamUrl}
+      recordingUrl={recordingUrl}
       isFollowing={following}
       onToggleFollow={clubId ? () => {
         const wasFollowing = following;

@@ -117,10 +117,16 @@ export interface GameDetailData {
 }
 
 export function GameDetailScreen({
-  game, fallbackStreamUrl, onBack, isFollowing = false, onToggleFollow, onCreateHighlight,
+  game, fallbackStreamUrl, recordingUrl, onBack, isFollowing = false, onToggleFollow, onCreateHighlight,
   onOpenPlayer, onOpenClub, onShare,
 }: {
-  game: GameDetailData; fallbackStreamUrl?: string; onBack?: () => void; isFollowing?: boolean; onToggleFollow?: () => void;
+  game: GameDetailData; fallbackStreamUrl?: string;
+  /**
+   * Partido NO en vivo (`FINISHED`/`STOPPED`/viejo): la grabación propia, no la
+   * URL de la cámara — ver la nota de `streamSrc` más abajo.
+   */
+  recordingUrl?: string | null;
+  onBack?: () => void; isFollowing?: boolean; onToggleFollow?: () => void;
   onCreateHighlight?: () => void;
   /** Abre el perfil público de un jugador. Sin handler, la fila no es tocable. */
   onOpenPlayer?: (playerId: string) => void;
@@ -136,9 +142,21 @@ export function GameDetailScreen({
   const [streamError, setStreamError] = React.useState(false);
   const [paused, setPaused] = React.useState(false);
 
-  // Reutiliza la URL ya validada por la preview del Home (GET /game/live) si la cámara
-  // activa del detalle (GET /game/:id) todavía no trae stream o el fetch falló.
-  const streamSrc = activeCam?.streamUrl || fallbackStreamUrl;
+  /**
+   * ⚠️ `camera.streamingUrl` es una propiedad de la CÁMARA, no de ESTE partido —
+   * sigue existiendo (y puede volver a estar activa) mucho después de que el
+   * partido termine. Usarla para un partido que ya no está en vivo mostraría
+   * lo que sea que esa cámara esté transmitiendo AHORA (otra partida nueva en
+   * la misma cancha), no la transmisión original. Bug real (2026-10-04): se
+   * podía "entrar a ver" una partida FINALIZADA/DETENIDA y terminar mirando un
+   * partido ajeno en vivo en esa misma cámara. Por eso, sin `isLive`, la fuente
+   * es la grabación propia del partido (`recordingUrl`) — o ninguna, si no hay.
+   *
+   * En vivo, reutiliza la URL ya validada por la preview del Home (GET
+   * /game/live) si la cámara activa del detalle (GET /game/:id) todavía no
+   * trae stream o el fetch falló.
+   */
+  const streamSrc = game.isLive ? (activeCam?.streamUrl || fallbackStreamUrl) : (recordingUrl || undefined);
 
   // Player de expo-video (SDK 55, reemplaza a `expo-av`). Instancia única para los
   // tres tamaños (card / absolute-fill / fullscreen): solo cambia el estilo del
@@ -924,7 +942,7 @@ export function GameDetailScreen({
               testID="comments-overlay"
               style={{
                 position: 'absolute', left: 0, right: 0,
-                bottom: (game.cameras.length > 1 ? 100 : 62) + bottomInset,
+                bottom: (game.isLive && game.cameras.length > 1 ? 100 : 62) + bottomInset,
                 // 25% y no 42%: ocupaba casi media pantalla y competía con el
                 // partido. Lo que importa es lo último que se dijo, no el historial
                 // — para leer todo está el scroll de la propia capa.
@@ -1091,8 +1109,11 @@ export function GameDetailScreen({
             </Animated.View>
           )}
 
-          {/* Cámaras: chips superpuestos, justo encima de la barra de abajo. */}
-          {!fullscreen && game.cameras.length > 1 && (
+          {/* Cámaras: chips superpuestos, justo encima de la barra de abajo. Solo
+              en vivo — sin eso, cambiar de "cámara" en un partido ya terminado
+              no mueve el video (que ahora sale de `recordingUrl`, no de la
+              cámara activa): un control que no hace nada es peor que no tenerlo. */}
+          {!fullscreen && game.isLive && game.cameras.length > 1 && (
             // Mismo motivo que `comments-overlay`/`compose-bar-row`: traslación
             // pura vía `transform` nativo en iOS, sin relayout.
             <Animated.View style={{
