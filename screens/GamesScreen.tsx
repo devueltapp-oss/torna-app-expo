@@ -312,12 +312,15 @@ export function GamesScreen({
         onConfirm={async () => {
           if (!actionTarget) return;
           const action = actionTarget.kind === 'pause' ? onPauseGame : actionTarget.kind === 'finish' ? onFinishGame : onCancelGame;
+          if (__DEV__) console.log('[FINISH DEBUG] confirm sheet onConfirm', { kind: actionTarget.kind, id: actionTarget.id, hasAction: !!action });
           if (!action) return;
           setSubmitting(true);
           try {
             await action(actionTarget.id);
+            if (__DEV__) console.log('[FINISH DEBUG] action resolved OK', actionTarget.kind);
             setActionTarget(null);
           } catch (error) {
+            if (__DEV__) console.log('[FINISH DEBUG] action FAILED', actionTarget.kind, error instanceof Error ? error.message : error);
             Alert.alert('No se pudo completar la acción', error instanceof Error ? error.message : 'Reintentá cerca de las cámaras.');
           } finally {
             setSubmitting(false);

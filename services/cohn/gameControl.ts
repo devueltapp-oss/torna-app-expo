@@ -4,29 +4,47 @@ import { fetchClubCameras } from '../../api/cameras';
 import { fetchClubGames, fetchClubGameCameras, finishClubGame, setGameLiveStatus } from '../../api/games';
 
 let controlling = false;
-/** All cameras must confirm stopped before publishing the game transition. */
+/**
+ * All cameras must confirm stopped before publishing the game transition.
+ *
+ * Instrumentado con `[FINISH DEBUG]` (mismo criterio que `[STREAM DEBUG]` de
+ * `useGameDetail.ts`/`GameDetailScreen.tsx`): pausar/finalizar depende de un
+ * round-trip BLE real contra la GoPro, así que un fallo silencioso acá (sin
+ * log) es indistinguible de "no pasa nada" para quien lo prueba. Dejar estos
+ * logs — no son para borrar antes de producción, son el único rastro de en
+ * qué paso se cae un intento real.
+ */
 export async function controlClubStream(user: ClubIdentity | null, gameId: string, action: 'pause' | 'finish') {
+  const log = (...args: unknown[]) => { if (__DEV__) console.log('[FINISH DEBUG]', ...args); };
+  log('start', { gameId, action });
   assertClub(user);
   if (controlling) throw new Error('Esperá a que termine la acción anterior.');
   controlling = true;
   try {
     const games = await fetchClubGames(user.id);
     const game = games.find(g => g.gameId === gameId);
+    log('fetched games', { count: games.length, gameStatus: game?.gameStatus });
     if (!game || !(action === 'pause' ? ['LIVE'] : ['LIVE', 'STOPPED']).includes(game.gameStatus)) {
       throw new Error('La partida cambió de estado. Actualizá la lista.');
     }
     const [cameras, owned] = await Promise.all([fetchClubGameCameras(user, gameId), fetchClubCameras(user)]);
+    log('fetched cameras', { cameras: cameras.map(c => ({ id: c.id, bleName: c.bleName })), ownedCount: owned.length });
     if (!cameras.length || cameras.some(c => !owned.some(o => o.id === c.id) || !c.bleName)) {
       throw new Error('No se pueden verificar las cámaras de esta partida. Revisá su configuración.');
     }
     const otherLive = await Promise.all(games.filter(g => g.gameId !== gameId && g.gameStatus === 'LIVE').map(g => fetchClubGameCameras(user, g.gameId)));
     if (otherLive.flat().some(c => cameras.some(target => target.id === c.id))) throw new Error('Una cámara está asociada a otra partida en vivo. Revisá la asignación antes de detenerla.');
     for (const camera of cameras) {
-      const session = await connectCameraFromPhone(user, camera.bleName!, new AbortController().signal, () => {}, () => {});
-      try { await session.stopLive(); }
+      log('connecting BLE to', camera.bleName);
+      const session = await connectCameraFromPhone(user, camera.bleName!, new AbortController().signal, (m) => log('BLE progress', m), () => log('BLE disconnected', camera.bleName));
+      try { await session.stopLive(); log('stopLive OK', camera.bleName); }
       finally { await session.close(); }
     }
     if (action === 'pause') await setGameLiveStatus(user, gameId, 'stop');
     else await finishClubGame(user, gameId);
+    log('done', { action });
+  } catch (error) {
+    log('FAILED', error instanceof Error ? error.message : error);
+    throw error;
   } finally { controlling = false; }
 }
