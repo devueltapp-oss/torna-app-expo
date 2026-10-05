@@ -35,6 +35,13 @@ export interface ConfirmSheetProps {
   destructive?: boolean;
   /** Mientras corre, el botón muestra spinner y no se puede tocar de nuevo. */
   loading?: boolean;
+  /**
+   * Reemplaza a `message` mientras `loading` es `true` — para acciones largas
+   * (p. ej. reconectar una cámara por BLE) donde un spinner mudo durante
+   * varios segundos se percibe como "no está pasando nada". Sin esto, se
+   * sigue mostrando `message`.
+   */
+  loadingMessage?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -47,6 +54,7 @@ export function ConfirmSheet({
   cancelLabel = 'Cancelar',
   destructive = false,
   loading = false,
+  loadingMessage,
   onConfirm,
   onCancel,
 }: ConfirmSheetProps) {
@@ -90,9 +98,9 @@ export function ConfirmSheet({
             {title}
           </Text>
 
-          {message ? (
+          {(loading && loadingMessage) || message ? (
             <Text style={{ fontSize: 14, color: colors.muted2, lineHeight: 20, marginTop: 8 }}>
-              {message}
+              {loading && loadingMessage ? loadingMessage : message}
             </Text>
           ) : null}
 

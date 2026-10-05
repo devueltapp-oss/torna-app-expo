@@ -12,6 +12,7 @@ import { MapsButton } from '../components/MapsButton';
 import { NearbyPromptCard } from '../components/NearbyPromptCard';
 import { ConfirmSheet } from '../components/ConfirmSheet';
 import type { UpcomingGameData } from '../data/types';
+import type { ControlClubStreamOptions } from '../services/cohn/gameControl';
 
 type Filter = 'TODAS' | 'LIVE' | 'SCHEDULED' | 'FINISHED' | 'CANCELLED';
 
@@ -66,15 +67,16 @@ interface Props {
    * vuelve a `ClubPrepareGame`, donde "Iniciar streaming" la retoma. Solo
    * filas `LIVE`.
    */
-  onPauseGame?: (id: string) => Promise<void>;
+  onPauseGame?: (id: string, options?: ControlClubStreamOptions) => Promise<void>;
   /**
    * (Club) Finaliza manualmente una partida (`LIVE` o `STOPPED`). Es la
    * transición terminal sobre un vivo — no hay "reanudar" desde acá (eso
    * es pausar): dispara el procesado de la grabación. Mismo guard por BLE
    * que pausar: no marca `FINISHED` si no pudo confirmar que la cámara
-   * dejó de transmitir.
+   * dejó de transmitir — salvo que se fuerce (ver `ControlClubStreamOptions`),
+   * que el club puede elegir cuando la cámara es realmente inalcanzable.
    */
-  onFinishGame?: (id: string) => Promise<void>;
+  onFinishGame?: (id: string, options?: ControlClubStreamOptions) => Promise<void>;
 }
 
 const FILTER_LABEL: Record<Filter, string> = {
@@ -97,6 +99,21 @@ export function GamesScreen({
   const [actionTarget, setActionTarget] = React.useState<{ id: string; kind: 'cancel' | 'finish' | 'pause' } | null>(null);
   const [menuTarget, setMenuTarget] = React.useState<GameListData | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+  // Mensajes de progreso durante pausar/finalizar (reconectar por BLE puede tardar
+  // varios segundos) — reemplazan el `message` fijo del sheet mientras `loading`.
+  const [progressMessage, setProgressMessage] = React.useState<string | undefined>(undefined);
+  // true = la cámara no confirmó que dejó de transmitir y el sheet pasó a ofrecer
+  // "Forzar sin confirmar" en vez de cerrarse con un error mudo (pedido explícito:
+  // el club nunca debe quedar sin forma de cerrar una partida por una cámara
+  // inalcanzable). Solo aplica a pausar/finalizar — cancelar nunca toca BLE.
+  const [forceAvailable, setForceAvailable] = React.useState(false);
+  // Abre el sheet de confirmación, siempre arrancando en el paso normal — sin esto,
+  // un "Forzar" que quedó activo de un intento previo se filtraría a la próxima
+  // partida que se intente pausar/finalizar.
+  const openAction = (target: { id: string; kind: 'cancel' | 'finish' | 'pause' }) => {
+    setForceAvailable(false);
+    setActionTarget(target);
+  };
 
   // Vista del player: hub de partidos = Mis partidas + Abiertos para sumarme + Reservar.
   if (role === 'player') {
@@ -254,9 +271,9 @@ export function GamesScreen({
               if (submitting) return;
               setMenuTarget(item);
             }}
-            onDelete={onCancelGame && (item.status === 'SCHEDULED' || item.status === 'STOPPED') ? () => setActionTarget({ id: item.id, kind: 'cancel' }) : undefined}
-            onPause={onPauseGame && item.status === 'LIVE' ? () => setActionTarget({ id: item.id, kind: 'pause' }) : undefined}
-            onFinish={onFinishGame && ['LIVE', 'STOPPED'].includes(item.status) ? () => setActionTarget({ id: item.id, kind: 'finish' }) : undefined}
+            onDelete={onCancelGame && (item.status === 'SCHEDULED' || item.status === 'STOPPED') ? () => openAction({ id: item.id, kind: 'cancel' }) : undefined}
+            onPause={onPauseGame && item.status === 'LIVE' ? () => openAction({ id: item.id, kind: 'pause' }) : undefined}
+            onFinish={onFinishGame && ['LIVE', 'STOPPED'].includes(item.status) ? () => openAction({ id: item.id, kind: 'finish' }) : undefined}
           />
           {/* DETENIDA (2026-10-03): la cámara quedó sin emitir (nunca se conectó
               o se cortó) — no es un estado terminal, el horario sigue siendo
@@ -291,9 +308,9 @@ export function GamesScreen({
             {menuTarget && [
               ...(['SCHEDULED','STOPPED'].includes(menuTarget.status) && onPrepareGame ? [{label: menuTarget.status === 'STOPPED' ? 'Reanudar transmisión' : 'Preparar cámaras', run: () => onPrepareGame(menuTarget.id)}] : []),
               ...(onOpenGame ? [{label: 'Ver partida', run: () => onOpenGame(menuTarget.id)}] : []),
-              ...(['SCHEDULED','STOPPED'].includes(menuTarget.status) && onCancelGame ? [{label: menuTarget.status === 'STOPPED' ? 'Cancelar partida' : 'Borrar partida agendada', run: () => setActionTarget({id: menuTarget.id, kind: 'cancel'})}] : []),
-              ...(menuTarget.status === 'LIVE' && onPauseGame ? [{label: 'Pausar transmisión', run: () => setActionTarget({id: menuTarget.id, kind: 'pause'})}] : []),
-              ...(['LIVE','STOPPED'].includes(menuTarget.status) && onFinishGame ? [{label: 'Finalizar partida', run: () => setActionTarget({id: menuTarget.id, kind: 'finish'})}] : []),
+              ...(['SCHEDULED','STOPPED'].includes(menuTarget.status) && onCancelGame ? [{label: menuTarget.status === 'STOPPED' ? 'Cancelar partida' : 'Borrar partida agendada', run: () => openAction({id: menuTarget.id, kind: 'cancel'})}] : []),
+              ...(menuTarget.status === 'LIVE' && onPauseGame ? [{label: 'Pausar transmisión', run: () => openAction({id: menuTarget.id, kind: 'pause'})}] : []),
+              ...(['LIVE','STOPPED'].includes(menuTarget.status) && onFinishGame ? [{label: 'Finalizar partida', run: () => openAction({id: menuTarget.id, kind: 'finish'})}] : []),
               {label: 'Cerrar', run: () => {}},
             ].map(option => <Pressable key={option.label} accessibilityRole="button" onPress={() => {setMenuTarget(null); option.run();}} style={{paddingVertical: 12}}><Text style={{color: colors.text}}>{option.label}</Text></Pressable>)}
           </View>
@@ -301,29 +318,50 @@ export function GamesScreen({
       </Modal>
       <ConfirmSheet
         visible={!!actionTarget}
-        title={actionTarget?.kind === 'pause' ? 'Pausar esta transmisión' : actionTarget?.kind === 'finish' ? 'Finalizar esta partida' : 'Cancelar esta reserva'}
-        message={actionTarget?.kind === 'pause' ? 'Se detendrán las cámaras. Podrás reanudar desde esta partida. Mantené el teléfono cerca de las GoPro.' : actionTarget?.kind === 'finish'
+        title={forceAvailable ? 'No se pudo confirmar la cámara'
+          : actionTarget?.kind === 'pause' ? 'Pausar esta transmisión' : actionTarget?.kind === 'finish' ? 'Finalizar esta partida' : 'Cancelar esta reserva'}
+        message={forceAvailable
+          ? 'No se pudo confirmar que la cámara dejó de transmitir. Forzar puede dejarla transmitiendo sin que nadie la vea — revisala a mano después.'
+          : actionTarget?.kind === 'pause' ? 'Se detendrán las cámaras. Podrás reanudar desde esta partida. Mantené el teléfono cerca de las GoPro.' : actionTarget?.kind === 'finish'
           ? 'Corta la transmisión y queda como FINALIZADA. No se puede deshacer ni reanudar.'
           : 'Se cancela y se avisa a los jugadores. No se puede deshacer.'}
-        confirmLabel={actionTarget?.kind === 'pause' ? 'Pausar transmisión' : actionTarget?.kind === 'finish' ? 'Finalizar partida' : 'Cancelar reserva'}
+        confirmLabel={forceAvailable ? 'Forzar sin confirmar'
+          : actionTarget?.kind === 'pause' ? 'Pausar transmisión' : actionTarget?.kind === 'finish' ? 'Finalizar partida' : 'Cancelar reserva'}
+        loadingMessage={progressMessage}
         destructive
         loading={submitting}
-        onCancel={() => { if (!submitting) setActionTarget(null); }}
+        onCancel={() => { if (submitting) return; setActionTarget(null); setForceAvailable(false); }}
         onConfirm={async () => {
           if (!actionTarget) return;
-          const action = actionTarget.kind === 'pause' ? onPauseGame : actionTarget.kind === 'finish' ? onFinishGame : onCancelGame;
-          if (__DEV__) console.log('[FINISH DEBUG] confirm sheet onConfirm', { kind: actionTarget.kind, id: actionTarget.id, hasAction: !!action });
-          if (!action) return;
+          if (__DEV__) console.log('[FINISH DEBUG] confirm sheet onConfirm', { kind: actionTarget.kind, id: actionTarget.id, force: forceAvailable });
           setSubmitting(true);
+          setProgressMessage(undefined);
+          const onProgress = (m: string) => setProgressMessage(m);
           try {
-            await action(actionTarget.id);
+            if (actionTarget.kind === 'cancel') {
+              if (!onCancelGame) return;
+              await onCancelGame(actionTarget.id);
+            } else if (actionTarget.kind === 'pause') {
+              if (!onPauseGame) return;
+              await onPauseGame(actionTarget.id, { force: forceAvailable, onProgress });
+            } else {
+              if (!onFinishGame) return;
+              await onFinishGame(actionTarget.id, { force: forceAvailable, onProgress });
+            }
             if (__DEV__) console.log('[FINISH DEBUG] action resolved OK', actionTarget.kind);
             setActionTarget(null);
+            setForceAvailable(false);
           } catch (error) {
             if (__DEV__) console.log('[FINISH DEBUG] action FAILED', actionTarget.kind, error instanceof Error ? error.message : error);
-            Alert.alert('No se pudo completar la acción', error instanceof Error ? error.message : 'Reintentá cerca de las cámaras.');
+            const forceable = actionTarget.kind !== 'cancel' && !!(error as { cameraConfirmationFailed?: boolean } | undefined)?.cameraConfirmationFailed;
+            if (forceable) {
+              setForceAvailable(true);
+            } else {
+              Alert.alert('No se pudo completar la acción', error instanceof Error ? error.message : 'Reintentá cerca de las cámaras.');
+            }
           } finally {
             setSubmitting(false);
+            setProgressMessage(undefined);
           }
         }}
       />

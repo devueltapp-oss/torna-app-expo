@@ -171,15 +171,33 @@ export async function startNativeLivestream(
   await waitForLivestreamStatus(t, [LIVE_STREAM_STATE_STREAMING], Date.now() + 150000);
 }
 
-/** Confirm stopped before allowing the game status to change. Keep WiFi for resuming. */
-export async function stopNativeLivestream(t: CohnTransport): Promise<void> {
+// "No streaming" states for NotifyLiveStreamStatus — same values the first cut of this
+// function already assumed (unverified against hardware either way, see below).
+const NOT_STREAMING_STATES = [0, 2, 4, 5];
+
+/**
+ * Confirm stopped before allowing the game status to change.
+ *
+ * Esta es la conexión BLE que arma `connectCameraFromPhone` DESDE CERO — `startNativeLivestream`
+ * ya cerró la suya al confirmar `STREAMING` (ver el comentario de `services/cohn/gameControl.ts`
+ * y `docs/cohn-mobile.md`). Reconectar por BLE contra una GoPro que ya transmite de forma
+ * autónoma SÍ funciona — está verificado contra hardware real por `torna-desktop/legacy-ble/
+ * python/native_stream.py do_stop`, que hace exactamente esto desde un proceso nuevo — así que
+ * el mecanismo de abajo reusa el mismo patrón de registro + espera pasiva que ya usa
+ * `startNativeLivestream` (`registerLivestreamStatus` + `waitForLivestreamStatus`) en vez de
+ * un query-loop sin registrar: ese query-loop fue el primer intento de esto (reemplazado el
+ * mismo día que se escribió, nunca llegó a probarse contra hardware).
+ *
+ * `releaseNetwork` manda 0xF1/0x78 ("liberar la red"), igual que `do_stop` de Desktop — pero
+ * SOLO cuando el llamador no va a reanudar (`finish`): `pause` necesita que la cámara siga en
+ * la misma WiFi para que "Iniciar streaming" la retome sin volver a unir red, y no está
+ * verificado que `0x78` no afecte también el enlace COHN que usa el preview local.
+ */
+export async function stopNativeLivestream(t: CohnTransport, releaseNetwork: boolean): Promise<void> {
   await setShutter(t, false, 20000);
-  const deadline = Date.now() + 30000;
-  while (Date.now() < deadline) {
-    const fields = await request(t, 'query', 0xf5, 0x74, {}, Math.min(10000, deadline - Date.now()));
-    const state = numberField(fields, 1);
-    if (state === 0 || state === 2 || state === 4 || state === 5) return;
-    await new Promise(resolve => setTimeout(resolve, 1000));
+  await registerLivestreamStatus(t);
+  await waitForLivestreamStatus(t, NOT_STREAMING_STATES, Date.now() + 30000);
+  if (releaseNetwork) {
+    await request(t, 'command', 0xf1, 0x78, {}, 15000).then((fields) => success(fields, 'liberar la red')).catch(() => {});
   }
-  throw new Error('La GoPro no confirmó que dejó de transmitir. No se cambió el estado de la partida.');
 }

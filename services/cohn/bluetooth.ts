@@ -147,7 +147,8 @@ export interface CameraBluetoothSession {
   readNetwork(): Promise<CohnCredentials | null>;
   /** Configures + starts the camera's own RTMP push and resolves once it confirms it's actually streaming. */
   goLive(wifi: { ssid: string; password: string }, target: LivestreamTarget, signal: AbortSignal, progress: (message: string) => void): Promise<void>;
-  stopLive(): Promise<void>;
+  /** `releaseNetwork`: liberar la WiFi de la cámara (0xF1/0x78) — solo en `finish`, nunca en `pause` (ver `stopNativeLivestream`). */
+  stopLive(releaseNetwork: boolean): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -183,7 +184,7 @@ export function connectCameraFromPhone(user: ClubIdentity | null, bleName: strin
           try { if (operationSignal.aborted) abort(); return await startNativeLivestream(transport, wifi, target, operationSignal, update); }
           finally { operationSignal.removeEventListener('abort', abort); }
         }),
-        stopLive: () => run(() => stopNativeLivestream(transport)),
+        stopLive: (releaseNetwork) => run(() => stopNativeLivestream(transport, releaseNetwork)),
         close: async () => { abort(); await finished; },
       });
       await held;

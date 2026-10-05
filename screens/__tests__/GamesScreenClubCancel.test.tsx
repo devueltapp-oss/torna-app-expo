@@ -136,7 +136,7 @@ describe('GamesScreen (club) — finalizar partida EN VIVO', () => {
     expect(onFinishGame).not.toHaveBeenCalled();
 
     fireEvent.press(getByText('Finalizar partida'));
-    await waitFor(() => expect(onFinishGame).toHaveBeenCalledWith('g-live'));
+    await waitFor(() => expect(onFinishGame).toHaveBeenCalledWith('g-live', expect.objectContaining({ force: false })));
   });
 
   it('cancelar y finalizar no se pisan: cada fila ofrece solo su propia acción', () => {
@@ -236,7 +236,7 @@ describe('GamesScreen (club) — pausar una transmisión EN VIVO', () => {
     expect(onPauseGame).not.toHaveBeenCalled();
 
     fireEvent.press(getByText('Pausar transmisión'));
-    await waitFor(() => expect(onPauseGame).toHaveBeenCalledWith('g-live'));
+    await waitFor(() => expect(onPauseGame).toHaveBeenCalledWith('g-live', expect.objectContaining({ force: false })));
   });
 
   it('pausar desde el menú de la fila hace lo mismo que el swipe', async () => {
@@ -249,7 +249,7 @@ describe('GamesScreen (club) — pausar una transmisión EN VIVO', () => {
     // El `ConfirmSheet` repite el label del botón ("Pausar transmisión"); tomamos el último.
     const confirmButtons = getAllByText('Pausar transmisión');
     fireEvent.press(confirmButtons[confirmButtons.length - 1]);
-    await waitFor(() => expect(onPauseGame).toHaveBeenCalledWith('g-live'));
+    await waitFor(() => expect(onPauseGame).toHaveBeenCalledWith('g-live', expect.objectContaining({ force: false })));
   });
 
   it('una partida STOPPED no ofrece pausar (ya no está en vivo)', () => {
@@ -273,5 +273,69 @@ describe('GamesScreen (club) — pausar una transmisión EN VIVO', () => {
     await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('No se pudo completar la acción', 'La GoPro no confirmó que dejó de transmitir.'));
     expect(getByText('Pausar esta transmisión')).toBeTruthy(); // el sheet sigue abierto, no se perdió el estado
     alertSpy.mockRestore();
+  });
+});
+
+/**
+ * "Forzar sin confirmar" (2026-10-04): si la cámara nunca confirma que dejó de
+ * transmitir (fuera de rango, apagada), el club no debe quedar sin forma de
+ * cerrar la partida. `controlClubStream` marca ese error puntual con
+ * `cameraConfirmationFailed` — solo ESE tipo de error ofrece forzar, nunca un
+ * error de validación (partida en otro estado, cámara ajena, etc.).
+ */
+describe('GamesScreen (club) — "Forzar sin confirmar" cuando la cámara no responde', () => {
+  function cameraConfirmationError() {
+    const error: Error & { cameraConfirmationFailed?: boolean } = new Error('La GoPro no confirmó que dejó de transmitir.');
+    error.cameraConfirmationFailed = true;
+    return error;
+  }
+
+  it('ofrece "Forzar sin confirmar" cuando falla por la cámara, y confirmar reintenta con force:true', async () => {
+    const onFinishGame = jest.fn()
+      .mockRejectedValueOnce(cameraConfirmationError())
+      .mockResolvedValueOnce(undefined);
+    const { getByTestId, getByText, queryByText } = renderWithTheme(
+      <GamesScreen games={[live]} role="club" onFinishGame={onFinishGame} />,
+    );
+    fireEvent.press(getByTestId('game-finish-g-live'));
+    fireEvent.press(getByText('Finalizar partida'));
+
+    await waitFor(() => expect(getByText('No se pudo confirmar la cámara')).toBeTruthy());
+    expect(queryByText(/No se pudo confirmar que la cámara dejó de transmitir/)).toBeTruthy();
+
+    fireEvent.press(getByText('Forzar sin confirmar'));
+    await waitFor(() => expect(onFinishGame).toHaveBeenCalledWith('g-live', expect.objectContaining({ force: true })));
+    // Al tener éxito, el sheet se cierra (no queda pidiendo forzar otra vez).
+    await waitFor(() => expect(queryByText('No se pudo confirmar la cámara')).toBeNull());
+  });
+
+  it('un error de validación (no de cámara) NO ofrece "Forzar" — se avisa con Alert y listo', async () => {
+    const onPauseGame = jest.fn(async () => { throw new Error('La partida cambió de estado. Actualizá la lista.'); });
+    const alertSpy = jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => {});
+    const { getByLabelText, getByText, queryByText } = renderWithTheme(
+      <GamesScreen games={[live]} role="club" onPauseGame={onPauseGame} onFinishGame={jest.fn()} />,
+    );
+    fireEvent.press(getByLabelText('Pausar transmisión'));
+    fireEvent.press(getByText('Pausar transmisión'));
+
+    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
+    expect(queryByText('Forzar sin confirmar')).toBeNull();
+    alertSpy.mockRestore();
+  });
+
+  it('un intento nuevo sobre otra partida arranca sin "forzar" pegado de un fallo previo', async () => {
+    const onFinishGame = jest.fn().mockRejectedValueOnce(cameraConfirmationError());
+    const { getByTestId, getByText, queryByText } = renderWithTheme(
+      <GamesScreen games={[live, { ...live, id: 'g-live-2', court: 'Cancha 5' }]} role="club" onFinishGame={onFinishGame} />,
+    );
+    fireEvent.press(getByTestId('game-finish-g-live'));
+    fireEvent.press(getByText('Finalizar partida'));
+    await waitFor(() => expect(getByText('Forzar sin confirmar')).toBeTruthy());
+
+    // Cerrar y abrir la hoja de OTRA partida: no debe arrastrar el estado "forzar".
+    fireEvent.press(getByTestId('confirm-sheet-cancel'));
+    fireEvent.press(getByTestId('game-finish-g-live-2'));
+    expect(queryByText('Finalizar esta partida')).toBeTruthy();
+    expect(queryByText('No se pudo confirmar la cámara')).toBeNull();
   });
 });

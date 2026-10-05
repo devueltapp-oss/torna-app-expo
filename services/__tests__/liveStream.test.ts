@@ -144,11 +144,64 @@ describe('livestream nativo de GoPro', () => {
     expect(sent.some((m) => m.channel === 'command' && m.payload[0] === 0xf1 && m.payload[1] === 0x79)).toBe(false);
   });
 
-  it('detener confirma el estado y conserva WiFi para reanudar', async () => {
-    const { transport, sent } = makeTransport({ command: [[0x01, 0]], query: [[0xf5, 0xf4, ...encode({1: 2})]] });
-    await stopNativeLivestream(transport);
+  /**
+   * `stopNativeLivestream` reutiliza EXACTAMENTE el mismo registro + espera pasiva
+   * (`registerLivestreamStatus` + `waitForLivestreamStatus`) que ya usa el arranque —
+   * no un query-loop sin registrar (eso fue el primer intento del 2026-10-04, nunca
+   * se probó contra hardware real y se reemplazó el mismo día).
+   */
+  it('detener apaga el shutter, se suscribe al estado y espera que deje de transmitir', async () => {
+    const { transport, sent } = makeTransport({
+      command: [[0x01, 0]], // shutter DISABLE ack
+      query: [
+        [0xf5, 0xf4, ...encode({ 1: 1 })], // ack síncrono del registro (register_livestream_status)
+        [0xf5, 0xf5, ...encode({ 1: 0 })], // notificación async: IDLE = ya no transmite
+      ],
+    });
+    await stopNativeLivestream(transport, false);
     expect(sent[0].payload).toEqual([0x01, 1, 0]);
     expect(sent[1].payload[0]).toBe(0xf5);
     expect(sent[1].payload[1]).toBe(0x74);
+    expect(numberField(decode(sent[1].payload.slice(2)), 1)).toBe(1); // se registra (field 1 = 1), no un query suelto
+    // `releaseNetwork=false` (pausar): no libera la red, la cámara sigue en la misma WiFi para reanudar.
+    expect(sent.some((m) => m.channel === 'command' && m.payload[0] === 0xf1 && m.payload[1] === 0x78)).toBe(false);
+  });
+
+  it('detener libera la red (0xF1/0x78) solo cuando releaseNetwork=true (finalizar, no pausar)', async () => {
+    const { transport, sent } = makeTransport({
+      command: [
+        [0x01, 0], // shutter DISABLE ack
+        [0xf1, 0xf8, ...encode({ 1: 1 })], // release_network ack
+      ],
+      query: [
+        [0xf5, 0xf4, ...encode({ 1: 1 })],
+        [0xf5, 0xf5, ...encode({ 1: 2 })], // READY tampoco es "streaming"
+      ],
+    });
+    await stopNativeLivestream(transport, true);
+    expect(sent.some((m) => m.channel === 'command' && m.payload[0] === 0xf1 && m.payload[1] === 0x78)).toBe(true);
+  });
+
+  it('liberar la red es best-effort: si no hay respuesta, no revienta el "detener"', async () => {
+    const { transport } = makeTransport({
+      command: [[0x01, 0]], // sin ack de release_network encolado
+      query: [
+        [0xf5, 0xf4, ...encode({ 1: 1 })],
+        [0xf5, 0xf5, ...encode({ 1: 4 })], // COMPLETE
+      ],
+    });
+    await expect(stopNativeLivestream(transport, true)).resolves.toBeUndefined();
+  });
+
+  it('propaga el error que reporta la cámara al intentar detener', async () => {
+    const { transport } = makeTransport({
+      command: [[0x01, 0]],
+      query: [
+        [0xf5, 0xf4, ...encode({ 1: 1 })],
+        // LIVE_STREAM_ERROR_OSNETWORK = 6: "El servidor cerró la conexión."
+        [0xf5, 0xf5, ...encode({ 1: 1, 2: 6 })],
+      ],
+    });
+    await expect(stopNativeLivestream(transport, false)).rejects.toThrow(/El servidor cerró la conexión/);
   });
 });

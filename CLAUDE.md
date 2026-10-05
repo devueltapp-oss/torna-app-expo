@@ -2299,27 +2299,42 @@ por el preview. A diferencia de "Previsualizar sin transmitir" (Android-only, de
 la vista nativa `TornaCohn`), "Iniciar streaming" no renderiza ningún preview — es solo
 BLE — así que está disponible en Android **e iOS**.
 
-#### Pausar y finalizar confirman por BLE que la cámara dejó de transmitir (2026-10-04)
+#### Pausar y finalizar confirman por BLE que la cámara dejó de transmitir (2026-10-04, corregido el mismo día)
 
 `stopNativeLivestream` (`services/cohn/liveStream.ts`) antes apagaba el shutter y
 soltaba la red **best-effort**: los dos pasos iban envueltos en `.catch(() => {})`, así
-que una GoPro que no respondía igual se reportaba como detenida. Ahora **confirma**:
-apaga el shutter (sin tragarse el error) y después consulta `NotifyLiveStreamStatus`
-(`0xF5`/`0x74`) en loop hasta ver un estado que no es "transmitiendo" (0/2/4/5) o hasta
-30 s, momento en el que lanza en vez de resolver en silencio. Ya no libera la red
-COHN al final (antes llamaba al comando `0x78`): pausar/reanudar necesita que la
-cámara siga en la misma WiFi para que "Iniciar streaming" la retome sin volver a
-enlazar por Bluetooth.
+que una GoPro que no respondía igual se reportaba como detenida. El primer intento de
+arreglar esto (mismo día) reemplazó eso por un query-loop contra `NotifyLiveStreamStatus`
+que mandaba `request(query, 0xf5, 0x74, {})` **sin registrarse antes** — nunca se probó
+contra hardware real y, en la práctica, "Finalizar partida" no hacía nada visible (ni
+error ni cambio de estado). ⚠️ **No repongas ese query-loop** si volvés a tocar esto.
 
-**`services/cohn/gameControl.ts`** (`controlClubStream(user, gameId, 'pause' | 'finish')`)
-es el único punto de entrada para las dos acciones manuales sobre una partida
-`LIVE`/`STOPPED` desde "Juegos": antes de tocar el backend, re-valida contra
-`fetchClubGames` que la partida sigue en el estado esperado, que **todas** las cámaras
-de `fetchClubGameCameras` pertenecen al club (`fetchClubCameras`) y tienen `bleName`, y
-que ninguna está adjunta a OTRA partida `LIVE` del club (para no pisar esa
-transmisión). Recién ahí se conecta por BLE a cada cámara (`connectCameraFromPhone`) y
-llama `stopLive()` — si **cualquier** cámara no confirma, la excepción sube sin tocar
-el estado de la partida. Solo si todas confirman:
+El mecanismo que quedó reutiliza la MISMA plomería que ya usa (y ya tenía tests)
+**arrancar** el stream: `registerLivestreamStatus` (`{1:1}`, se suscribe) +
+`waitForLivestreamStatus` (escucha pasivamente el ack síncrono `0xF4` o la notificación
+async `0xF5`, sin reenviar nada) — apuntando a los estados "no streaming" (`0,2,4,5`) en
+vez de a `STREAMING`. Esta reconexión por BLE contra una GoPro que ya transmite de forma
+autónoma **sí funciona** — está verificado contra hardware real por
+`torna-desktop/legacy-ble/python/native_stream.py do_stop`, que hace exactamente esto
+(abrir BLE desde cero, mandar el shutter OFF) desde un proceso nuevo, en producción.
+
+`stopNativeLivestream(t, releaseNetwork)` también vuelve a mandar "liberar la red"
+(`0xF1/0x78`, que Desktop sí manda y la primera reescritura había quitado) — pero
+**solo si `releaseNetwork` es `true`**, es decir solo en `'finish'`. En `'pause'` nunca
+se libera: reanudar depende de que la cámara siga en la misma WiFi para que "Iniciar
+streaming" la retome sin volver a enlazar por Bluetooth, y no está verificado que `0x78`
+no afecte también el enlace COHN que usa el preview local.
+
+**`services/cohn/gameControl.ts`** (`controlClubStream(user, gameId, 'pause' | 'finish',
+{ force?, onProgress? })`) es el único punto de entrada para las dos acciones manuales
+sobre una partida `LIVE`/`STOPPED` desde "Juegos": antes de tocar el backend, re-valida
+contra `fetchClubGames` que la partida sigue en el estado esperado, que **todas** las
+cámaras de `fetchClubGameCameras` pertenecen al club (`fetchClubCameras`) y tienen
+`bleName`, y que ninguna está adjunta a OTRA partida `LIVE` del club (para no pisar esa
+transmisión) — **estas tres validaciones nunca se saltean**, ni siquiera con `force`.
+Recién ahí se conecta por BLE a cada cámara (`connectCameraFromPhone`, con `onProgress`
+repasado como su `progress`) y llama `session.stopLive(action === 'finish')`. Solo si
+todas confirman (o se fuerza, ver abajo):
 - `'pause'` → `PUT /game/live/:id/stop` (mismo endpoint que ya usaba `ClubPrepareGameContainer`
   para `'start'`): la partida queda `STOPPED`, el mismo estado "DETENIDA" que ya existía
   para una cámara que se cortó sola — **no es un estado nuevo**, esto solo le suma un
@@ -2330,13 +2345,41 @@ el estado de la partida. Solo si todas confirman:
   terminal: la nota de más arriba sobre que **no existe "reanudar" desde `FINISHED`**
   sigue valiendo, eso no cambió.
 
+⚠️ **"Forzar sin confirmar" (pedido explícito, 2026-10-04): el club nunca debe quedar
+sin forma de cerrar una partida por una cámara inalcanzable** (apagada, fuera de rango,
+falla real). Si la conexión BLE o `stopLive` fallan para una cámara, el error se marca
+con `(error as any).cameraConfirmationFailed = true` — es la única señal que la UI usa
+para ofrecer forzar; un error de VALIDACIÓN (los tres chequeos de arriba) nunca lleva
+ese flag y nunca es forzable, porque no son problemas de conectividad. Con
+`options.force: true`, una falla de cámara se ignora (se sigue con las demás y con el
+cambio de estado de todas formas) en vez de interrumpir todo.
+
+`GamesScreen` (`screens/GamesScreen.tsx`) resuelve esto sin un segundo `Alert.alert`
+apilado sobre el `Modal` del `ConfirmSheet` ya abierto (no hay forma de confirmar hoy que
+eso se vea bien en los dos sistemas) — en vez de eso, el mismo `ConfirmSheet` pasa a un
+segundo paso ("No se pudo confirmar la cámara" / "Forzar sin confirmar") cuando el error
+trae `cameraConfirmationFailed`; confirmar ahí reintenta la misma acción con
+`{ force: true }`. Cualquier otro error (validaciones, "Esperá a que termine la acción
+anterior.") sigue mostrando el `Alert.alert` simple de siempre, sin ofrecer forzar. El
+estado de "forzar" se resetea (`openAction`) cada vez que se abre una acción nueva —
+nunca se filtra de un intento fallido anterior a la próxima partida.
+
+**Progreso visible**: `onProgress` (mensajes en español, ya listos para UI — "Buscando
+GoPro 1234…", "Conectando con CAM01…", "Finalizando la partida…") se muestra en
+`ConfirmSheet` vía su prop `loadingMessage`, reemplazando el `message` fijo mientras
+`loading` es `true`. Antes el usuario solo veía un spinner mudo durante hasta ~80 s
+(scan + connect + bond + confirmación) — un intento lento-pero-exitoso se percibía como
+"no hace nada".
+
 Un flag module-level (`controlling`) evita dos acciones en paralelo (p. ej. tocar
 "Pausar" dos veces rápido) — la segunda llamada rechaza con "Esperá a que termine la
 acción anterior." en vez de abrir una segunda sesión BLE sobre la misma cámara.
-`GamesScreen` muestra el error de cualquiera de estas validaciones con `Alert.alert`
-sobre el `ConfirmSheet` (que queda abierto, no se pierde la selección).
-Cubierto por `services/__tests__/gameControl.test.ts` y
-`services/__tests__/liveStream.test.ts`.
+Instrumentado con logs `[FINISH DEBUG]` (`__DEV__`, mismo criterio que `[STREAM DEBUG]`
+de `useGameDetail.ts`) en cada paso — no son para borrar, son el único rastro de en qué
+paso se cae un intento real sin acceso al dispositivo.
+Cubierto por `services/__tests__/gameControl.test.ts`,
+`services/__tests__/liveStream.test.ts` y
+`screens/__tests__/GamesScreenClubCancel.test.tsx` (describe "Forzar sin confirmar...").
 
 #### Pausar una transmisión y el menú de opciones al tocar la fila (2026-10-04)
 

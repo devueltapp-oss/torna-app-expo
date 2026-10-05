@@ -1,4 +1,4 @@
-import { controlClubStream } from './services/cohn/gameControl';
+import { controlClubStream, type ControlClubStreamOptions } from './services/cohn/gameControl';
 /**
  * Torna app entry. React Navigation stack with role-aware main containers
  * (MainPlayer / MainClub) that swap based on what role logged in. Las pantallas
@@ -1594,13 +1594,13 @@ function MainClub({ navigation, route }: any) {
   // Finalizar manualmente una partida EN VIVO — `PATCH /game/:id
   // {status:'FINISHED'}`, única transición manual que existe sobre un vivo
   // (no hay "detener sin finalizar" ni "reanudar": no existen en el backend).
-  const handleFinishClubGame = React.useCallback(async (gameId: string) => {
-    await controlClubStream(user ?? null, gameId, 'finish');
+  const handleFinishClubGame = React.useCallback(async (gameId: string, options?: ControlClubStreamOptions) => {
+    await controlClubStream(user ?? null, gameId, 'finish', options);
     refreshClubGames();
   }, [user, refreshClubGames]);
 
-  const handlePauseClubGame = React.useCallback(async (gameId: string) => {
-    await controlClubStream(user ?? null, gameId, 'pause');
+  const handlePauseClubGame = React.useCallback(async (gameId: string, options?: ControlClubStreamOptions) => {
+    await controlClubStream(user ?? null, gameId, 'pause', options);
     await refreshClubGames();
   }, [user, refreshClubGames]);
 

@@ -41,17 +41,29 @@ test('pausar detiene la cámara por BLE y deja la partida STOPPED, sin finalizar
   await controlClubStream(user, 'g1', 'pause');
 
   expect(connectCameraFromPhone).toHaveBeenCalledWith(user, '1234', expect.anything(), expect.any(Function), expect.any(Function));
-  expect(session.stopLive).toHaveBeenCalledTimes(1);
+  // `releaseNetwork=false`: pausar no libera la red, la cámara sigue en la misma WiFi para reanudar.
+  expect(session.stopLive).toHaveBeenCalledWith(false);
   expect(session.close).toHaveBeenCalledTimes(1);
   expect(setGameLiveStatus).toHaveBeenCalledWith(user, 'g1', 'stop');
   expect(finishClubGame).not.toHaveBeenCalled();
 });
 
 test('finalizar detiene la cámara y llama finishClubGame, sin pausar', async () => {
+  const session = mockSession();
   await controlClubStream(user, 'g1', 'finish');
 
+  // `releaseNetwork=true`: finalizar es terminal, libera la red de la cámara.
+  expect(session.stopLive).toHaveBeenCalledWith(true);
   expect(finishClubGame).toHaveBeenCalledWith(user, 'g1');
   expect(setGameLiveStatus).not.toHaveBeenCalled();
+});
+
+test('onProgress recibe mensajes en cada paso', async () => {
+  const onProgress = jest.fn();
+  await controlClubStream(user, 'g1', 'finish', { onProgress });
+
+  expect(onProgress).toHaveBeenCalledWith(expect.stringContaining('Conectando'));
+  expect(onProgress).toHaveBeenCalledWith(expect.stringContaining('Finalizando'));
 });
 
 test('finalizar también corre sobre una partida STOPPED (reanudada o no, la cámara se vuelve a verificar)', async () => {
@@ -64,17 +76,59 @@ test('si la cámara no confirma que dejó de transmitir, no se cambia el estado 
   const session = mockSession();
   session.stopLive.mockRejectedValue(new Error('La GoPro no confirmó que dejó de transmitir. No se cambió el estado de la partida.'));
 
-  await expect(controlClubStream(user, 'g1', 'pause')).rejects.toThrow('no confirmó');
+  const error: any = await controlClubStream(user, 'g1', 'pause').catch((e) => e);
 
+  expect(error.message).toMatch('no confirmó');
+  // La UI usa este flag para decidir si ofrece "Forzar sin confirmar" — ver GamesScreen.
+  expect(error.cameraConfirmationFailed).toBe(true);
   expect(session.close).toHaveBeenCalledTimes(1); // se libera la sesión BLE igual
   expect(setGameLiveStatus).not.toHaveBeenCalled();
   expect(finishClubGame).not.toHaveBeenCalled();
 });
 
+test('con force=true, la falla de la cámara no bloquea: se cambia el estado igual', async () => {
+  const session = mockSession();
+  session.stopLive.mockRejectedValue(new Error('La GoPro no confirmó que dejó de transmitir.'));
+
+  await controlClubStream(user, 'g1', 'pause', { force: true });
+
+  expect(session.close).toHaveBeenCalledTimes(1);
+  expect(setGameLiveStatus).toHaveBeenCalledWith(user, 'g1', 'stop');
+});
+
+test('con force=true, un fallo de conexión BLE tampoco bloquea el cambio de estado', async () => {
+  (connectCameraFromPhone as jest.Mock).mockRejectedValue(new Error('La cámara no respondió a tiempo.'));
+
+  await controlClubStream(user, 'g1', 'finish', { force: true });
+
+  expect(finishClubGame).toHaveBeenCalledWith(user, 'g1');
+});
+
+test('force=true NO saltea las validaciones (no es un problema de conectividad)', async () => {
+  (fetchClubGames as jest.Mock).mockResolvedValue([{ ...liveGame, gameStatus: 'STOPPED' }]);
+
+  await expect(controlClubStream(user, 'g1', 'pause', { force: true })).rejects.toThrow('La partida cambió de estado');
+  expect(connectCameraFromPhone).not.toHaveBeenCalled();
+  expect(setGameLiveStatus).not.toHaveBeenCalled();
+});
+
+test('force=true tampoco saltea el chequeo de cámara compartida con otra partida en vivo', async () => {
+  const otherLive = { ...liveGame, gameId: 'g2', courtName: 'Cancha 2' };
+  (fetchClubGames as jest.Mock).mockResolvedValue([liveGame, otherLive]);
+  (fetchClubGameCameras as jest.Mock).mockImplementation(async () => [camera]);
+
+  await expect(controlClubStream(user, 'g1', 'pause', { force: true })).rejects.toThrow('asociada a otra partida en vivo');
+  expect(connectCameraFromPhone).not.toHaveBeenCalled();
+});
+
 test('pausar una partida que no está LIVE falla sin tocar las cámaras (la lista está desactualizada)', async () => {
   (fetchClubGames as jest.Mock).mockResolvedValue([{ ...liveGame, gameStatus: 'STOPPED' }]);
 
-  await expect(controlClubStream(user, 'g1', 'pause')).rejects.toThrow('La partida cambió de estado');
+  const error: any = await controlClubStream(user, 'g1', 'pause').catch((e) => e);
+
+  expect(error.message).toMatch('La partida cambió de estado');
+  // No es una falla de conectividad — la UI NO debe ofrecer "Forzar" para esto.
+  expect(error.cameraConfirmationFailed).toBeUndefined();
   expect(connectCameraFromPhone).not.toHaveBeenCalled();
   expect(setGameLiveStatus).not.toHaveBeenCalled();
 });
