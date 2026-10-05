@@ -171,8 +171,15 @@ export async function startNativeLivestream(
   await waitForLivestreamStatus(t, [LIVE_STREAM_STATE_STREAMING], Date.now() + 150000);
 }
 
-/** Stop a native livestream started above. Best-effort: a failure here doesn't mean the camera is still live. */
+/** Confirm stopped before allowing the game status to change. Keep WiFi for resuming. */
 export async function stopNativeLivestream(t: CohnTransport): Promise<void> {
-  await setShutter(t, false, 20000).catch(() => {});
-  await request(t, 'command', 0xf1, 0x78, {}, 15000).then((fields) => success(fields, 'liberar la red')).catch(() => {});
+  await setShutter(t, false, 20000);
+  const deadline = Date.now() + 30000;
+  while (Date.now() < deadline) {
+    const fields = await request(t, 'query', 0xf5, 0x74, {}, Math.min(10000, deadline - Date.now()));
+    const state = numberField(fields, 1);
+    if (state === 0 || state === 2 || state === 4 || state === 5) return;
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  throw new Error('La GoPro no confirmó que dejó de transmitir. No se cambió el estado de la partida.');
 }

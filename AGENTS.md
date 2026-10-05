@@ -3,7 +3,7 @@
 Carpeta del producto. **iOS (principal) + Android**. Arranca con
 `npm install && npm start`.
 
-> Este documento es la fuente de verdad para Claude Code (o cualquier dev)
+> Este documento es la fuente de verdad para Codex (o cualquier dev)
 > que toque la app. Si una regla acá choca con lo que el código hace, gana
 > este documento: el código está atrasado, no al revés.
 
@@ -2233,7 +2233,7 @@ npm start                   # arranca sin warnings en Metro
 - Prototipo web visual: `prototype.html` (raíz del proyecto).
 - CSS tokens spec: `colors_and_type.css` (raíz).
 - Tipos del modelo: `data/types.ts` (solo tipos — la app no tiene mocks).
-- Backend: `torna-api/CLAUDE.md` (endpoints, módulos, gotchas).
+- Backend: `torna-api/AGENTS.md` (endpoints, módulos, gotchas).
 - Tests: ninguno por ahora.
 
 Cuando trabajes con esta app:

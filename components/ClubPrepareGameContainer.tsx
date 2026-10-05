@@ -160,7 +160,7 @@ function Preparation({ user, gameId, navigation }: { user: { id: string; isClub:
           <Text style={{ color: colors.text }}>{live ? 'La partida ya está en vivo. Abrí su transmisión para verla.' : 'Esta partida ya terminó o fue cancelada.'}</Text>
           {button('Ver partida', () => navigation.navigate('GameDetail', { gameId }))}
         </> : game && <>
-          <Text style={{ color: colors.muted2 }}>1. Conectá por Bluetooth · 2. Prepará el WiFi · 3. Revisá el encuadre</Text>
+          <Text style={{ color: colors.muted2 }}>Conectá la cámara, revisá el encuadre y elegí cuándo transmitir.</Text>
           {preview ? <LocalCameraPreview user={user} credentials={preview.credentials} name={preview.camera.identifier}
             onClose={() => setPreview(undefined)} onFrame={() => setVerified(ids => ids.includes(preview.camera.id) ? ids : [...ids, preview.camera.id])}
             onGoLive={() => { const camera = preview.camera; setPreview(undefined); void run(() => goLive(camera)); }} /> : <>
@@ -193,7 +193,8 @@ function Preparation({ user, gameId, navigation }: { user: { id: string; isClub:
                 setNetworkReady(ids => ids.filter(id => id !== camera.id));
                 if (mounted.current) setLinking(camera);
               }), busy)}
-              {button('Conectar cámara al WiFi', () => void run(async () => {
+              <Text style={{color: colors.muted2}}>Preparar WiFi habilita el preview local. Iniciar streaming conecta la GoPro a esta red y publica la transmisión.</Text>
+              {button('Preparar WiFi para preview', () => void run(async () => {
                 await ensureAvailable(camera.id);
                 if (assignedCameraWifi(camera, [])) { await prepareNetwork(camera); }
                 else { if (bluetoothCameraId !== camera.id) await closeBluetooth(); if (mounted.current) setLinking(camera); }
@@ -207,6 +208,18 @@ function Preparation({ user, gameId, navigation }: { user: { id: string; isClub:
                 if (!credentials) credentials = await prepareNetwork(camera);
                 if (mounted.current) setPreview({ camera, credentials });
               }), busy) : <Text style={{ color: colors.muted2 }}>El preview local está disponible en Android.</Text>}
+              {/*
+                Iniciar streaming SIN pasar por el preview. `goLive()` ya hace todo el
+                trabajo de red por su cuenta — `startNativeLivestream` llama `joinWifi`
+                sobre BLE (canal `network`, independiente de COHN) antes de mandar
+                `SET_LIVESTREAM_MODE` — así que "Conectar cámara al WiFi" (que solo
+                prepara las credenciales COHN del preview local) NO es un prerrequisito
+                para esto. Pedido explícito (2026-10-02): la cámara ya mostró imagen
+                en el preview, no hace falta repetirlo para transmitir — y a diferencia
+                del preview, esto no depende de la vista nativa `TornaCohn`, así que
+                corre en Android e iOS por igual.
+              */}
+              {button('Iniciar streaming', () => void run(() => goLive(camera)), busy)}
             </View>)}
             {prepared && <Text style={{ color: colors.muted2 }}>Revisá una cámara por vez. Cerrá su preview para continuar con la siguiente. La preparación no pone la partida en vivo.</Text>}
           </>}

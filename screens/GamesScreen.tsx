@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TextInput, Pressable, FlatList, Image, Animated } from 'react-native';
+import { View, Text, ScrollView, TextInput, Pressable, FlatList, Image, Animated, Alert, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Search, ChevronRight, Users, CalendarPlus, MapPin, Trash2, CircleStop } from 'lucide-react-native';
@@ -52,16 +52,27 @@ interface Props {
   onCreateGame?: () => void;
   /**
    * (Club) Cancela (soft) una reserva de otro usuario en la propia cancha.
-   * Solo filas `SCHEDULED` se pueden deslizar — sin esto, ninguna fila se
+   * Disponible en filas `SCHEDULED` (libera el horario) y `STOPPED` (la
+   * cámara nunca se conectó o se cortó, pero el horario sigue siendo
+   * válido — ver "DETENIDA" más abajo) — sin esto, ninguna fila se
    * envuelve en `Swipeable` (un swipe que no hace nada es peor que no tenerlo).
    */
   onCancelGame?: (id: string) => Promise<void>;
   /**
-   * (Club) Finaliza manualmente una partida EN VIVO. Es la única transición
-   * manual que existe sobre un vivo — no hay "detener sin finalizar" ni
-   * "reanudar" (no existen en el backend): `FINISHED` es terminal, igual que
-   * `CANCELLED`, pero dispara el procesado de la grabación. Solo filas `LIVE`
-   * se pueden deslizar.
+   * (Club) Pausa una partida EN VIVO: `services/cohn/gameControl.ts`
+   * confirma por BLE que cada cámara dejó de transmitir y recién ahí la
+   * pasa a `STOPPED` (`PUT /game/live/:id/stop`) — a diferencia de
+   * finalizar, es reanudable: "Reconectar cámara"/"Reanudar transmisión"
+   * vuelve a `ClubPrepareGame`, donde "Iniciar streaming" la retoma. Solo
+   * filas `LIVE`.
+   */
+  onPauseGame?: (id: string) => Promise<void>;
+  /**
+   * (Club) Finaliza manualmente una partida (`LIVE` o `STOPPED`). Es la
+   * transición terminal sobre un vivo — no hay "reanudar" desde acá (eso
+   * es pausar): dispara el procesado de la grabación. Mismo guard por BLE
+   * que pausar: no marca `FINISHED` si no pudo confirmar que la cámara
+   * dejó de transmitir.
    */
   onFinishGame?: (id: string) => Promise<void>;
 }
@@ -76,14 +87,15 @@ const FILTER_LABEL: Record<Filter, string> = {
 
 export function GamesScreen({
   games, loading = false, error, onRefresh, onPrepareGame, onOpenGame, onChangeTab, activeTab = 'games', hideBottomTabBar, emptyImage, role = 'club',
-  myGames = [], openGames = [], onOpenMyGame, onReserve, nearbyPrompt, onCreateGame, onCancelGame, onFinishGame,
+  myGames = [], openGames = [], onOpenMyGame, onReserve, nearbyPrompt, onCreateGame, onCancelGame, onFinishGame, onPauseGame,
 }: Props) {
   const { colors } = useTheme();
   const [filter, setFilter] = React.useState<Filter>('TODAS');
   const [q, setQ] = React.useState('');
   // Una sola hoja de confirmación para las dos acciones (cancelar/finalizar) —
   // `kind` decide el texto, no hace falta duplicar el estado ni el sheet.
-  const [actionTarget, setActionTarget] = React.useState<{ id: string; kind: 'cancel' | 'finish' } | null>(null);
+  const [actionTarget, setActionTarget] = React.useState<{ id: string; kind: 'cancel' | 'finish' | 'pause' } | null>(null);
+  const [menuTarget, setMenuTarget] = React.useState<GameListData | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
 
   // Vista del player: hub de partidos = Mis partidas + Abiertos para sumarme + Reservar.
@@ -238,9 +250,13 @@ export function GamesScreen({
           <ClubGameRow
             game={item}
             colors={colors}
-            onPress={() => (item.status === 'SCHEDULED' || item.status === 'STOPPED') && onPrepareGame ? onPrepareGame(item.id) : onOpenGame?.(item.id)}
+            onPress={() => {
+              if (submitting) return;
+              setMenuTarget(item);
+            }}
             onDelete={onCancelGame && (item.status === 'SCHEDULED' || item.status === 'STOPPED') ? () => setActionTarget({ id: item.id, kind: 'cancel' }) : undefined}
-            onFinish={onFinishGame && item.status === 'LIVE' ? () => setActionTarget({ id: item.id, kind: 'finish' }) : undefined}
+            onPause={onPauseGame && item.status === 'LIVE' ? () => setActionTarget({ id: item.id, kind: 'pause' }) : undefined}
+            onFinish={onFinishGame && ['LIVE', 'STOPPED'].includes(item.status) ? () => setActionTarget({ id: item.id, kind: 'finish' }) : undefined}
           />
           {/* DETENIDA (2026-10-03): la cámara quedó sin emitir (nunca se conectó
               o se cortó) — no es un estado terminal, el horario sigue siendo
@@ -268,24 +284,41 @@ export function GamesScreen({
           `kind` decide el texto; "Finalizar" no tiene "reanudar" del otro
           lado — es terminal, igual que cancelar, pero dispara el procesado
           de la grabación del lado del backend. */}
+      <Modal visible={!!menuTarget} transparent animationType="fade" onRequestClose={() => setMenuTarget(null)}>
+        <View style={{flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.5)'}}>
+          <View style={{padding: 20, borderRadius: 16, backgroundColor: colors.bg, gap: 16}}>
+            <Text style={{color: colors.text, fontSize: 20, fontWeight: '700'}}>{menuTarget?.court} · {menuTarget?.time}</Text>
+            {menuTarget && [
+              ...(['SCHEDULED','STOPPED'].includes(menuTarget.status) && onPrepareGame ? [{label: menuTarget.status === 'STOPPED' ? 'Reanudar transmisión' : 'Preparar cámaras', run: () => onPrepareGame(menuTarget.id)}] : []),
+              ...(onOpenGame ? [{label: 'Ver partida', run: () => onOpenGame(menuTarget.id)}] : []),
+              ...(['SCHEDULED','STOPPED'].includes(menuTarget.status) && onCancelGame ? [{label: menuTarget.status === 'STOPPED' ? 'Cancelar partida' : 'Borrar partida agendada', run: () => setActionTarget({id: menuTarget.id, kind: 'cancel'})}] : []),
+              ...(menuTarget.status === 'LIVE' && onPauseGame ? [{label: 'Pausar transmisión', run: () => setActionTarget({id: menuTarget.id, kind: 'pause'})}] : []),
+              ...(['LIVE','STOPPED'].includes(menuTarget.status) && onFinishGame ? [{label: 'Finalizar partida', run: () => setActionTarget({id: menuTarget.id, kind: 'finish'})}] : []),
+              {label: 'Cerrar', run: () => {}},
+            ].map(option => <Pressable key={option.label} accessibilityRole="button" onPress={() => {setMenuTarget(null); option.run();}} style={{paddingVertical: 12}}><Text style={{color: colors.text}}>{option.label}</Text></Pressable>)}
+          </View>
+        </View>
+      </Modal>
       <ConfirmSheet
         visible={!!actionTarget}
-        title={actionTarget?.kind === 'finish' ? 'Finalizar esta partida' : 'Cancelar esta reserva'}
-        message={actionTarget?.kind === 'finish'
+        title={actionTarget?.kind === 'pause' ? 'Pausar esta transmisión' : actionTarget?.kind === 'finish' ? 'Finalizar esta partida' : 'Cancelar esta reserva'}
+        message={actionTarget?.kind === 'pause' ? 'Se detendrán las cámaras. Podrás reanudar desde esta partida. Mantené el teléfono cerca de las GoPro.' : actionTarget?.kind === 'finish'
           ? 'Corta la transmisión y queda como FINALIZADA. No se puede deshacer ni reanudar.'
           : 'Se cancela y se avisa a los jugadores. No se puede deshacer.'}
-        confirmLabel={actionTarget?.kind === 'finish' ? 'Finalizar partida' : 'Cancelar reserva'}
+        confirmLabel={actionTarget?.kind === 'pause' ? 'Pausar transmisión' : actionTarget?.kind === 'finish' ? 'Finalizar partida' : 'Cancelar reserva'}
         destructive
         loading={submitting}
         onCancel={() => { if (!submitting) setActionTarget(null); }}
         onConfirm={async () => {
           if (!actionTarget) return;
-          const action = actionTarget.kind === 'finish' ? onFinishGame : onCancelGame;
+          const action = actionTarget.kind === 'pause' ? onPauseGame : actionTarget.kind === 'finish' ? onFinishGame : onCancelGame;
           if (!action) return;
           setSubmitting(true);
           try {
             await action(actionTarget.id);
             setActionTarget(null);
+          } catch (error) {
+            Alert.alert('No se pudo completar la acción', error instanceof Error ? error.message : 'Reintentá cerca de las cámaras.');
           } finally {
             setSubmitting(false);
           }
@@ -313,12 +346,13 @@ export function GamesScreen({
  * tenerlo).
  */
 function ClubGameRow({
-  game, colors, onPress, onDelete, onFinish,
+  game, colors, onPress, onDelete, onFinish, onPause,
 }: {
   game: GameListData;
   colors: ReturnType<typeof useTheme>['colors'];
   onPress: () => void;
   onDelete?: () => void;
+  onPause?: () => void;
   onFinish?: () => void;
 }) {
   const swipeRef = React.useRef<Swipeable>(null);
@@ -332,6 +366,8 @@ function ClubGameRow({
     if (!action) return null;
     const scale = progress.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1], extrapolate: 'clamp' });
     return (
+      <View style={{flexDirection: 'row'}}>
+      {onPause && <Pressable accessibilityRole="button" accessibilityLabel="Pausar transmisión" onPress={() => {swipeRef.current?.close(); onPause();}} style={{width: 85, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg2}}><Text style={{color: colors.text}}>Pausar</Text></Pressable>}
       <Pressable
         onPress={() => { swipeRef.current?.close(); action.run(); }}
         accessibilityRole="button"
@@ -343,6 +379,7 @@ function ClubGameRow({
           <action.Icon size={22} color={colors.destructiveFg} />
         </Animated.View>
       </Pressable>
+      </View>
     );
   };
 

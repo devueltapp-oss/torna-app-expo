@@ -163,26 +163,115 @@ describe('GamesScreen (club) — partida DETENIDA: cancelar o reconectar cámara
     expect(getByTestId('game-cancel-g-stopped')).toBeTruthy();
   });
 
-  it('muestra "Reconectar cámara" (no el texto de SCHEDULED) y togglear la fila llama a onPrepareGame', () => {
-    const onPrepareGame = jest.fn();
-    const onOpenGame = jest.fn();
+  it('muestra "Reconectar cámara" (no el texto de SCHEDULED) como acceso directo en la fila', () => {
     const { getByText, queryByText } = renderWithTheme(
-      <GamesScreen games={[stopped]} role="club" onPrepareGame={onPrepareGame} onOpenGame={onOpenGame} />,
+      <GamesScreen games={[stopped]} role="club" onPrepareGame={jest.fn()} onOpenGame={jest.fn()} />,
     );
     expect(getByText('Reconectar cámara')).toBeTruthy();
     expect(queryByText('Iniciar partida · preparar cámaras')).toBeNull();
+  });
 
+  it('tocar la fila (2026-10-04) abre el menú de opciones en vez de llamar a onPrepareGame directo', () => {
+    const onPrepareGame = jest.fn();
+    const onOpenGame = jest.fn();
+    const { getByText } = renderWithTheme(
+      <GamesScreen games={[stopped]} role="club" onPrepareGame={onPrepareGame} onOpenGame={onOpenGame} />,
+    );
     fireEvent.press(getByText('Cancha 4 · CAM04 · 4 jug.'));
+    expect(onPrepareGame).not.toHaveBeenCalled();
+    expect(onOpenGame).not.toHaveBeenCalled();
+    // El menú ofrece "Reanudar transmisión" para una STOPPED (no "Preparar cámaras", que es de SCHEDULED).
+    expect(getByText('Reanudar transmisión')).toBeTruthy();
+
+    fireEvent.press(getByText('Reanudar transmisión'));
     expect(onPrepareGame).toHaveBeenCalledWith('g-stopped');
     expect(onOpenGame).not.toHaveBeenCalled();
   });
 
-  it('sin onPrepareGame, tocar la fila cae a onOpenGame (no deja al club sin ninguna acción)', () => {
+  it('sin onPrepareGame, el menú no ofrece preparar/reconectar, solo "Ver partida"', () => {
     const onOpenGame = jest.fn();
-    const { getByText } = renderWithTheme(
+    const { getByText, queryByText } = renderWithTheme(
       <GamesScreen games={[stopped]} role="club" onOpenGame={onOpenGame} />,
     );
     fireEvent.press(getByText('Cancha 4 · CAM04 · 4 jug.'));
+    expect(queryByText('Reanudar transmisión')).toBeNull();
+
+    fireEvent.press(getByText('Ver partida'));
     expect(onOpenGame).toHaveBeenCalledWith('g-stopped');
+  });
+
+  it('el menú de una STOPPED también ofrece cancelar (mismas dos salidas que una SCHEDULED)', async () => {
+    const onCancelGame = jest.fn(async () => {});
+    const { getByText } = renderWithTheme(
+      <GamesScreen games={[stopped]} role="club" onCancelGame={onCancelGame} />,
+    );
+    fireEvent.press(getByText('Cancha 4 · CAM04 · 4 jug.'));
+    fireEvent.press(getByText('Cancelar partida'));
+    fireEvent.press(getByText('Cancelar reserva'));
+    await waitFor(() => expect(onCancelGame).toHaveBeenCalledWith('g-stopped'));
+  });
+});
+
+/**
+ * Pausar una partida EN VIVO (2026-10-04): a diferencia de finalizar, deja la
+ * partida `STOPPED` (reanudable desde "Preparar partida"), en vez de
+ * `FINISHED` (terminal). Disponible por swipe (junto al botón de finalizar)
+ * y desde el menú que abre tocar la fila.
+ */
+describe('GamesScreen (club) — pausar una transmisión EN VIVO', () => {
+  it('sin onPauseGame, la fila LIVE no tiene botón de pausar en el swipe', () => {
+    const { queryByLabelText } = renderWithTheme(
+      <GamesScreen games={[live]} role="club" onFinishGame={jest.fn()} />,
+    );
+    expect(queryByLabelText('Pausar transmisión')).toBeNull();
+  });
+
+  it('pausar por swipe pide confirmación y, al confirmar, llama a onPauseGame con el id correcto', async () => {
+    const onPauseGame = jest.fn(async () => {});
+    const { getByLabelText, getByText } = renderWithTheme(
+      <GamesScreen games={[live]} role="club" onPauseGame={onPauseGame} onFinishGame={jest.fn()} />,
+    );
+    fireEvent.press(getByLabelText('Pausar transmisión'));
+    expect(getByText('Pausar esta transmisión')).toBeTruthy();
+    expect(onPauseGame).not.toHaveBeenCalled();
+
+    fireEvent.press(getByText('Pausar transmisión'));
+    await waitFor(() => expect(onPauseGame).toHaveBeenCalledWith('g-live'));
+  });
+
+  it('pausar desde el menú de la fila hace lo mismo que el swipe', async () => {
+    const onPauseGame = jest.fn(async () => {});
+    const { getByText, getAllByText } = renderWithTheme(
+      <GamesScreen games={[live]} role="club" onPauseGame={onPauseGame} />,
+    );
+    fireEvent.press(getByText('Cancha 2 · CAM02 · 4 jug.'));
+    fireEvent.press(getByText('Pausar transmisión'));
+    // El `ConfirmSheet` repite el label del botón ("Pausar transmisión"); tomamos el último.
+    const confirmButtons = getAllByText('Pausar transmisión');
+    fireEvent.press(confirmButtons[confirmButtons.length - 1]);
+    await waitFor(() => expect(onPauseGame).toHaveBeenCalledWith('g-live'));
+  });
+
+  it('una partida STOPPED no ofrece pausar (ya no está en vivo)', () => {
+    const { queryByLabelText, getByText, queryByText } = renderWithTheme(
+      <GamesScreen games={[stopped]} role="club" onPauseGame={jest.fn()} />,
+    );
+    expect(queryByLabelText('Pausar transmisión')).toBeNull();
+    fireEvent.press(getByText('Cancha 4 · CAM04 · 4 jug.'));
+    expect(queryByText('Pausar transmisión')).toBeNull();
+  });
+
+  it('si pausar falla (p. ej. la GoPro no confirmó que dejó de transmitir), avisa y no cierra el sheet solo', async () => {
+    const onPauseGame = jest.fn(async () => { throw new Error('La GoPro no confirmó que dejó de transmitir.'); });
+    const alertSpy = jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => {});
+    const { getByLabelText, getByText } = renderWithTheme(
+      <GamesScreen games={[live]} role="club" onPauseGame={onPauseGame} onFinishGame={jest.fn()} />,
+    );
+    fireEvent.press(getByLabelText('Pausar transmisión'));
+    fireEvent.press(getByText('Pausar transmisión'));
+
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('No se pudo completar la acción', 'La GoPro no confirmó que dejó de transmitir.'));
+    expect(getByText('Pausar esta transmisión')).toBeTruthy(); // el sheet sigue abierto, no se perdió el estado
+    alertSpy.mockRestore();
   });
 });

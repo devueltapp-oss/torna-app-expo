@@ -144,11 +144,11 @@ describe('livestream nativo de GoPro', () => {
     expect(sent.some((m) => m.channel === 'command' && m.payload[0] === 0xf1 && m.payload[1] === 0x79)).toBe(false);
   });
 
-  it('detener la transmisión apaga el shutter y libera la red', async () => {
-    const { transport, sent } = makeTransport({ command: [[0x01, 0], [0xf1, 0xf8, ...encode({ 1: 1 })]] });
+  it('detener confirma el estado y conserva WiFi para reanudar', async () => {
+    const { transport, sent } = makeTransport({ command: [[0x01, 0]], query: [[0xf5, 0xf4, ...encode({1: 2})]] });
     await stopNativeLivestream(transport);
     expect(sent[0].payload).toEqual([0x01, 1, 0]);
-    expect(sent[1].payload[0]).toBe(0xf1);
-    expect(sent[1].payload[1]).toBe(0x78);
+    expect(sent[1].payload[0]).toBe(0xf5);
+    expect(sent[1].payload[1]).toBe(0x74);
   });
 });
