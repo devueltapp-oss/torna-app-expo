@@ -213,6 +213,55 @@ describe('GamesScreen (club) — partida DETENIDA: cancelar o reconectar cámara
 });
 
 /**
+ * Bug real (2026-10-06): una partida puede tener varias cámaras transmitiendo
+ * a la vez, cada una su propio ángulo. El botón/menú de "preparar cámaras"
+ * excluía las filas LIVE — una vez que la primera cámara arrancaba, no había
+ * ninguna forma de volver a entrar a "Preparar partida" para arrancar la
+ * segunda (ver `ClubPrepareGameContainer.test.tsx` para el fix del lado de
+ * esa pantalla). Acá solo se fija que la fila LIVE siga ofreciendo la entrada.
+ */
+describe('GamesScreen (club) — partida EN VIVO: agregar otra cámara', () => {
+  it('muestra "Agregar cámara" como acceso directo en la fila (no "Iniciar partida..." ni "Reconectar")', () => {
+    const { getByText, queryByText } = renderWithTheme(
+      <GamesScreen games={[live]} role="club" onPrepareGame={jest.fn()} />,
+    );
+    expect(getByText('Agregar cámara')).toBeTruthy();
+    expect(queryByText('Iniciar partida · preparar cámaras')).toBeNull();
+    expect(queryByText('Reconectar cámara')).toBeNull();
+  });
+
+  it('tocarlo llama a onPrepareGame con el id correcto', () => {
+    const onPrepareGame = jest.fn();
+    const { getByText } = renderWithTheme(
+      <GamesScreen games={[live]} role="club" onPrepareGame={onPrepareGame} />,
+    );
+    fireEvent.press(getByText('Agregar cámara'));
+    expect(onPrepareGame).toHaveBeenCalledWith('g-live');
+  });
+
+  it('el menú de la fila (tocar la fila) también ofrece "Agregar cámara"', () => {
+    const onPrepareGame = jest.fn();
+    const { getByText, getAllByText } = renderWithTheme(
+      <GamesScreen games={[live]} role="club" onPrepareGame={onPrepareGame} onFinishGame={jest.fn()} />,
+    );
+    fireEvent.press(getByText('Cancha 2 · CAM02 · 4 jug.'));
+    // El acceso directo bajo la fila repite el mismo label que la entrada del menú.
+    const options = getAllByText('Agregar cámara');
+    fireEvent.press(options[options.length - 1]);
+    expect(onPrepareGame).toHaveBeenCalledWith('g-live');
+  });
+
+  it('sin onPrepareGame, no se ofrece ni el acceso directo ni la entrada del menú', () => {
+    const { getByText, queryByText } = renderWithTheme(
+      <GamesScreen games={[live]} role="club" onFinishGame={jest.fn()} />,
+    );
+    expect(queryByText('Agregar cámara')).toBeNull();
+    fireEvent.press(getByText('Cancha 2 · CAM02 · 4 jug.'));
+    expect(queryByText('Agregar cámara')).toBeNull();
+  });
+});
+
+/**
  * Pausar una partida EN VIVO (2026-10-04): a diferencia de finalizar, deja la
  * partida `STOPPED` (reanudable desde "Preparar partida"), en vez de
  * `FINISHED` (terminal). Disponible por swipe (junto al botón de finalizar)

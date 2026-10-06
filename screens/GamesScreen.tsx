@@ -279,8 +279,12 @@ export function GamesScreen({
               o se cortó) — no es un estado terminal, el horario sigue siendo
               válido. Mismas dos salidas que una SCHEDULED: reconectar la
               cámara (preparar) o liberar el horario (cancelar, swipe arriba). */}
-          {(item.status === 'SCHEDULED' || item.status === 'STOPPED') && onPrepareGame && <Pressable accessibilityRole="button" onPress={() => onPrepareGame(item.id)} style={{padding: 14, backgroundColor: colors.bg2, borderRadius: 10}}>
-            <Text style={{color: colors.accentText, fontWeight: '800'}}>{item.status === 'STOPPED' ? 'Reconectar cámara' : 'Iniciar partida · preparar cámaras'}</Text>
+          {/* LIVE entra acá también (2026-10-06): una partida puede tener varias
+              cámaras, cada una su propio ángulo transmitiendo por su cuenta — la
+              primera que arranca pone la partida LIVE, pero eso no debe tapar el
+              control de las demás. Ver el comentario de `ClubPrepareGameContainer`. */}
+          {['SCHEDULED', 'STOPPED', 'LIVE'].includes(item.status) && onPrepareGame && <Pressable accessibilityRole="button" onPress={() => onPrepareGame(item.id)} style={{padding: 14, backgroundColor: colors.bg2, borderRadius: 10}}>
+            <Text style={{color: colors.accentText, fontWeight: '800'}}>{item.status === 'STOPPED' ? 'Reconectar cámara' : item.status === 'LIVE' ? 'Agregar cámara' : 'Iniciar partida · preparar cámaras'}</Text>
           </Pressable>}
           </View>
         )}
@@ -306,7 +310,7 @@ export function GamesScreen({
           <View style={{padding: 20, borderRadius: 16, backgroundColor: colors.bg, gap: 16}}>
             <Text style={{color: colors.text, fontSize: 20, fontWeight: '700'}}>{menuTarget?.court} · {menuTarget?.time}</Text>
             {menuTarget && [
-              ...(['SCHEDULED','STOPPED'].includes(menuTarget.status) && onPrepareGame ? [{label: menuTarget.status === 'STOPPED' ? 'Reanudar transmisión' : 'Preparar cámaras', run: () => onPrepareGame(menuTarget.id)}] : []),
+              ...(['SCHEDULED','STOPPED','LIVE'].includes(menuTarget.status) && onPrepareGame ? [{label: menuTarget.status === 'STOPPED' ? 'Reanudar transmisión' : menuTarget.status === 'LIVE' ? 'Agregar cámara' : 'Preparar cámaras', run: () => onPrepareGame(menuTarget.id)}] : []),
               ...(onOpenGame ? [{label: 'Ver partida', run: () => onOpenGame(menuTarget.id)}] : []),
               ...(['SCHEDULED','STOPPED'].includes(menuTarget.status) && onCancelGame ? [{label: menuTarget.status === 'STOPPED' ? 'Cancelar partida' : 'Borrar partida agendada', run: () => openAction({id: menuTarget.id, kind: 'cancel'})}] : []),
               ...(menuTarget.status === 'LIVE' && onPauseGame ? [{label: 'Pausar transmisión', run: () => openAction({id: menuTarget.id, kind: 'pause'})}] : []),

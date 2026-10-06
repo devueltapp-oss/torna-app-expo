@@ -156,6 +156,76 @@ test('"Iniciar streaming" arranca la transmisión nativa sin pasar por "Preparar
   connect.mockRestore();
 });
 
+/**
+ * Bug real (2026-10-06): una partida puede tener varias cámaras, cada una
+ * transmitiendo su propio ángulo por su cuenta. Arrancar la primera pone la
+ * partida LIVE — y antes, eso hacía que la pantalla entera cambiara a "La
+ * partida ya está en vivo. Abrí su transmisión para verla.", escondiendo el
+ * control de la SEGUNDA cámara sin ninguna forma de volver a verlo. Ahora
+ * LIVE ya no oculta la lista de cámaras.
+ */
+test('con dos cámaras, arrancar la primera NO esconde el control de la segunda', async () => {
+  const bluetooth = require('../../services/cohn/bluetooth');
+  const games = require('../../api/games');
+  const camera1 = { ...camera, wifiSsid: 'Jeyu', wifiPassword: 'secret', rtmpServer: 'rtmp://host/app/cam1' };
+  const camera2 = { id: 'cam-2', identifier: 'CAM02', bleName: '5678', wifiSsid: 'Jeyu', wifiPassword: 'secret', rtmpServer: 'rtmp://host/app/cam2' };
+  (fetchClubCameras as jest.Mock).mockResolvedValue([camera1, camera2]);
+  (fetchClubGameCameras as jest.Mock).mockResolvedValue([camera1, camera2]);
+  (fetchClubGames as jest.Mock)
+    .mockResolvedValueOnce([stoppedGame]) // carga inicial: todavía ninguna cámara transmite
+    .mockResolvedValue([{ ...stoppedGame, gameStatus: 'LIVE' }]); // desde que arranca la primera
+  const goLive = jest.fn(async () => {});
+  const connect = jest.spyOn(bluetooth, 'connectCameraFromPhone').mockResolvedValue({
+    close: jest.fn(async () => {}), readNetwork: jest.fn(), configureWifi: jest.fn(), goLive,
+  });
+  const utils = renderWithTheme(
+    <ClubPrepareGameContainer route={{ params: { gameId: 'g1' } }} navigation={{ goBack: jest.fn(), navigate: jest.fn(), addListener: jest.fn(() => () => {}) }} />,
+  );
+  await waitFor(() => expect(utils.getAllByText('Iniciar streaming')).toHaveLength(2));
+
+  fireEvent.press(utils.getAllByText('Iniciar streaming')[0]);
+  await waitFor(() => expect(goLive).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(games.setGameLiveStatus).toHaveBeenCalledWith({ id: 'club-1', isClub: true }, 'g1', 'start'));
+
+  // La partida ya está LIVE, pero la segunda cámara sigue con su propio botón —
+  // antes esto desaparecía por completo (solo quedaba "Ver partida").
+  await waitFor(() => expect(utils.getByText(/La partida ya está en vivo/)).toBeTruthy());
+  expect(utils.getByText('✓ Transmitiendo')).toBeTruthy(); // la primera, ya no ofrece "Iniciar streaming" de nuevo
+  expect(utils.getByText('Iniciar streaming')).toBeTruthy(); // la segunda, todavía disponible
+
+  fireEvent.press(utils.getByText('Iniciar streaming'));
+  await waitFor(() => expect(goLive).toHaveBeenCalledTimes(2));
+  connect.mockRestore();
+});
+
+/**
+ * Bug real (2026-10-06, segundo): el chequeo "¿esta cámara ya está en otra
+ * partida en vivo?" no excluía la partida ACTUAL de la lista de "partidas en
+ * vivo" — una vez que la partida propia pasaba a LIVE (por su primera
+ * cámara), arrancar la segunda se detectaba a sí misma como el conflicto.
+ */
+test('arrancar la segunda cámara no se bloquea a sí misma por "otra partida en vivo"', async () => {
+  const bluetooth = require('../../services/cohn/bluetooth');
+  const camera1 = { ...camera, wifiSsid: 'Jeyu', wifiPassword: 'secret', rtmpServer: 'rtmp://host/app/cam1' };
+  const camera2 = { id: 'cam-2', identifier: 'CAM02', bleName: '5678', wifiSsid: 'Jeyu', wifiPassword: 'secret', rtmpServer: 'rtmp://host/app/cam2' };
+  (fetchClubCameras as jest.Mock).mockResolvedValue([camera1, camera2]);
+  (fetchClubGameCameras as jest.Mock).mockResolvedValue([camera1, camera2]);
+  (fetchClubGames as jest.Mock).mockResolvedValue([{ ...stoppedGame, gameStatus: 'LIVE' }]); // ya en vivo desde el arranque
+  const goLive = jest.fn(async () => {});
+  const connect = jest.spyOn(bluetooth, 'connectCameraFromPhone').mockResolvedValue({
+    close: jest.fn(async () => {}), readNetwork: jest.fn(), configureWifi: jest.fn(), goLive,
+  });
+  const utils = renderWithTheme(
+    <ClubPrepareGameContainer route={{ params: { gameId: 'g1' } }} navigation={{ goBack: jest.fn(), navigate: jest.fn(), addListener: jest.fn(() => () => {}) }} />,
+  );
+  await waitFor(() => expect(utils.getAllByText('Iniciar streaming')).toHaveLength(2));
+
+  fireEvent.press(utils.getAllByText('Iniciar streaming')[0]);
+  await waitFor(() => expect(goLive).toHaveBeenCalledTimes(1));
+  expect(utils.queryByText(/transmitiendo otra partida/)).toBeNull();
+  connect.mockRestore();
+});
+
 test('"Iniciar streaming" sin servidor RTMP configurado muestra el error, sin tocar la cámara', async () => {
   const bluetooth = require('../../services/cohn/bluetooth');
   (fetchClubCameras as jest.Mock).mockResolvedValue([{ ...camera, wifiSsid: 'Jeyu', wifiPassword: 'secret' }]);

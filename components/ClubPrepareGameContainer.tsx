@@ -48,6 +48,15 @@ function Preparation({ user, gameId, navigation }: { user: { id: string; isClub:
   const [linking, setLinking] = useState<ClubCamera>();
   const [bluetoothCameraId, setBluetoothCameraId] = useState<string>();
   const [bluetoothStatus, setBluetoothStatus] = useState('');
+  // Qué cámaras arrancamos a transmitir EN ESTA visita a la pantalla (2026-10-06).
+  // El backend no guarda "está transmitiendo" por cámara, solo el estado de la
+  // partida entera — así que no hay forma de saber desde afuera cuál de varias
+  // cámaras ya está en vivo. Esto alcanza para el caso que importa: arrancar
+  // dos (o más) cámaras de la misma partida, una después de la otra, sin salir
+  // de la pantalla. Si se reentra más tarde, vuelve a estar vacío — mejor
+  // ofrecer "Iniciar streaming" de nuevo a una cámara ya en vivo (es best-effort,
+  // mismo riesgo que tocarlo dos veces seguidas) que no poder tocar nada.
+  const [liveCameraIds, setLiveCameraIds] = useState<string[]>([]);
   const connection = useRef<CameraBluetoothSession | undefined>(undefined);
   const connectionAbort = useRef<AbortController | undefined>(undefined);
   const closeBluetooth = () => {
@@ -92,9 +101,16 @@ function Preparation({ user, gameId, navigation }: { user: { id: string; isClub:
   const ensureAvailable = async (cameraId?: string) => {
     const games = await fetchClubGames(user.id);
     const fresh = games.find(g => g.gameId === gameId);
-    if (!fresh || !['SCHEDULED', 'WAITING', 'STOPPED'].includes(fresh.gameStatus)) throw new Error('El estado de la partida cambió. Actualizá antes de preparar sus cámaras.');
+    // LIVE es válido (2026-10-06): una partida puede tener varias cámaras, cada
+    // una streameando su propio ángulo — la primera que arranca ya puso la
+    // partida en vivo, y eso no debe impedir conectar/arrancar las demás.
+    // Solo FINISHED/CANCELLED son terminales de verdad.
+    if (!fresh || ['FINISHED', 'CANCELLED'].includes(fresh.gameStatus)) throw new Error('El estado de la partida cambió. Actualizá antes de preparar sus cámaras.');
     if (cameraId) {
-      const activeCameras = await Promise.all(games.filter(g => g.gameStatus === 'LIVE').map(g => fetchClubGameCameras(user, g.gameId)));
+      // `g.gameId !== gameId`: con LIVE ya permitido arriba, la partida actual puede
+      // estar en la lista de "partidas en vivo" — sin excluirla, arrancar una segunda
+      // cámara de la MISMA partida se detectaba a sí misma como conflicto.
+      const activeCameras = await Promise.all(games.filter(g => g.gameId !== gameId && g.gameStatus === 'LIVE').map(g => fetchClubGameCameras(user, g.gameId)));
       if (activeCameras.flat().some(c => c.id === cameraId)) throw new Error('Esta cámara está transmitiendo otra partida. Elegí una cámara libre.');
     }
   };
@@ -137,6 +153,7 @@ function Preparation({ user, gameId, navigation }: { user: { id: string; isClub:
       connectionAbort.current!.signal,
       message => { if (mounted.current) setBluetoothStatus(message); });
     await setGameLiveStatus(user, gameId, 'start');
+    if (mounted.current) setLiveCameraIds(ids => ids.includes(camera.id) ? ids : [...ids, camera.id]);
     await load();
   };
   const button = (label: string, onPress: () => void, disabled = false) => <Pressable accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={onPress}
@@ -156,10 +173,19 @@ function Preparation({ user, gameId, navigation }: { user: { id: string; isClub:
         {!!error && <Text accessibilityRole="alert" style={{ color: colors.text }}>{error}</Text>}
         {/permit|permiso/i.test(error) && button('Abrir permisos de la app', () => { void Linking.openSettings(); })}
         {!game && button('Reintentar', () => void load())}
-        {(live || terminal) ? <>
-          <Text style={{ color: colors.text }}>{live ? 'La partida ya está en vivo. Abrí su transmisión para verla.' : 'Esta partida ya terminó o fue cancelada.'}</Text>
+        {terminal ? <>
+          <Text style={{ color: colors.text }}>Esta partida ya terminó o fue cancelada.</Text>
           {button('Ver partida', () => navigation.navigate('GameDetail', { gameId }))}
         </> : game && <>
+          {/* LIVE ya NO reemplaza toda la pantalla (2026-10-06): una partida puede
+              tener varias cámaras, cada una transmitiendo su propio ángulo por su
+              cuenta — la primera que arranca pone la partida en vivo, y había que
+              poder seguir conectando/arrancando las demás desde acá mismo, no solo
+              ofrecer "Ver partida". */}
+          {live && <View style={{ gap: 8 }}>
+            <Text style={{ color: colors.text }}>La partida ya está en vivo. Podés seguir agregando cámaras, o abrir su transmisión.</Text>
+            {button('Ver partida', () => navigation.navigate('GameDetail', { gameId }))}
+          </View>}
           <Text style={{ color: colors.muted2 }}>Conectá la cámara, revisá el encuadre y elegí cuándo transmitir.</Text>
           {preview ? <LocalCameraPreview user={user} credentials={preview.credentials} name={preview.camera.identifier}
             onClose={() => setPreview(undefined)} onFrame={() => setVerified(ids => ids.includes(preview.camera.id) ? ids : [...ids, preview.camera.id])}
@@ -219,7 +245,9 @@ function Preparation({ user, gameId, navigation }: { user: { id: string; isClub:
                 del preview, esto no depende de la vista nativa `TornaCohn`, así que
                 corre en Android e iOS por igual.
               */}
-              {button('Iniciar streaming', () => void run(() => goLive(camera)), busy)}
+              {liveCameraIds.includes(camera.id)
+                ? <Text style={{ color: colors.accentText, fontWeight: '800' }}>✓ Transmitiendo</Text>
+                : button('Iniciar streaming', () => void run(() => goLive(camera)), busy)}
             </View>)}
             {prepared && <Text style={{ color: colors.muted2 }}>Revisá una cámara por vez. Cerrá su preview para continuar con la siguiente. La preparación no pone la partida en vivo.</Text>}
           </>}

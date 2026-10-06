@@ -2266,6 +2266,67 @@ UDP local (el botón de preview no aparece ahí). Las reglas anteriores que limi
 todo preview a Desktop quedan reemplazadas por este flujo. Canchas ofrece edición y
 horarios dentro de la app (ver "Editar cancha"/"Horarios de cancha" más arriba).
 
+#### Varias cámaras transmitiendo a la vez en la misma partida (bug real, 2026-10-06)
+
+Una partida puede tener varias cámaras adjuntas (`cameraIds` al crearla), cada una
+transmitiendo su **propio ángulo** de forma autónoma por RTMP (son conexiones
+independientes a Wowza — `Camera.rtmpServer`/`streamingUrl` es por cámara, no por
+partida; es lo que alimenta el swipe entre cámaras del visor). Arrancar dos o más
+cámaras para la misma partida está pensado desde el modelo de datos, pero `Preparation`
+(`ClubPrepareGameContainer.tsx`) lo bloqueaba en la práctica:
+
+- **La pantalla entera cambiaba de vista apenas la PRIMERA cámara confirmaba
+  `STREAMING_STARTED`** (`game.gameStatus` pasa a `LIVE` — es un estado de la
+  partida entera, no hay "LIVE por cámara" en el modelo): la condición de render era
+  `(live || terminal) ? "La partida ya está en vivo..." : <toda la lista de cámaras>`,
+  así que el control de la SEGUNDA cámara (su propio botón "Iniciar streaming")
+  desaparecía apenas la primera arrancaba, sin ninguna forma de volver a verlo —
+  ni reentrando a la pantalla, porque `game.gameStatus` ya es `LIVE` en el próximo
+  `load()`.
+- **`ensureAvailable(cameraId)` rechazaba cualquier operación si la partida no estaba
+  en `['SCHEDULED','WAITING','STOPPED']`** — `LIVE` no estaba en esa lista, así que
+  ni conectar por BLE ni arrancar la segunda cámara pasaba del primer chequeo.
+
+Ninguna de las dos cosas es necesaria del lado del backend: `PUT /game/live/:id/start`
+ya es idempotente (`wasAlreadyLive` en `game.controller.ts` evita renotificar
+`STREAMING_STARTED` si ya estaba LIVE) y `startStreamFromReservation` (el servicio de
+`POST /game/:id/start-stream`) solo rechaza `CANCELLED`/`FINISHED`, nunca `LIVE`.
+
+**Arreglado**: `LIVE` ya no es terminal para esta pantalla — solo `FINISHED`/`CANCELLED`
+lo son (mismo criterio que ya aplicaba a `STOPPED`, ver más abajo). Con la partida LIVE,
+`Preparation` muestra un aviso ("La partida ya está en vivo. Podés seguir agregando
+cámaras, o abrir su transmisión.") **arriba** de la lista de cámaras, no en su lugar —
+y `ensureAvailable` pasa a bloquear solo esos dos estados terminales.
+
+⚠️ **Al permitir LIVE en `ensureAvailable`, aparece un chequeo que antes nunca se
+ejecutaba con la partida propia en ese estado**: el de "¿esta cámara ya está en OTRA
+partida en vivo?" (`games.filter(g => g.gameStatus === 'LIVE')`) — sin excluir
+`g.gameId !== gameId`, la partida ACTUAL (ya LIVE por su primera cámara) se detectaba a
+sí misma como el conflicto al intentar arrancar la segunda. `gameControl.ts` ya excluía
+la partida propia en su chequeo equivalente (`otherLive`); `ensureAvailable` no, y había
+que agregarlo ahí también. Si tocás cualquier chequeo de "cámara en otra partida en
+vivo", confirmá que excluye `gameId` de la partida sobre la que se está operando.
+
+**`liveCameraIds`** (estado local, solo de esta visita a la pantalla) marca qué cámara(s)
+ya se arrancaron en esta sesión, para mostrar "✓ Transmitiendo" en vez de volver a
+ofrecer "Iniciar streaming" sobre la misma. El backend no guarda "está transmitiendo"
+por cámara (solo el estado de la partida entera), así que esto se resetea si se sale y
+se reentra a la pantalla — en ese caso puede volver a ofrecerse "Iniciar streaming"
+sobre una cámara que ya estaba en vivo (mismo riesgo que tocarlo dos veces seguidas por
+error, no es nuevo de este fix).
+
+`GamesScreen`: el botón fijo bajo la fila y la entrada del menú al tocarla (antes
+excluían LIVE) ahora también aparecen en filas `LIVE`, con su propio texto "Agregar
+cámara" (distinto de "Iniciar partida · preparar cámaras" de SCHEDULED y "Reconectar
+cámara" de STOPPED) — es la única puerta de entrada a `ClubPrepareGame` una vez que la
+partida ya está en vivo.
+
+Cubierto por `components/__tests__/ClubPrepareGameContainer.test.tsx` ("con dos
+cámaras..." y "arrancar la segunda cámara no se bloquea a sí misma...") y
+`screens/__tests__/GamesScreenClubCancel.test.tsx` (describe "partida EN VIVO: agregar
+otra cámara"). ⚠️ No probado contra dos GoPro físicas a la vez — la salvedad de
+siempre (`docs/cohn-mobile.md`) sigue valiendo doble acá.
+
 **Transmisión real desde el móvil (2026-10-03).** El botón del preview ("Cerrar
 preview e iniciar transmisión") SÍ transmite: arranca el livestream nativo de la
 GoPro (`services/cohn/liveStream.ts`) — la cámara empuja RTMP a Wowza por su cuenta,
