@@ -7,10 +7,24 @@ export interface ControlClubStreamOptions {
   /**
    * Saltea el bloqueo cuando una cámara no confirma por BLE que dejó de
    * transmitir (p. ej. fuera de rango o apagada) — el club nunca debe
-   * quedar sin forma de cerrar una partida por una cámara inalcanzable.
-   * NO saltea las validaciones previas (partida en el estado esperado,
-   * cámaras del club con `bleName`, ninguna compartida con otra partida
-   * LIVE): esas son chequeos de seguridad reales, no de conectividad.
+   * quedar sin forma de CERRAR una partida por un problema de cámara,
+   * sea de conectividad o de configuración.
+   *
+   * Para **`action: 'finish'`** esto también saltea las dos validaciones de
+   * cámara previas al enlace BLE (ninguna cámara verificable — sin ninguna
+   * asignada, no son del club, o sin `bleName` — y una cámara compartida con
+   * otra partida en vivo): sin esta puerta, una partida con las cámaras mal
+   * configuradas en la base quedaba IMPOSIBLE de cerrar desde la app, para
+   * siempre, incluso con force. En ese caso no se toca ninguna cámara por
+   * BLE — se marca la partida FINALIZADA directo, igual que el auto-cierre
+   * del backend (`GameLifecycleService`, ver `torna-api/CLAUDE.md`).
+   *
+   * Para **`action: 'pause'`** sigue sin saltear esas dos: pausar ES
+   * detener una cámara real — sin una cámara verificable no hay nada que
+   * pausar, forzarlo solo dejaría un estado confuso.
+   *
+   * Tampoco saltea la partida en un estado inesperado (eso es staleness de
+   * la lista, no un problema de cámara: se resuelve actualizando, no forzando).
    */
   force?: boolean;
   /** Mensajes en español, listos para mostrar en la UI (ver `GamesScreen`). */
@@ -51,31 +65,72 @@ export async function controlClubStream(
     }
     const [cameras, owned] = await Promise.all([fetchClubGameCameras(user, gameId), fetchClubCameras(user)]);
     log('fetched cameras', { cameras: cameras.map(c => ({ id: c.id, bleName: c.bleName })), ownedCount: owned.length });
-    if (!cameras.length || cameras.some(c => !owned.some(o => o.id === c.id) || !c.bleName)) {
-      throw new Error('No se pueden verificar las cámaras de esta partida. Revisá su configuración.');
-    }
-    const otherLive = await Promise.all(games.filter(g => g.gameId !== gameId && g.gameStatus === 'LIVE').map(g => fetchClubGameCameras(user, g.gameId)));
-    if (otherLive.flat().some(c => cameras.some(target => target.id === c.id))) throw new Error('Una cámara está asociada a otra partida en vivo. Revisá la asignación antes de detenerla.');
-    for (const camera of cameras) {
-      const label = camera.identifier || camera.bleName;
-      onProgress(`Conectando con ${label}…`);
-      log('connecting BLE to', camera.bleName);
-      try {
-        const session = await connectCameraFromPhone(user, camera.bleName!, new AbortController().signal, onProgress, () => log('BLE disconnected', camera.bleName));
-        try {
-          onProgress(`Deteniendo ${label}…`);
-          await session.stopLive(action === 'finish');
-          log('stopLive OK', camera.bleName);
-        } finally { await session.close(); }
-      } catch (error) {
-        log('camera confirmation FAILED', camera.bleName, error instanceof Error ? error.message : error);
-        if (!force) {
-          const message = error instanceof Error ? error.message : 'No se pudo confirmar la cámara.';
-          const wrapped = new Error(message);
+
+    // Las dos validaciones de abajo son "forzables" SOLO para finalizar (ver el
+    // comentario de `force` en `ControlClubStreamOptions`): si force+finish, no
+    // tiramos el error — marcamos `skipCameraFlow` y nos saltamos TODO el enlace
+    // BLE, yendo directo a `finishClubGame`. `force` en una pausa nunca llega
+    // hasta acá sin lanzar: no tiene sentido "pausar" sin una cámara real.
+    const canBypassForFinish = force && action === 'finish';
+    let skipCameraFlow = false;
+
+    const camerasUnverifiable = !cameras.length || cameras.some(c => !owned.some(o => o.id === c.id) || !c.bleName);
+    if (camerasUnverifiable) {
+      if (canBypassForFinish) {
+        log('cameras unverifiable, forced finish bypasses the BLE flow entirely');
+        skipCameraFlow = true;
+      } else {
+        const wrapped = new Error('No se pueden verificar las cámaras de esta partida. Revisá su configuración.');
+        if (action === 'finish') {
           (wrapped as Error & { cameraConfirmationFailed?: boolean }).cameraConfirmationFailed = true;
+        }
+        throw wrapped;
+      }
+    }
+
+    if (!skipCameraFlow) {
+      const otherLive = await Promise.all(games.filter(g => g.gameId !== gameId && g.gameStatus === 'LIVE').map(g => fetchClubGameCameras(user, g.gameId)));
+      const sharedWithLiveGame = otherLive.flat().some(c => cameras.some(target => target.id === c.id));
+      if (sharedWithLiveGame) {
+        if (canBypassForFinish) {
+          log('camera shared with another LIVE game, forced finish bypasses the BLE flow entirely');
+          skipCameraFlow = true;
+        } else {
+          const wrapped = new Error('Una cámara está asociada a otra partida en vivo. Revisá la asignación antes de detenerla.');
+          if (action === 'finish') {
+            (wrapped as Error & { cameraConfirmationFailed?: boolean }).cameraConfirmationFailed = true;
+          }
           throw wrapped;
         }
-        // force=true: seguimos con las demás cámaras y con el cambio de estado igual.
+      }
+    }
+
+    if (skipCameraFlow) {
+      // No se toca ninguna cámara: el problema ES la cámara, no algo que BLE
+      // pueda resolver. Mismo resultado final que el auto-cierre del backend.
+      onProgress('No se pudo verificar la cámara: cerrando la partida igual…');
+    } else {
+      for (const camera of cameras) {
+        const label = camera.identifier || camera.bleName;
+        onProgress(`Conectando con ${label}…`);
+        log('connecting BLE to', camera.bleName);
+        try {
+          const session = await connectCameraFromPhone(user, camera.bleName!, new AbortController().signal, onProgress, () => log('BLE disconnected', camera.bleName));
+          try {
+            onProgress(`Deteniendo ${label}…`);
+            await session.stopLive(action === 'finish');
+            log('stopLive OK', camera.bleName);
+          } finally { await session.close(); }
+        } catch (error) {
+          log('camera confirmation FAILED', camera.bleName, error instanceof Error ? error.message : error);
+          if (!force) {
+            const message = error instanceof Error ? error.message : 'No se pudo confirmar la cámara.';
+            const wrapped = new Error(message);
+            (wrapped as Error & { cameraConfirmationFailed?: boolean }).cameraConfirmationFailed = true;
+            throw wrapped;
+          }
+          // force=true: seguimos con las demás cámaras y con el cambio de estado igual.
+        }
       }
     }
     onProgress(action === 'pause' ? 'Pausando la partida…' : 'Finalizando la partida…');

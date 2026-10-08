@@ -1554,6 +1554,7 @@ tipos** que emite el backend (cubiertos por `services/__tests__/notifications.te
 | `NEW_CHAT_MESSAGE` | `GameChat { gameId }` |
 | `NEW_DM_MESSAGE` | `DirectChat { userId: fromUserId }` |
 | `GAME_CANCELLED` · `GAME_PLAYER_LEFT` · `GAME_PAIR_CANCELLED` · `GAME_PLAYER_ADDED` · `GAME_APPLICATION_RECEIVED` | `MainPlayer { initialTab: 'games' }` |
+| `COURT_RESERVED` · `GAME_CLOSING_SOON` · `GAME_AUTO_CLOSED` (2026-10-07: avisos dirigidos al CLUB dueño de la cancha — reserva nueva, recordatorio de cierre, auto-cierre) | `MainPlayer { initialTab: 'games' }` |
 | `NEW_HIGHLIGHT_PUBLISHED` (2026-09-09: alguien que seguís subió un highlight público) | `PlayerProfile { playerId: actorId }` |
 
 - **La misma tabla resuelve el tap en la campanita**: cada notificación guardada trae el
@@ -2389,13 +2390,13 @@ no afecte también el enlace COHN que usa el preview local.
 **`services/cohn/gameControl.ts`** (`controlClubStream(user, gameId, 'pause' | 'finish',
 { force?, onProgress? })`) es el único punto de entrada para las dos acciones manuales
 sobre una partida `LIVE`/`STOPPED` desde "Juegos": antes de tocar el backend, re-valida
-contra `fetchClubGames` que la partida sigue en el estado esperado, que **todas** las
-cámaras de `fetchClubGameCameras` pertenecen al club (`fetchClubCameras`) y tienen
-`bleName`, y que ninguna está adjunta a OTRA partida `LIVE` del club (para no pisar esa
-transmisión) — **estas tres validaciones nunca se saltean**, ni siquiera con `force`.
-Recién ahí se conecta por BLE a cada cámara (`connectCameraFromPhone`, con `onProgress`
-repasado como su `progress`) y llama `session.stopLive(action === 'finish')`. Solo si
-todas confirman (o se fuerza, ver abajo):
+contra `fetchClubGames` que la partida sigue en el estado esperado (**nunca** se saltea,
+ni con `force` — es staleness de la lista, se resuelve actualizando, no forzando), que
+**todas** las cámaras de `fetchClubGameCameras` pertenecen al club (`fetchClubCameras`) y
+tienen `bleName`, y que ninguna está adjunta a OTRA partida `LIVE` del club (para no
+pisar esa transmisión). Recién ahí se conecta por BLE a cada cámara
+(`connectCameraFromPhone`, con `onProgress` repasado como su `progress`) y llama
+`session.stopLive(action === 'finish')`. Solo si todas confirman (o se fuerza, ver abajo):
 - `'pause'` → `PUT /game/live/:id/stop` (mismo endpoint que ya usaba `ClubPrepareGameContainer`
   para `'start'`): la partida queda `STOPPED`, el mismo estado "DETENIDA" que ya existía
   para una cámara que se cortó sola — **no es un estado nuevo**, esto solo le suma un
@@ -2406,24 +2407,38 @@ todas confirman (o se fuerza, ver abajo):
   terminal: la nota de más arriba sobre que **no existe "reanudar" desde `FINISHED`**
   sigue valiendo, eso no cambió.
 
-⚠️ **"Forzar sin confirmar" (pedido explícito, 2026-10-04): el club nunca debe quedar
-sin forma de cerrar una partida por una cámara inalcanzable** (apagada, fuera de rango,
-falla real). Si la conexión BLE o `stopLive` fallan para una cámara, el error se marca
-con `(error as any).cameraConfirmationFailed = true` — es la única señal que la UI usa
-para ofrecer forzar; un error de VALIDACIÓN (los tres chequeos de arriba) nunca lleva
-ese flag y nunca es forzable, porque no son problemas de conectividad. Con
-`options.force: true`, una falla de cámara se ignora (se sigue con las demás y con el
-cambio de estado de todas formas) en vez de interrumpir todo.
+⚠️ **"Forzar sin confirmar" (pedido explícito, 2026-10-04; extendido 2026-10-07): el
+club nunca debe quedar sin forma de CERRAR una partida por un problema de cámara** —
+ni por conectividad (apagada, fuera de rango) ni por configuración (ninguna cámara
+asignada, de otro club, sin `bleName`, o compartida con otra partida `LIVE`). Dos capas:
+
+1. **Conectividad** (sin cambios): si la conexión BLE o `stopLive` fallan para una
+   cámara puntual, el error se marca con `cameraConfirmationFailed = true`. Con
+   `force: true` esa falla puntual se ignora y se sigue con las demás cámaras y con el
+   cambio de estado igual.
+2. **Configuración, solo para `'finish'`** (2026-10-07): antes, las dos validaciones de
+   cámara ("ninguna verificable" / "compartida con otra `LIVE`") **nunca** llevaban el
+   flag y **nunca** eran forzables — una partida con las cámaras mal cargadas en la base
+   quedaba imposible de cerrar **para siempre**, incluso con `force`. Ahora, para
+   `action: 'finish'` únicamente, esas dos SÍ marcan `cameraConfirmationFailed = true`, y
+   con `force: true` se saltea el enlace BLE **por completo** (no se toca ninguna cámara)
+   y se llama `finishClubGame` directo — mismo resultado final que el auto-cierre del
+   backend (`torna-api/AGENTS.md` → "Recordatorio de cierre + auto-cierre de partidas").
+   ⚠️ **`'pause'` sigue sin esta puerta a propósito**: pausar ES detener una cámara real,
+   forzarlo sin ninguna cámara verificable solo dejaría un estado confuso. Ver
+   `services/__tests__/gameControl.test.ts` → describe `"finalizar con force"`.
 
 `GamesScreen` (`screens/GamesScreen.tsx`) resuelve esto sin un segundo `Alert.alert`
 apilado sobre el `Modal` del `ConfirmSheet` ya abierto (no hay forma de confirmar hoy que
 eso se vea bien en los dos sistemas) — en vez de eso, el mismo `ConfirmSheet` pasa a un
-segundo paso ("No se pudo confirmar la cámara" / "Forzar sin confirmar") cuando el error
+segundo paso ("No se pudo verificar la cámara" / "Forzar sin confirmar") cuando el error
 trae `cameraConfirmationFailed`; confirmar ahí reintenta la misma acción con
-`{ force: true }`. Cualquier otro error (validaciones, "Esperá a que termine la acción
-anterior.") sigue mostrando el `Alert.alert` simple de siempre, sin ofrecer forzar. El
-estado de "forzar" se resetea (`openAction`) cada vez que se abre una acción nueva —
-nunca se filtra de un intento fallido anterior a la próxima partida.
+`{ force: true }`. El texto es deliberadamente genérico (no dice "la GoPro no confirmó
+que dejó de transmitir") porque ahora cubre dos causas distintas y la UI no puede
+distinguir cuál es. Cualquier otro error (partida en otro estado, "Esperá a que termine
+la acción anterior.") sigue mostrando el `Alert.alert` simple de siempre, sin ofrecer
+forzar. El estado de "forzar" se resetea (`openAction`) cada vez que se abre una acción
+nueva — nunca se filtra de un intento fallido anterior a la próxima partida.
 
 **Progreso visible**: `onProgress` (mensajes en español, ya listos para UI — "Buscando
 GoPro 1234…", "Conectando con CAM01…", "Finalizando la partida…") se muestra en

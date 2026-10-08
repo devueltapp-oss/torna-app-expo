@@ -322,10 +322,16 @@ export function GamesScreen({
       </Modal>
       <ConfirmSheet
         visible={!!actionTarget}
-        title={forceAvailable ? 'No se pudo confirmar la cámara'
+        title={forceAvailable ? 'No se pudo verificar la cámara'
           : actionTarget?.kind === 'pause' ? 'Pausar esta transmisión' : actionTarget?.kind === 'finish' ? 'Finalizar esta partida' : 'Cancelar esta reserva'}
         message={forceAvailable
-          ? 'No se pudo confirmar que la cámara dejó de transmitir. Forzar puede dejarla transmitiendo sin que nadie la vea — revisala a mano después.'
+          // Cubre dos causas distintas (ver `ControlClubStreamOptions.force` en
+          // gameControl.ts): la GoPro no confirmó por BLE que dejó de transmitir,
+          // O la partida no tiene ninguna cámara verificable (sin asignar, de
+          // otro club, o compartida con otra partida en vivo) — en ese segundo
+          // caso no hay ningún riesgo de dejarla transmitiendo, pero el texto
+          // se mantiene cauteloso porque desde la app no se puede distinguir cuál es.
+          ? 'No se pudo verificar el estado de la cámara de esta partida. Forzar la cierra igual — revisala a mano después.'
           : actionTarget?.kind === 'pause' ? 'Se detendrán las cámaras. Podrás reanudar desde esta partida. Mantené el teléfono cerca de las GoPro.' : actionTarget?.kind === 'finish'
           ? 'Corta la transmisión y queda como FINALIZADA. No se puede deshacer ni reanudar.'
           : 'Se cancela y se avisa a los jugadores. No se puede deshacer.'}

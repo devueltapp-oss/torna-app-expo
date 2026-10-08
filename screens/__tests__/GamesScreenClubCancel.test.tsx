@@ -326,11 +326,14 @@ describe('GamesScreen (club) — pausar una transmisión EN VIVO', () => {
 });
 
 /**
- * "Forzar sin confirmar" (2026-10-04): si la cámara nunca confirma que dejó de
- * transmitir (fuera de rango, apagada), el club no debe quedar sin forma de
- * cerrar la partida. `controlClubStream` marca ese error puntual con
- * `cameraConfirmationFailed` — solo ESE tipo de error ofrece forzar, nunca un
- * error de validación (partida en otro estado, cámara ajena, etc.).
+ * "Forzar sin confirmar" (2026-10-04, extendido 2026-10-07): el club no debe
+ * quedar sin forma de CERRAR una partida por un problema de cámara — ni si la
+ * GoPro no confirma por BLE que dejó de transmitir, ni si la partida tiene las
+ * cámaras mal configuradas (ninguna asignada, de otro club, o compartida con
+ * otra en vivo: ver `gameControl.test.ts` → "finalizar con force"). En los dos
+ * casos `controlClubStream` marca el error con `cameraConfirmationFailed`, que
+ * es lo único que esta pantalla mira para decidir si ofrece forzar — nunca lo
+ * hace para un error que no es de cámara (partida en otro estado, etc.).
  */
 describe('GamesScreen (club) — "Forzar sin confirmar" cuando la cámara no responde', () => {
   function cameraConfirmationError() {
@@ -349,13 +352,13 @@ describe('GamesScreen (club) — "Forzar sin confirmar" cuando la cámara no res
     fireEvent.press(getByTestId('game-finish-g-live'));
     fireEvent.press(getByText('Finalizar partida'));
 
-    await waitFor(() => expect(getByText('No se pudo confirmar la cámara')).toBeTruthy());
-    expect(queryByText(/No se pudo confirmar que la cámara dejó de transmitir/)).toBeTruthy();
+    await waitFor(() => expect(getByText('No se pudo verificar la cámara')).toBeTruthy());
+    expect(queryByText(/No se pudo verificar el estado de la cámara/)).toBeTruthy();
 
     fireEvent.press(getByText('Forzar sin confirmar'));
     await waitFor(() => expect(onFinishGame).toHaveBeenCalledWith('g-live', expect.objectContaining({ force: true })));
     // Al tener éxito, el sheet se cierra (no queda pidiendo forzar otra vez).
-    await waitFor(() => expect(queryByText('No se pudo confirmar la cámara')).toBeNull());
+    await waitFor(() => expect(queryByText('No se pudo verificar la cámara')).toBeNull());
   });
 
   it('un error de validación (no de cámara) NO ofrece "Forzar" — se avisa con Alert y listo', async () => {
@@ -385,6 +388,6 @@ describe('GamesScreen (club) — "Forzar sin confirmar" cuando la cámara no res
     fireEvent.press(getByTestId('confirm-sheet-cancel'));
     fireEvent.press(getByTestId('game-finish-g-live-2'));
     expect(queryByText('Finalizar esta partida')).toBeTruthy();
-    expect(queryByText('No se pudo confirmar la cámara')).toBeNull();
+    expect(queryByText('No se pudo verificar la cámara')).toBeNull();
   });
 });

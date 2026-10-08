@@ -112,7 +112,7 @@ test('force=true NO saltea las validaciones (no es un problema de conectividad)'
   expect(setGameLiveStatus).not.toHaveBeenCalled();
 });
 
-test('force=true tampoco saltea el chequeo de cámara compartida con otra partida en vivo', async () => {
+test('force=true tampoco saltea, al PAUSAR, el chequeo de cámara compartida con otra partida en vivo', async () => {
   const otherLive = { ...liveGame, gameId: 'g2', courtName: 'Cancha 2' };
   (fetchClubGames as jest.Mock).mockResolvedValue([liveGame, otherLive]);
   (fetchClubGameCameras as jest.Mock).mockImplementation(async () => [camera]);
@@ -143,9 +143,13 @@ test('una partida que ya no está en la agenda del club falla sin tocar las cám
 test('una cámara sin bleName bloquea la acción antes de tocar el backend', async () => {
   (fetchClubGameCameras as jest.Mock).mockResolvedValue([{ id: 'cam-1', identifier: 'CAM01', bleName: undefined }]);
 
-  await expect(controlClubStream(user, 'g1', 'pause')).rejects.toThrow('No se pueden verificar las cámaras');
+  const error: any = await controlClubStream(user, 'g1', 'pause').catch((e) => e);
+
+  expect(error.message).toMatch('No se pueden verificar las cámaras');
   expect(connectCameraFromPhone).not.toHaveBeenCalled();
   expect(setGameLiveStatus).not.toHaveBeenCalled();
+  // Al PAUSAR nunca es forzable: no tiene sentido "pausar" sin una cámara real.
+  expect(error.cameraConfirmationFailed).toBeUndefined();
 });
 
 test('una cámara que no pertenece al club bloquea la acción', async () => {
@@ -168,6 +172,87 @@ test('una cámara compartida con otra partida LIVE bloquea la acción, para no p
 
   await expect(controlClubStream(user, 'g1', 'pause')).rejects.toThrow('asociada a otra partida en vivo');
   expect(connectCameraFromPhone).not.toHaveBeenCalled();
+});
+
+/**
+ * El gran hueco que esto cierra: hasta acá, una partida con las cámaras mal
+ * configuradas (ninguna asignada, de otro club, sin bleName, o compartida con
+ * otra en vivo) quedaba IMPOSIBLE de finalizar desde la app — ni siquiera con
+ * `force`, porque estas dos validaciones nunca dejaban pasar nada ni marcaban
+ * el error como forzable. El club se quedaba sin ninguna forma de cerrarla.
+ */
+describe('finalizar con force: SIEMPRE hay una forma de cerrar la partida', () => {
+  test('al FINALIZAR, sin force, una partida sin cámaras SÍ se marca como forzable', async () => {
+    (fetchClubGameCameras as jest.Mock).mockResolvedValue([]);
+
+    const error: any = await controlClubStream(user, 'g1', 'finish').catch((e) => e);
+
+    expect(error.message).toMatch('No se pueden verificar las cámaras');
+    // A diferencia de pausar: acá SÍ hay que ofrecer "Forzar" — ver GamesScreen.
+    expect(error.cameraConfirmationFailed).toBe(true);
+    expect(finishClubGame).not.toHaveBeenCalled();
+  });
+
+  test('al FINALIZAR con force=true, una partida sin ninguna cámara asignada se cierra igual, sin tocar BLE', async () => {
+    (fetchClubGameCameras as jest.Mock).mockResolvedValue([]);
+
+    await controlClubStream(user, 'g1', 'finish', { force: true });
+
+    expect(connectCameraFromPhone).not.toHaveBeenCalled();
+    expect(finishClubGame).toHaveBeenCalledWith(user, 'g1');
+  });
+
+  test('al FINALIZAR con force=true, una cámara que no es del club se cierra igual, sin tocar BLE', async () => {
+    (fetchClubCameras as jest.Mock).mockResolvedValue([]);
+
+    await controlClubStream(user, 'g1', 'finish', { force: true });
+
+    expect(connectCameraFromPhone).not.toHaveBeenCalled();
+    expect(finishClubGame).toHaveBeenCalledWith(user, 'g1');
+  });
+
+  test('al FINALIZAR con force=true, una cámara sin bleName se cierra igual, sin tocar BLE', async () => {
+    (fetchClubGameCameras as jest.Mock).mockResolvedValue([{ id: 'cam-1', identifier: 'CAM01', bleName: undefined }]);
+
+    await controlClubStream(user, 'g1', 'finish', { force: true });
+
+    expect(connectCameraFromPhone).not.toHaveBeenCalled();
+    expect(finishClubGame).toHaveBeenCalledWith(user, 'g1');
+  });
+
+  test('al FINALIZAR, sin force, una cámara compartida con otra partida LIVE SÍ se marca como forzable', async () => {
+    const otherLive = { ...liveGame, gameId: 'g2', courtName: 'Cancha 2' };
+    (fetchClubGames as jest.Mock).mockResolvedValue([liveGame, otherLive]);
+    (fetchClubGameCameras as jest.Mock).mockImplementation(async () => [camera]);
+
+    const error: any = await controlClubStream(user, 'g1', 'finish').catch((e) => e);
+
+    expect(error.message).toMatch('asociada a otra partida en vivo');
+    expect(error.cameraConfirmationFailed).toBe(true);
+    expect(finishClubGame).not.toHaveBeenCalled();
+  });
+
+  test('al FINALIZAR con force=true, una cámara compartida con otra partida LIVE se cierra igual, SIN tocarla por BLE', async () => {
+    const otherLive = { ...liveGame, gameId: 'g2', courtName: 'Cancha 2' };
+    (fetchClubGames as jest.Mock).mockResolvedValue([liveGame, otherLive]);
+    (fetchClubGameCameras as jest.Mock).mockImplementation(async () => [camera]);
+
+    await controlClubStream(user, 'g1', 'finish', { force: true });
+
+    // No se toca la cámara compartida por BLE — se la deja como está en la
+    // otra partida, solo se marca ESTA como finalizada.
+    expect(connectCameraFromPhone).not.toHaveBeenCalled();
+    expect(finishClubGame).toHaveBeenCalledWith(user, 'g1');
+  });
+
+  test('una partida en un estado inesperado SIGUE sin ser forzable (no es un problema de cámara)', async () => {
+    (fetchClubGames as jest.Mock).mockResolvedValue([{ ...liveGame, gameStatus: 'CANCELLED' }]);
+
+    const error: any = await controlClubStream(user, 'g1', 'finish', { force: true }).catch((e) => e);
+
+    expect(error.message).toMatch('La partida cambió de estado');
+    expect(finishClubGame).not.toHaveBeenCalled();
+  });
 });
 
 test('no permite dos acciones en paralelo', async () => {
