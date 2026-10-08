@@ -80,6 +80,9 @@ export interface ForegroundPush {
  * | GAME_APPLICATION_ACCEPTED | game.service (te aceptaron)   | GameDetail |
  * | GAME_APPLICATION_REJECTED | game.service (no quedaste)    | Juegos     |
  * | OPEN_GAME_NEARBY    | game.service (buscan rivales cerca) | GameDetail |
+ * | COURT_RESERVED      | game.service (alguien reservó TU cancha, solo club) | Juegos |
+ * | GAME_CLOSING_SOON   | game-lifecycle (tu partida termina en 10/5 min, solo club) | Juegos |
+ * | GAME_AUTO_CLOSED    | game-lifecycle (se cerró sola por pasar 10 min, solo club) | Juegos |
  *
  * La misma tabla resuelve el tap en la **campanita**: cada notificación guardada trae
  * el mismo `data` que viajó en el push (`NotificationsScreen` → `resolvePushTarget`).
@@ -139,6 +142,13 @@ export function resolvePushTarget(data: PushData | null | undefined): PushTarget
     // No quedaste: llevarte al detalle de una partida que no jugás sería cruel y
     // además inútil. El hub tiene el resto de las abiertas.
     case 'GAME_APPLICATION_REJECTED':
+    // Alguien reservó TU cancha (solo club): se gestiona desde el hub de partidos,
+    // no hay un "detalle de reserva" propio.
+    case 'COURT_RESERVED':
+    // Tu partida está por terminar sin cerrarse, o se cerró sola (solo club): las
+    // dos son "ve a revisar tus partidas", mismo destino que el resto de este grupo.
+    case 'GAME_CLOSING_SOON':
+    case 'GAME_AUTO_CLOSED':
       // La partida ya no se puede ver (cancelada) o cambió su composición: el
       // lugar útil es el hub de partidos, no el visor del stream.
       return { name: 'MainPlayer', params: { initialTab: gamesTab } };

@@ -125,6 +125,15 @@ describe('resolvePushTarget', () => {
     }
   });
 
+  it('los avisos dirigidos al club (reserva nueva, cierre pendiente, auto-cierre) van al hub de partidos', () => {
+    for (const type of ['COURT_RESERVED', 'GAME_CLOSING_SOON', 'GAME_AUTO_CLOSED']) {
+      expect(resolvePushTarget({ type, gameId: 'g1' })).toEqual({
+        name: 'MainPlayer',
+        params: { initialTab: 'games' },
+      });
+    }
+  });
+
   /**
    * Los dos avisos del flujo de rivales que SÍ terminan en una partida concreta:
    * "buscan rivales cerca tuyo" (hay que decidir si postularse mirando club,
